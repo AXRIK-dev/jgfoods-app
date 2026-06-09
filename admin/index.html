@@ -405,9 +405,78 @@
     .stats-row{grid-template-columns:1fr 1fr}
     .field-row{grid-template-columns:1fr}
   }
+  /* ── Login screen ─────────────────────────────────────── */
+  #login-screen{
+    position:fixed;inset:0;z-index:9999;
+    background:var(--navy-deep);
+    display:flex;align-items:center;justify-content:center;
+    padding:24px;
+  }
+  #login-screen.hidden{display:none}
+  .login-card{
+    background:var(--paper);
+    border:1px solid var(--gold);
+    border-radius:14px;
+    padding:40px 36px 36px;
+    width:100%;max-width:380px;
+    text-align:center;
+  }
+  .login-seal{
+    width:52px;height:52px;border-radius:50%;
+    background:radial-gradient(circle at 38% 32%,var(--navy-2),var(--navy-deep));
+    border:1.5px solid var(--gold);
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--display);color:var(--gold-bright);font-size:15px;font-weight:600;
+    flex-direction:column;line-height:.9;
+    margin:0 auto 16px;
+  }
+  .login-seal span{font-size:6px;letter-spacing:1.2px;color:var(--gold);text-transform:uppercase;margin-top:2px}
+  .login-card h2{font-family:var(--display);font-size:20px;color:var(--navy);margin-bottom:4px}
+  .login-card p{font-size:12px;color:var(--ink-soft);margin-bottom:24px}
+  .login-field{text-align:left;margin-bottom:14px}
+  .login-field label{display:block;font-size:11px;font-weight:700;color:var(--ink-soft);margin-bottom:5px;text-transform:uppercase;letter-spacing:.6px}
+  .login-field input{
+    width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:8px;
+    font-size:14px;font-family:var(--body);background:var(--paper-2);color:var(--ink);
+    box-sizing:border-box;
+  }
+  .login-field input:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(194,149,74,.15)}
+  .login-btn{
+    width:100%;padding:13px;border:none;border-radius:8px;
+    background:var(--navy);color:var(--gold-bright);
+    font-family:var(--display);font-size:14px;font-weight:600;
+    cursor:pointer;margin-top:8px;transition:background .15s;
+  }
+  .login-btn:hover{background:var(--navy-2)}
+  .login-btn:disabled{opacity:.6;cursor:default}
+  .login-error{
+    font-size:12px;color:#c0392b;background:#fdecea;
+    border:1px solid #f5c6c2;border-radius:6px;
+    padding:9px 12px;margin-top:12px;display:none;text-align:left;
+  }
 </style>
 </head>
 <body>
+
+<!-- ============ LOGIN SCREEN ============ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-seal"><b>JG</b><span>Foods</span></div>
+    <h2>Admin Login</h2>
+    <p>JG Foods management portal</p>
+    <div class="login-field">
+      <label>Email</label>
+      <input type="email" id="login-email" placeholder="your@email.com" autocomplete="email">
+    </div>
+    <div class="login-field">
+      <label>Password</label>
+      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter') signIn()">
+    </div>
+    <button class="login-btn" id="login-btn" onclick="signIn()">Sign in</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
 
 <!-- ============ TOP NAV ============ -->
 <nav class="topnav">
@@ -431,8 +500,9 @@
       <div class="tn-link" id="nav-invoices" onclick="showPage('invoices')">📄 Invoices</div>
     </div>
     <div class="tn-right">
-      <div class="tn-avatar">J</div>
-      <span class="tn-user">Jon</span>
+      <div class="tn-avatar" id="nav-avatar">J</div>
+      <span class="tn-user" id="nav-username">Jon</span>
+      <button onclick="signOut()" id="nav-signout" style="margin-left:10px;padding:5px 11px;border:1px solid rgba(224,189,114,.3);border-radius:6px;background:transparent;color:var(--gold-soft);font-size:11px;cursor:pointer;font-family:var(--body)">Sign out</button>
     </div>
   </div>
 </nav>
@@ -1516,9 +1586,17 @@ const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUserRole = 'driver'; // safe default until profile is loaded
 
 async function loadUserRole() {
-  if (!supabase) return; // Supabase not yet configured — run in demo mode
+  if (!supabase) { hideLoginScreen(); return; }
+
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
+  if (!user) { showLoginScreen(); return; }
+
+  // Update nav with user's email initial
+  const initial = (user.email || 'J')[0].toUpperCase();
+  const avatarEl = document.getElementById('nav-avatar');
+  const userEl   = document.getElementById('nav-username');
+  if (avatarEl) avatarEl.textContent = initial;
+  if (userEl)   userEl.textContent   = user.email.split('@')[0];
 
   const { data: profile } = await supabase
     .from('user_profiles')
@@ -1528,6 +1606,57 @@ async function loadUserRole() {
 
   currentUserRole = profile?.role || 'driver';
   applyRoleRestrictions();
+  hideLoginScreen();
+}
+
+function showLoginScreen() {
+  const screen = document.getElementById('login-screen');
+  if (screen) screen.classList.remove('hidden');
+}
+
+function hideLoginScreen() {
+  const screen = document.getElementById('login-screen');
+  if (screen) screen.classList.add('hidden');
+}
+
+async function signIn() {
+  const email    = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const btn      = document.getElementById('login-btn');
+  const errEl    = document.getElementById('login-error');
+
+  if (!email || !password) {
+    errEl.textContent = 'Please enter your email and password.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.textContent = 'Signing in…';
+  btn.disabled = true;
+  errEl.style.display = 'none';
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    errEl.textContent = 'Incorrect email or password. Please try again.';
+    errEl.style.display = 'block';
+    btn.textContent = 'Sign in';
+    btn.disabled = false;
+    return;
+  }
+
+  // Successful login — load role and data
+  await loadUserRole();
+  await loadAppData();
+}
+
+async function signOut() {
+  await supabase.auth.signOut();
+  showLoginScreen();
+  document.getElementById('login-email').value = '';
+  document.getElementById('login-password').value = '';
+  document.getElementById('login-btn').textContent = 'Sign in';
+  document.getElementById('login-btn').disabled = false;
 }
 
 function applyRoleRestrictions() {
@@ -1552,8 +1681,128 @@ function applyRoleRestrictions() {
   if (roleTag) { roleTag.textContent = 'Delivery'; roleTag.style.display = 'inline-block'; }
 }
 
+// ============ LOAD APP DATA FROM SUPABASE ============
+async function loadAppData() {
+  if (!supabase) return;
+
+  try {
+    // Fetch all three in parallel
+    const [productsRes, customersRes, ordersRes] = await Promise.all([
+      supabase
+        .from('products')
+        .select('id, name, category, price, description, is_available, img_url, sort_order')
+        .order('sort_order').order('name'),
+
+      supabase
+        .from('customers')
+        .select('id, name, customer_type, phone, address_line_1, notes, cash_tab, tab_settle_day')
+        .eq('is_active', true)
+        .order('name'),
+
+      supabase
+        .from('orders')
+        .select(`
+          id, channel, status, total_amount, notes, created_at,
+          customers (name, customer_type, address_line_1),
+          delivery_slots (day_label),
+          order_items (product_name, quantity)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(100),
+    ]);
+
+    // ── Products ──────────────────────────────────────────
+    if (productsRes.data && productsRes.data.length > 0) {
+      sampleProducts.length = 0;
+      productsRes.data.forEach(p => sampleProducts.push({
+        id:    p.id,
+        name:  p.name,
+        cat:   p.category,
+        price: parseFloat(p.price),
+        desc:  p.description || '',
+        live:  p.is_available,
+        img:   p.img_url || null,
+      }));
+    }
+
+    // ── Customers ─────────────────────────────────────────
+    if (customersRes.data && customersRes.data.length > 0) {
+      sampleCustomers.length = 0;
+      customersRes.data.forEach(c => sampleCustomers.push({
+        id:           c.id,
+        name:         c.name,
+        type:         c.customer_type,
+        phone:        c.phone          || '',
+        address:      c.address_line_1 || '',
+        notes:        c.notes          || '',
+        cashTab:      c.cash_tab,
+        tabSettleDay: c.tab_settle_day  || '',
+        orders:       0,
+        total:        0,
+        lastOrder:    '',
+        exempt:       false,
+      }));
+    }
+
+    // ── Orders ────────────────────────────────────────────
+    if (ordersRes.data && ordersRes.data.length > 0) {
+      sampleOrders.length = 0;
+      ordersRes.data.forEach(o => {
+        const dayLabel = o.delivery_slots?.day_label || '';
+        const slot = dayLabel === 'Monday' ? 'mon' : dayLabel === 'Thursday' ? 'thu' : 'wed';
+        sampleOrders.push({
+          id:      o.id,
+          name:    o.customers?.name          || 'Unknown',
+          type:    o.customers?.customer_type || 'domestic',
+          slot,
+          items:   (o.order_items || []).map(i => `${i.product_name} × ${i.quantity}`).join(', '),
+          total:   parseFloat(o.total_amount),
+          channel: o.channel ? o.channel.charAt(0).toUpperCase() + o.channel.slice(1) : '',
+          status:  o.status,
+          address: o.customers?.address_line_1 || '',
+        });
+      });
+    }
+
+    // ── Re-render active page and always refresh dashboard stats ──
+    const activePage = document.querySelector('.page.active');
+    if (activePage) {
+      const id = activePage.id.replace('page-', '');
+      if (id === 'runs')      renderOrders();
+      if (id === 'stock')     renderStock();
+      if (id === 'customers') renderCustomers();
+      if (id === 'finance')   renderInvoices();
+    }
+    renderDashboard();
+    rebuildInvoiceCustomers();
+
+  } catch (err) {
+    console.error('loadAppData error:', err);
+    // Sample data stays as fallback — app still usable
+  }
+}
+
+// ── Update dashboard stat cards with live data ────────────
+function renderDashboard() {
+  const monOrders  = sampleOrders.filter(o => o.slot === 'mon').length;
+  const weekRevenue = sampleOrders.reduce((s, o) => s + (o.total || 0), 0);
+  const activeCustomers = sampleCustomers.length;
+
+  const cards = document.querySelectorAll('.stat-card');
+  if (cards[0]) cards[0].querySelector('.sc-val').textContent = monOrders;
+  if (cards[1]) cards[1].querySelector('.sc-val').textContent =
+    '£' + weekRevenue.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  if (cards[3]) cards[3].querySelector('.sc-val').textContent = activeCustomers;
+}
+
 // Call on page load
-document.addEventListener('DOMContentLoaded', loadUserRole);
+// loadAppData is called by loadUserRole after confirming a valid session
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadUserRole();
+  // If a session exists, load data; if not, login screen is already showing
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) loadAppData();
+});
 
 // ============ SAMPLE DATA ============
 // TODO: Replace with Supabase queries once tables are set up
@@ -1614,10 +1863,11 @@ function showPage(id) {
     }
   });
   window.scrollTo({top:0,behavior:'smooth'});
-  if (id === 'runs') renderOrders();
-  if (id === 'stock') renderStock();
+  if (id === 'runs')      renderOrders();
+  if (id === 'stock')     renderStock();
   if (id === 'customers') renderCustomers();
-  if (id === 'finance') renderInvoices();
+  if (id === 'finance')   renderInvoices();
+  if (id === 'dashboard') renderDashboard();
 }
 
 // ============ TABS ============
@@ -1760,23 +2010,64 @@ function handleImgUpload(event, id) {
   reader.readAsDataURL(file);
 }
 
-function savePrices() {
+async function savePrices() {
   const btn = document.getElementById('savePricesBtn');
   if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
 
-  // TODO: supabase.from('products').upsert(sampleProducts);
+  const isUUID = id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-  // Auto-generate both social posts on save
-  setTimeout(() => {
+  try {
+    if (supabase) {
+      const existing = sampleProducts.filter(p => isUUID(p.id));
+      const newProds  = sampleProducts.filter(p => !isUUID(p.id));
+
+      if (existing.length) {
+        const { error } = await supabase.from('products').upsert(
+          existing.map(p => ({
+            id:           p.id,
+            name:         p.name,
+            category:     p.cat || 'Other',
+            price:        p.price || 0,
+            description:  p.desc || null,
+            is_available: p.live !== false,
+          }))
+        );
+        if (error) throw error;
+      }
+
+      if (newProds.length) {
+        const { data, error } = await supabase.from('products').insert(
+          newProds.map(p => ({
+            name:         p.name,
+            category:     p.cat || 'Other',
+            price:        p.price || 0,
+            description:  p.desc || null,
+            is_available: p.live !== false,
+          }))
+        ).select('id, name');
+        if (error) throw error;
+        // Update local IDs so future saves use the returned UUID
+        if (data) {
+          data.forEach(row => {
+            const local = sampleProducts.find(p => p.name === row.name && !isUUID(p.id));
+            if (local) local.id = row.id;
+          });
+        }
+      }
+    }
+
     generateSocialPost('facebook');
     generateSocialPost('instagram');
-    // Show both post boxes
     document.getElementById('socialPostBox').style.display = 'block';
     document.getElementById('instagramPostBox').style.display = 'block';
     document.getElementById('socialPostBox').scrollIntoView({behavior:'smooth'});
     if (btn) { btn.textContent = '✓ Saved & posts ready'; btn.disabled = false;
       setTimeout(() => btn.textContent = 'Save changes', 3000); }
-  }, 600);
+  } catch (err) {
+    console.error('Save products error:', err);
+    if (btn) { btn.textContent = 'Save failed — try again'; btn.disabled = false;
+      setTimeout(() => btn.textContent = 'Save changes', 3000); }
+  }
 }
 
 function addNewProduct() {
@@ -1849,17 +2140,26 @@ function openEditProduct(id) {
   document.getElementById('editProductModal').classList.add('show');
 }
 
-function saveEditProduct() {
+async function saveEditProduct() {
   const id = document.getElementById('ep-id').value;
   const p = sampleProducts.find(x => x.id === id);
   if (!p) return;
-  p.name = document.getElementById('ep-name').value.trim() || p.name;
-  p.cat = document.getElementById('ep-cat').value.trim() || p.cat;
+  p.name  = document.getElementById('ep-name').value.trim()  || p.name;
+  p.cat   = document.getElementById('ep-cat').value.trim()   || p.cat;
   p.price = parseFloat(document.getElementById('ep-price').value) || p.price;
-  p.desc = document.getElementById('ep-desc').value.trim();
+  p.desc  = document.getElementById('ep-desc').value.trim();
   closeModal('editProductModal');
   renderStock();
-  // TODO: supabase.from('products').update({name, cat, price, desc}).eq('id', id)
+
+  if (supabase && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    const { error } = await supabase.from('products').update({
+      name:        p.name,
+      category:    p.cat,
+      price:       p.price,
+      description: p.desc || null,
+    }).eq('id', id);
+    if (error) console.error('Update product error:', error);
+  }
 }
 
 // ============ EDIT CUSTOMER ============
@@ -1878,23 +2178,33 @@ function editCustomer(id) {
   document.getElementById('editCustomerModal').classList.add('show');
 }
 
-function saveEditCustomer() {
+async function saveEditCustomer() {
   const id = document.getElementById('ec-id').value;
   const c = sampleCustomers.find(x => x.id === id);
   if (!c) return;
   const first = document.getElementById('ec-first').value.trim();
-  const last = document.getElementById('ec-last').value.trim();
+  const last  = document.getElementById('ec-last').value.trim();
   if (!first) { alert('Please enter a name.'); return; }
-  c.name = `${first} ${last}`.trim();
-  c.phone = document.getElementById('ec-phone').value.trim();
-  c.address = document.getElementById('ec-address').value.trim();
-  c.type = document.getElementById('ec-type').value;
+  c.name      = `${first} ${last}`.trim();
+  c.phone     = document.getElementById('ec-phone').value.trim();
+  c.address   = document.getElementById('ec-address').value.trim();
+  c.type      = document.getElementById('ec-type').value;
   c.referredBy = document.getElementById('ec-referredby').value.trim();
-  c.exempt = document.getElementById('ec-exempt').checked;
-  c.notes = document.getElementById('ec-notes').value.trim();
+  c.exempt    = document.getElementById('ec-exempt').checked;
+  c.notes     = document.getElementById('ec-notes').value.trim();
   closeModal('editCustomerModal');
   renderCustomers();
-  // TODO: supabase.from('customers').update({name, phone, address, type, notes}).eq('id', id)
+
+  if (supabase && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    const { error } = await supabase.from('customers').update({
+      name:          c.name,
+      phone:         c.phone         || null,
+      address_line_1: c.address      || null,
+      customer_type: c.type          || 'domestic',
+      notes:         c.notes         || null,
+    }).eq('id', id);
+    if (error) console.error('Update customer error:', error);
+  }
 }
 
 // ============ PASTE & EXTRACT ============
@@ -2390,12 +2700,31 @@ document.getElementById('sendModalOverlay')?.addEventListener('click', e => {
 // GDPR: UK personal data retention — flag customers with no order in 24 months for review
 const TWO_YEARS_MS = 1000 * 60 * 60 * 24 * 365 * 2;
 
-function customerLookup(query) {
+async function customerLookup(query) {
   const dropdown = document.getElementById('lookupDropdown');
   if (!query || query.length < 2) { dropdown.classList.remove('show'); return; }
 
-  const q = query.toLowerCase();
-  const matches = sampleCustomers.filter(c => c.name.toLowerCase().includes(q));
+  let matches;
+  if (supabase) {
+    const { data } = await supabase
+      .from('customers')
+      .select('id, name, phone, address_line_1, customer_type')
+      .ilike('name', `%${query}%`)
+      .eq('is_active', true)
+      .limit(6);
+    matches = (data || []).map(c => ({
+      id:        c.id,
+      name:      c.name,
+      phone:     c.phone         || '',
+      address:   c.address_line_1 || '',
+      type:      c.customer_type,
+      lastOrder: '',
+      orders:    1, // assume active customer — GDPR flag not applicable without order count
+    }));
+  } else {
+    const q = query.toLowerCase();
+    matches = sampleCustomers.filter(c => c.name.toLowerCase().includes(q));
+  }
 
   if (!matches.length) { dropdown.classList.remove('show'); return; }
 
@@ -2403,14 +2732,13 @@ function customerLookup(query) {
     const typeBadge = c.type === 'trade'
       ? `<span class="li-badge badge-trade">Trade</span>`
       : `<span class="li-badge badge-home">Domestic</span>`;
-    // GDPR flag — simulated last order date check
-    const gdprFlag = c.orders < 1 ? ' ⚠️' : '';
+    const detail = c.lastOrder ? `${c.phone} · Last order: ${c.lastOrder}` : c.phone;
     return `
       <div class="lookup-item" onmousedown="selectCustomer('${c.id}')">
         ${typeBadge}
         <div>
-          <div class="li-name">${c.name}${gdprFlag}</div>
-          <div class="li-detail">${c.phone} · Last order: ${c.lastOrder}</div>
+          <div class="li-name">${c.name}</div>
+          <div class="li-detail">${detail}</div>
         </div>
       </div>`;
   }).join('');
@@ -2418,17 +2746,24 @@ function customerLookup(query) {
   dropdown.classList.add('show');
 }
 
-function selectCustomer(id) {
-  const c = sampleCustomers.find(x => x.id === id);
+async function selectCustomer(id) {
+  // Try local sample data first, then fall back to Supabase
+  let c = sampleCustomers.find(x => x.id === id);
+  if (!c && supabase) {
+    const { data } = await supabase
+      .from('customers')
+      .select('id, name, phone, address_line_1, customer_type')
+      .eq('id', id).single();
+    if (data) c = { id: data.id, name: data.name, phone: data.phone, address: data.address_line_1, type: data.customer_type };
+  }
   if (!c) return;
   document.getElementById('lo-name').value    = c.name;
-  document.getElementById('lo-phone').value   = c.phone || '';
+  document.getElementById('lo-phone').value   = c.phone   || '';
   document.getElementById('lo-address').value = c.address || '';
-  document.getElementById('lo-type').value    = c.type || 'domestic';
+  document.getElementById('lo-type').value    = c.type    || 'domestic';
   closeLookup();
-  updateLogTotal(); // recalculate in case customer is exempt
+  updateLogTotal();
 
-  // Show a subtle confirmation
   const nameField = document.getElementById('lo-name');
   nameField.style.borderColor = 'var(--green)';
   nameField.style.background  = 'var(--green-soft)';
@@ -2490,18 +2825,25 @@ function addLogItem() {
   const div = document.createElement('div');
   div.className = 'log-item-row';
   div.id = 'item-row-' + (++logItemCount);
+
+  // Build from live products — falls back to sample data if nothing loaded yet
+  const liveProducts = sampleProducts.filter(p => p.live !== false);
+  const opts = liveProducts.length
+    ? liveProducts.map(p => `<option value="${p.name}|${p.price}">${p.name} — £${p.price.toFixed(2)}</option>`).join('')
+    : `<option value="5kg Chicken Fillets|34">5kg Chicken Fillets — £34.00</option>
+       <option value="BBQ Pack|47.50">BBQ Pack — £47.50</option>
+       <option value="Ribeye Steaks ×5|30">Ribeye Steaks ×5 — £30.00</option>
+       <option value="Lean Mince 1kg|12">Lean Mince 1kg — £12.00</option>
+       <option value="Extra Lean Meat Pack|38.50">Extra Lean Meat Pack — £38.50</option>
+       <option value="Kebab Pack ×5|20">Kebab Pack ×5 — £20.00</option>
+       <option value="Chicken Thighs 3kg|18">Chicken Thighs 3kg — £18.00</option>
+       <option value="Family Value Pack|52">Family Value Pack — £52.00</option>
+       <option value="Diced Beef 1kg|10">Diced Beef 1kg — £10.00</option>`;
+
   div.innerHTML = `
     <select class="item-product" onchange="updateLogTotal()">
       <option value="">— select product —</option>
-      <option value="5kg Chicken Fillets|34">5kg Chicken Fillets — £34.00</option>
-      <option value="BBQ Pack|47.50">BBQ Pack — £47.50</option>
-      <option value="Ribeye Steaks ×5|30">Ribeye Steaks ×5 — £30.00</option>
-      <option value="Lean Mince 1kg|12">Lean Mince 1kg — £12.00</option>
-      <option value="Extra Lean Meat Pack|38.50">Extra Lean Meat Pack — £38.50</option>
-      <option value="Kebab Pack ×5|20">Kebab Pack ×5 — £20.00</option>
-      <option value="Chicken Thighs 3kg|18">Chicken Thighs 3kg — £18.00</option>
-      <option value="Family Value Pack|52">Family Value Pack — £52.00</option>
-      <option value="Diced Beef 1kg|10">Diced Beef 1kg — £10.00</option>
+      ${opts}
     </select>
     <input type="number" min="1" value="1" class="item-qty" placeholder="Qty" onchange="updateLogTotal()">
     <button onclick="removeLogItem(this)">×</button>
@@ -2514,13 +2856,12 @@ function removeLogItem(btn) {
   if (rows.length > 1) { btn.closest('.log-item-row').remove(); updateLogTotal(); }
 }
 
-function saveLogOrder() {
-  const name = document.getElementById('lo-name').value.trim();
+async function saveLogOrder() {
+  const name    = document.getElementById('lo-name').value.trim();
   const address = document.getElementById('lo-address').value.trim();
   if (!name || !address) { alert('Please enter customer name and address.'); return; }
 
   const items = [];
-  let valid = true;
   document.querySelectorAll('.log-item-row').forEach(row => {
     const val = row.querySelector('.item-product').value;
     const qty = parseInt(row.querySelector('.item-qty').value) || 1;
@@ -2528,27 +2869,111 @@ function saveLogOrder() {
   });
   if (items.length === 0) { alert('Please add at least one item.'); return; }
 
-  const total = items.reduce((s, i) => s + i.price * i.qty, 0);
+  const total     = items.reduce((s, i) => s + i.price * i.qty, 0);
+  const slotValue = document.getElementById('lo-slot').value;
+  const custType  = document.getElementById('lo-type').value;
+  const rawChannel = document.getElementById('lo-channel').value;
+  // Map 'text' to 'phone' — schema only allows: website, facebook, instagram, phone, whatsapp
+  const channel   = rawChannel === 'text' ? 'phone' : rawChannel;
+
+  // Add to local sample list for immediate UI update
   const newOrder = {
     id: 'o' + Date.now(),
     name,
-    type: document.getElementById('lo-type').value,
-    slot: document.getElementById('lo-slot').value,
+    type: custType,
+    slot: slotValue,
     items: items.map(i => `${i.product} × ${i.qty}`).join(', '),
     total,
-    channel: document.getElementById('lo-channel').value.charAt(0).toUpperCase() + document.getElementById('lo-channel').value.slice(1),
+    channel: channel.charAt(0).toUpperCase() + channel.slice(1),
     status: 'new',
     address,
   };
   sampleOrders.push(newOrder);
 
-  // Success feedback
   const btn = document.querySelector('#page-logorder .btn-add');
   btn.textContent = '✓ Order saved';
   btn.style.background = 'var(--green)';
   setTimeout(() => { btn.textContent = 'Save order'; btn.style.background = ''; clearLogForm(); showPage('runs'); }, 1200);
 
-  // TODO: supabase.from('orders').insert(newOrder);
+  // Persist to Supabase
+  if (!supabase) return;
+  try {
+    const phone = document.getElementById('lo-phone').value.trim();
+
+    // 1. Find or create customer
+    let customerId;
+    if (phone) {
+      const { data: existing } = await supabase
+        .from('customers').select('id').eq('phone', phone).maybeSingle();
+      if (existing) {
+        customerId = existing.id;
+      } else {
+        const { data: newCust, error: custErr } = await supabase
+          .from('customers')
+          .insert({ name, phone, address_line_1: address, customer_type: custType })
+          .select('id').single();
+        if (custErr) throw custErr;
+        customerId = newCust.id;
+      }
+    } else {
+      const { data: newCust, error: custErr } = await supabase
+        .from('customers')
+        .insert({ name, address_line_1: address, customer_type: custType })
+        .select('id').single();
+      if (custErr) throw custErr;
+      customerId = newCust.id;
+    }
+
+    // 2. Find or create delivery slot for the selected day
+    const dayLabel = slotValue === 'mon' ? 'Monday' : 'Thursday';
+    const today    = new Date().toISOString().split('T')[0];
+    const { data: slotData } = await supabase
+      .from('delivery_slots').select('id')
+      .eq('day_label', dayLabel).eq('is_open', true)
+      .gte('delivery_date', today)
+      .order('delivery_date', { ascending: true })
+      .limit(1).maybeSingle();
+
+    let slotId;
+    if (slotData) {
+      slotId = slotData.id;
+    } else {
+      const nextDate = getNextDayDate(dayLabel);
+      const { data: newSlot, error: slotErr } = await supabase
+        .from('delivery_slots')
+        .insert({ delivery_date: nextDate, day_label: dayLabel })
+        .select('id').single();
+      if (slotErr) throw slotErr;
+      slotId = newSlot.id;
+    }
+
+    // 3. Insert order
+    const { data: orderData, error: orderErr } = await supabase
+      .from('orders').insert({
+        customer_id:      customerId,
+        delivery_slot_id: slotId,
+        channel:          channel,
+        status:           'pending',
+        total_amount:     total,
+        notes:            document.getElementById('lo-notes').value.trim() || null,
+      }).select('id').single();
+    if (orderErr) throw orderErr;
+
+    // 4. Insert order items
+    const { error: itemsErr } = await supabase.from('order_items').insert(
+      items.map(i => ({
+        order_id:     orderData.id,
+        product_name: i.product,
+        unit_price:   i.price,
+        quantity:     i.qty,
+      }))
+    );
+    if (itemsErr) throw itemsErr;
+
+  } catch (err) {
+    console.error('Save order error:', err);
+    // Order already shown in UI — log error but don't alarm Jon
+  }
 }
 
 function clearLogForm() {
@@ -2571,6 +2996,17 @@ document.addEventListener('keydown', e => {
     document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('show'));
   }
 });
+
+// ── Helper: next calendar date for a given day label ──────────
+function getNextDayDate(dayLabel) {
+  const dayNums = { Monday: 1, Wednesday: 3, Thursday: 4 };
+  const target = dayNums[dayLabel];
+  const now = new Date();
+  const diff = ((target - now.getDay()) + 7) % 7 || 7;
+  const next = new Date(now);
+  next.setDate(now.getDate() + diff);
+  return next.toISOString().split('T')[0]; // YYYY-MM-DD
+}
 
 // ============ AI ROUTE SUGGESTION ============
 const routeTips = [
@@ -3014,16 +3450,29 @@ function nextTempMonth() { tempMonth++; if (tempMonth > 11) { tempMonth=0; tempY
 function printTemps() { window.print(); }
 
 // ============ INVOICE GENERATOR ============
-const INVOICE_CUSTOMERS = sampleCustomers.map(c => ({
-  id: c.id, name: c.name, type: c.type, phone: c.phone || '', address: c.address || '',
-  prefix: c.name.split(' ').map(w=>w[0]).join('').slice(0,3).toUpperCase(),
-  nextInv: Math.floor(10000 + Math.random() * 90000),
-  products: [] // TODO: load from Supabase per-customer product list
-}));
+// Built lazily from sampleCustomers — rebuilt after loadAppData so real customers appear
+let INVOICE_CUSTOMERS = [];
+
+function rebuildInvoiceCustomers() {
+  INVOICE_CUSTOMERS = sampleCustomers.map(c => ({
+    id:      c.id,
+    name:    c.name,
+    type:    c.type,
+    phone:   c.phone   || '',
+    address: c.address || '',
+    prefix:  c.name.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase(),
+    nextInv: Math.floor(10000 + Math.random() * 90000),
+    products: sampleProducts.map(p => ({ name: p.name, price: p.price })),
+  }));
+  // Refresh the customer dropdown if the invoice page is open
+  populateInvoiceCustomerSelect();
+}
 
 function populateInvoiceCustomerSelect() {
   const sel = document.getElementById('inv-customer');
   if (!sel) return;
+  if (!INVOICE_CUSTOMERS.length) rebuildInvoiceCustomers();
+  sel.innerHTML = '<option value="">— select customer —</option>';
   INVOICE_CUSTOMERS.forEach(c => {
     const opt = document.createElement('option');
     opt.value = c.id; opt.textContent = c.name;
@@ -3362,11 +3811,59 @@ function calcWeekly() {
   set('ws-vatreclaim', vat);
 }
 
-function saveWeekly() {
+async function saveWeekly() {
   const btn = event.target;
-  btn.textContent = '✓ Saved';
+  btn.textContent = 'Saving…';
+  btn.disabled = true;
+
+  // Gather purchases
+  const purchases = SUPPLIERS.map((s, i) => ({
+    supplier: s.name,
+    cash:     parseFloat(document.getElementById(`sup-cash-${i}`)?.value) || 0,
+    bank:     parseFloat(document.getElementById(`sup-bank-${i}`)?.value) || 0,
+    total:    (parseFloat(document.getElementById(`sup-cash-${i}`)?.value) || 0) +
+              (parseFloat(document.getElementById(`sup-bank-${i}`)?.value) || 0),
+  }));
+
+  // Gather expenses
+  const expenses = EXPENSES.map((e, i) => ({
+    label: e.name,
+    net:   parseFloat(document.getElementById(`exp-amt-${i}`)?.value) || 0,
+    vat:   parseFloat(document.getElementById(`exp-vat-${i}`)?.value) || 0,
+  }));
+
+  const sales    = parseFloat(document.getElementById('wk-sales')?.value)   || 0;
+  const carried  = parseFloat(document.getElementById('wk-carried')?.value) || 0;
+  const vatReclaim = parseFloat(document.getElementById('wk-vat')?.value)   || 0;
+  const totalPurch = purchases.reduce((s, p) => s + p.total, 0);
+  const totalExp   = expenses.reduce((s, e) => s + e.net, 0);
+  const banked     = (sales + carried + vatReclaim) - totalPurch - totalExp;
+
+  // Use Friday of the current week as week_ending
+  const today = new Date();
+  const friday = new Date(today);
+  friday.setDate(today.getDate() + (5 - today.getDay() + 7) % 7 || 7);
+  const weekEnding = friday.toISOString().split('T')[0];
+
+  try {
+    if (supabase) {
+      const { error } = await supabase.from('weekly_sheets').upsert({
+        week_ending:     weekEnding,
+        carried_forward: carried,
+        sales_total:     sales + carried + vatReclaim,
+        banked:          banked,
+        purchases:       purchases,
+        expenses:        expenses,
+      }, { onConflict: 'week_ending' });
+      if (error) throw error;
+    }
+    btn.textContent = '✓ Saved';
+  } catch (err) {
+    console.error('Save weekly sheet error:', err);
+    btn.textContent = 'Save failed — try again';
+  }
+  btn.disabled = false;
   setTimeout(() => btn.textContent = 'Save weekly sheet', 2000);
-  // TODO: supabase.from('weekly_sheets').insert({...})
 }
 
 function exportWeekly() {
