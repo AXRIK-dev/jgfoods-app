@@ -612,9 +612,9 @@
       <p>All orders for each day's run — with pick list and route summary.</p>
     </div>
     <div class="btn-row">
-      <button class="btn-navy" onclick="openRoutePlanner('mon')">
+      <button class="btn-navy" onclick="openRoutePlanner(currentRunSlot)">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="3" cy="3" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="11" cy="11" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="11" cy="3" r="1.8" stroke="currentColor" stroke-width="1.3"/><path d="M3 4.8v4.4M4.8 3h4.4M4.8 11h4.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-        Plan Monday route
+        Plan route
       </button>
       <button style="background:#e5ecde;color:var(--green);font-weight:800;font-size:12.5px;padding:10px 16px;border-radius:9px;display:flex;align-items:center;gap:7px;border:1.5px solid #cfdcc4" onclick="openQuickTemps(currentRunSlot)">
         🌡️ Log temps
@@ -648,8 +648,9 @@
 
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px">
     <div class="tabs" style="margin-bottom:0;border-bottom:none">
-      <div class="tab active" onclick="switchTab('runs','mon');currentRunSlot='mon'">Monday <span class="tab-count">12</span></div>
-      <div class="tab" onclick="switchTab('runs','thu');currentRunSlot='thu'">Thursday <span class="tab-count">8</span></div>
+      <div class="tab active" onclick="switchTab('runs','mon');currentRunSlot='mon';renderPickList('mon')">Monday <span class="tab-count" id="tab-count-mon">12</span></div>
+      <div class="tab" onclick="switchTab('runs','wed');currentRunSlot='wed';renderPickList('wed')">Wednesday <span class="tab-count" id="tab-count-wed">0</span></div>
+      <div class="tab" onclick="switchTab('runs','thu');currentRunSlot='thu';renderPickList('thu')">Thursday <span class="tab-count" id="tab-count-thu">8</span></div>
     </div>
     <button class="btn-navy" id="planRouteTabBtn" onclick="openRoutePlanner(currentRunSlot)" style="font-size:12px;padding:8px 14px">
       <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="3" cy="3" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="11" cy="11" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="11" cy="3" r="1.8" stroke="currentColor" stroke-width="1.3"/><path d="M3 4.8v4.4M4.8 3h4.4M4.8 11h4.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
@@ -666,23 +667,21 @@
           <!-- populated by JS -->
         </div>
       </div>
+      <!-- Wednesday tab -->
+      <div class="tab-panel" id="runs-wed">
+        <div class="order-list" id="wedOrderList"></div>
+      </div>
       <!-- Thursday tab -->
       <div class="tab-panel" id="runs-thu">
         <div class="order-list" id="thuOrderList"></div>
       </div>
     </div>
 
-    <!-- Pick list -->
+    <!-- Pick list — populated by renderPickList() -->
     <div class="pick-panel">
-      <h3>Monday pick list</h3>
+      <h3 id="pickListTitle">Monday pick list</h3>
       <div class="pick-sub">Total quantities to pack</div>
-      <div class="pick-line"><span>5kg Chicken Fillets</span><b>×8</b></div>
-      <div class="pick-line"><span>BBQ Pack</span><b>×4</b></div>
-      <div class="pick-line"><span>Ribeye Steaks ×5</span><b>×6</b></div>
-      <div class="pick-line"><span>Lean Mince 1kg</span><b>×9</b></div>
-      <div class="pick-line"><span>Extra Lean Meat Pack</span><b>×3</b></div>
-      <div class="pick-line"><span>Kebab Pack ×5</span><b>×5</b></div>
-      <div class="pick-line"><span>Family Value Pack</span><b>×2</b></div>
+      <div id="pickListLines"></div>
       <div class="pick-actions">
         <button class="pf-print" onclick="window.print()">🖨 Print list</button>
         <button class="pf-ai" onclick="generateAIRoute()">✦ AI route tip</button>
@@ -749,6 +748,7 @@
         <label>Delivery slot *</label>
         <select id="lo-slot">
           <option value="mon">Monday</option>
+          <option value="wed">Wednesday</option>
           <option value="thu">Thursday</option>
         </select>
       </div>
@@ -1881,9 +1881,60 @@ function switchTab(page, tab) {
 // ============ ORDERS ============
 function renderOrders() {
   const mon = sampleOrders.filter(o => o.slot === 'mon');
+  const wed = sampleOrders.filter(o => o.slot === 'wed');
   const thu = sampleOrders.filter(o => o.slot === 'thu');
-  document.getElementById('monOrderList').innerHTML = mon.map(orderCard).join('');
-  document.getElementById('thuOrderList').innerHTML = thu.map(orderCard).join('');
+  document.getElementById('monOrderList').innerHTML = mon.map(orderCard).join('') || '<p style="padding:20px;color:var(--ink-soft);font-size:13px;text-align:center">No Monday orders yet.</p>';
+  document.getElementById('wedOrderList').innerHTML = wed.map(orderCard).join('') || '<p style="padding:20px;color:var(--ink-soft);font-size:13px;text-align:center">No Wednesday orders yet.</p>';
+  document.getElementById('thuOrderList').innerHTML = thu.map(orderCard).join('') || '<p style="padding:20px;color:var(--ink-soft);font-size:13px;text-align:center">No Thursday orders yet.</p>';
+  // Update tab counts
+  const monCount = document.getElementById('tab-count-mon');
+  const wedCount = document.getElementById('tab-count-wed');
+  const thuCount = document.getElementById('tab-count-thu');
+  if (monCount) monCount.textContent = mon.length;
+  if (wedCount) wedCount.textContent = wed.length;
+  if (thuCount) thuCount.textContent = thu.length;
+  renderPickList(currentRunSlot);
+}
+
+function renderPickList(slot) {
+  slot = slot || currentRunSlot || 'mon';
+  const label = slot === 'mon' ? 'Monday' : slot === 'wed' ? 'Wednesday' : 'Thursday';
+  const titleEl = document.getElementById('pickListTitle');
+  const linesEl = document.getElementById('pickListLines');
+  if (!titleEl || !linesEl) return;
+
+  titleEl.textContent = `${label} pick list`;
+
+  // Aggregate quantities from all non-delivered orders for this slot
+  const orders = sampleOrders.filter(o => o.slot === slot && o.status !== 'delivered');
+  if (orders.length === 0) {
+    linesEl.innerHTML = `<p style="font-size:12.5px;color:var(--ink-soft);padding:8px 0">No active orders for ${label}.</p>`;
+    return;
+  }
+
+  const totals = {};
+  orders.forEach(o => {
+    // items is a comma-separated string like "5kg Chicken Fillets × 2, BBQ Pack × 1"
+    if (!o.items) return;
+    o.items.split(',').forEach(seg => {
+      const m = seg.trim().match(/^(.+?)\s*[×x]\s*(\d+)$/);
+      if (m) {
+        const product = m[1].trim();
+        const qty     = parseInt(m[2], 10);
+        totals[product] = (totals[product] || 0) + qty;
+      }
+    });
+  });
+
+  const keys = Object.keys(totals).sort();
+  if (keys.length === 0) {
+    linesEl.innerHTML = `<p style="font-size:12.5px;color:var(--ink-soft);padding:8px 0">Items not available — order details may be missing.</p>`;
+    return;
+  }
+
+  linesEl.innerHTML = keys.map(k =>
+    `<div class="pick-line"><span>${k}</span><b>×${totals[k]}</b></div>`
+  ).join('');
 }
 
 function orderCard(o) {
@@ -1914,7 +1965,8 @@ function openOrderModal(id) {
   if (!o) return;
   currentOrderId = id;
   document.getElementById('modalOrderName').textContent = o.name;
-  document.getElementById('modalOrderRef').textContent = `Ref: ORD-${id.toUpperCase()} · ${o.slot === 'mon' ? 'Monday' : 'Thursday'} delivery`;
+  const slotLabel = o.slot === 'mon' ? 'Monday' : o.slot === 'wed' ? 'Wednesday' : 'Thursday';
+  document.getElementById('modalOrderRef').textContent = `Ref: ORD-${id.toUpperCase()} · ${slotLabel} delivery`;
   document.getElementById('modalOrderBody').innerHTML = `
     <div class="modal-detail-row"><span>Items</span><b style="max-width:280px;text-align:right">${o.items}</b></div>
     <div class="modal-detail-row"><span>Address</span><b>${o.address}</b></div>
@@ -1925,11 +1977,22 @@ function openOrderModal(id) {
   document.getElementById('orderModal').classList.add('show');
 }
 
-function updateOrderStatus(status) {
+async function updateOrderStatus(status) {
   if (!currentOrderId) return;
   const o = sampleOrders.find(x => x.id === currentOrderId);
   if (o) { o.status = status; renderOrders(); }
   document.getElementById('orderModal').classList.remove('show');
+  // Persist to Supabase
+  if (supabase && currentOrderId) {
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentOrderId);
+    if (isUUID) {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status })
+        .eq('id', currentOrderId);
+      if (error) console.error('Order status update failed:', error.message);
+    }
+  }
 }
 
 // ============ STOCK ============
@@ -2301,6 +2364,7 @@ function simulateExtract(msg) {
   const namePat = /(?:it'?s|from|this is|my name is)\s+([A-Z][a-z]+ [A-Z][a-z]+)/i;
   const phonePat = /0[0-9]{4}\s?[0-9]{6}/;
   const monPat = /monday|mon\b/i;
+  const wedPat = /wednesday|wed\b/i;
   const thuPat = /thursday|thurs?\b/i;
   const addrPat = /\d+\s+[\w\s]+,\s*[\w\s]+/i;
   const qtyPat = /(\d+)\s*x?\s*(chicken fillet|bbq pack|ribeye|mince|lean meat|kebab|family|thigh|diced)/gi;
@@ -2311,7 +2375,7 @@ function simulateExtract(msg) {
   if (phoneMatch) result.phone = phoneMatch[0];
   const addrMatch = msg.match(addrPat);
   if (addrMatch) result.address = addrMatch[0];
-  result.slot = thuPat.test(msg) ? 'thu' : 'mon';
+  result.slot = thuPat.test(msg) ? 'thu' : wedPat.test(msg) ? 'wed' : 'mon';
 
   let m;
   while ((m = qtyPat.exec(msg)) !== null) {
@@ -2353,23 +2417,80 @@ function filterCustomers(type) {
   renderCustomers(type);
 }
 
-function openCustomerDetail(id) {
+async function openCustomerDetail(id) {
   const c = sampleCustomers.find(x => x.id === id);
   if (!c) return;
   document.getElementById('modalOrderName').textContent = c.name;
   document.getElementById('modalOrderRef').textContent = `${c.type === 'trade' ? 'Trade' : 'Domestic'} customer`;
+
+  // Show modal immediately with basic info + loading state
   document.getElementById('modalOrderBody').innerHTML = `
-    <div class="modal-detail-row"><span>Phone</span><b>${c.phone}</b></div>
-    <div class="modal-detail-row"><span>Total orders</span><b>${c.orders}</b></div>
-    <div class="modal-detail-row"><span>Total spent</span><b style="font-family:var(--display);font-size:18px;color:var(--navy)">£${c.total.toFixed(2)}</b></div>
-    <div class="modal-detail-row"><span>Last order</span><b>${c.lastOrder}</b></div>
+    <div class="modal-detail-row"><span>Phone</span><b>${c.phone || '—'}</b></div>
+    <div class="modal-detail-row"><span>Address</span><b>${c.address || '—'}</b></div>
+    ${c.notes ? `<div class="modal-detail-row"><span>Notes</span><b>${c.notes}</b></div>` : ''}
     ${c.referredBy ? `<div class="modal-detail-row"><span>Referred by</span><b>${c.referredBy}</b></div>` : ''}
-    ${c.referredBy && c.orders <= 1 ? `<div style="background:#f5eefc;border:1px solid #d8b4fe;border-radius:9px;padding:10px 13px;margin-top:10px;font-size:12.5px;color:#6b21a8;font-weight:700">🎁 Referral gift due — include free sausage or bacon on first delivery</div>` : ''}
     ${c.exempt ? `<div style="background:#fdf3e3;border:1px solid #fcd299;border-radius:9px;padding:10px 13px;margin-top:10px;font-size:12.5px;color:#b06000;font-weight:700">✓ Exempt from £5 minimum order charge</div>` : ''}
-    <p style="font-size:12px;color:var(--ink-soft);margin-top:12px;padding:10px;background:var(--cream);border-radius:8px">Full order history will appear here once connected to Supabase.</p>
+    <div id="custOrderHistory" style="margin-top:14px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px">Order History</div>
+      <p style="font-size:12.5px;color:var(--ink-soft);padding:10px;background:var(--cream);border-radius:8px">Loading…</p>
+    </div>
   `;
-  document.getElementById('modalOrderModal') ;
   document.getElementById('orderModal').classList.add('show');
+
+  // Fetch order history from Supabase
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  if (!supabase || !isUUID) {
+    document.getElementById('custOrderHistory').innerHTML = `
+      <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px">Order History</div>
+      <p style="font-size:12.5px;color:var(--ink-soft);padding:10px;background:var(--cream);border-radius:8px">No order history available.</p>`;
+    return;
+  }
+
+  const { data: orders, error } = await supabase
+    .from('orders')
+    .select('id, status, total_amount, channel, created_at, delivery_slots (day_label), order_items (product_name, quantity)')
+    .eq('customer_id', id)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  const histEl = document.getElementById('custOrderHistory');
+  if (!histEl) return;
+
+  if (error || !orders || orders.length === 0) {
+    const totalSpent = (orders || []).reduce((s, o) => s + parseFloat(o.total_amount || 0), 0);
+    histEl.innerHTML = `
+      <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px">Order History</div>
+      <p style="font-size:12.5px;color:var(--ink-soft);padding:10px;background:var(--cream);border-radius:8px">No orders yet.</p>`;
+    return;
+  }
+
+  const totalSpent = orders.reduce((s, o) => s + parseFloat(o.total_amount || 0), 0);
+  const statusColors = { pending:'#f6e5cf', confirmed:'#d9f0e0', packed:'#dbeafe', delivered:'#e5e7eb', new:'#fef3c7' };
+  const statusText   = { pending:'var(--oxblood)', confirmed:'#1a6640', packed:'#1d4ed8', delivered:'var(--ink-soft)', new:'#92400e' };
+
+  const rows = orders.map(o => {
+    const date = new Date(o.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+    const items = (o.order_items || []).map(i => `${i.product_name} ×${i.quantity}`).join(', ');
+    const slot  = o.delivery_slots?.day_label || '';
+    const sc = statusColors[o.status] || '#f6e5cf';
+    const st = statusText[o.status]   || 'var(--ink)';
+    return `
+      <div style="padding:9px 0;border-bottom:1px solid var(--line-soft);font-size:12.5px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:3px">
+          <span style="font-weight:700;color:var(--navy)">£${parseFloat(o.total_amount).toFixed(2)}</span>
+          <span style="font-size:10.5px;padding:2px 7px;border-radius:5px;font-weight:700;background:${sc};color:${st}">${o.status}</span>
+        </div>
+        <div style="color:var(--ink-soft);font-size:11.5px">${date}${slot ? ' · ' + slot : ''} · ${o.channel || ''}</div>
+        ${items ? `<div style="color:var(--ink-soft);font-size:11px;margin-top:2px">${items}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  histEl.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft)">Order History</div>
+      <div style="font-size:11px;color:var(--ink-soft)">${orders.length} orders · <b style="color:var(--navy)">£${totalSpent.toFixed(2)}</b> total</div>
+    </div>
+    ${rows}`;
 }
 
 function showAddCustomerModal() {
@@ -2380,20 +2501,45 @@ function showAddCustomerModal() {
   };
 }
 
-function saveCustomer() {
+async function saveCustomer() {
   const first = document.getElementById('ac-first').value.trim();
-  const last = document.getElementById('ac-last').value.trim();
+  const last  = document.getElementById('ac-last').value.trim();
   if (!first || !last) { alert('Please enter a name.'); return; }
-  sampleCustomers.push({
-    id:'c'+Date.now(), name:`${first} ${last}`,
-    type: document.getElementById('ac-type').value,
-    phone: document.getElementById('ac-phone').value,
+
+  const newCust = {
+    id:         'c' + Date.now(),
+    name:       `${first} ${last}`,
+    type:       document.getElementById('ac-type').value,
+    phone:      document.getElementById('ac-phone').value.trim(),
+    address:    document.getElementById('ac-address') ? document.getElementById('ac-address').value.trim() : '',
+    notes:      document.getElementById('ac-notes')   ? document.getElementById('ac-notes').value.trim()   : '',
     referredBy: document.getElementById('ac-referredby').value.trim(),
-    exempt: document.getElementById('ac-exempt').checked,
-    orders:0, total:0, lastOrder:'—'
-  });
+    exempt:     document.getElementById('ac-exempt').checked,
+    orders: 0, total: 0, lastOrder: '—',
+  };
+
+  sampleCustomers.push(newCust);
   renderCustomers();
   closeModal('addCustomerModal');
+  rebuildInvoiceCustomers();
+
+  // Persist to Supabase
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('customers').insert({
+        name:            newCust.name,
+        customer_type:   newCust.type,
+        phone:           newCust.phone   || null,
+        address_line_1:  newCust.address || null,
+        notes:           newCust.notes   || null,
+        is_active:       true,
+      }).select('id').single();
+
+      if (error) { console.error('Save customer failed:', error.message); return; }
+      // Replace temp id with real UUID so edits work immediately
+      newCust.id = data.id;
+    } catch (err) { console.error('Save customer error:', err); }
+  }
 }
 
 // ============ INVOICES ============
@@ -2938,7 +3084,7 @@ async function saveLogOrder() {
     }
 
     // 2. Find or create delivery slot for the selected day
-    const dayLabel = slotValue === 'mon' ? 'Monday' : 'Thursday';
+    const dayLabel = slotValue === 'mon' ? 'Monday' : slotValue === 'wed' ? 'Wednesday' : 'Thursday';
     const today    = new Date().toISOString().split('T')[0];
     const { data: slotData } = await supabase
       .from('delivery_slots').select('id')
@@ -3136,7 +3282,7 @@ let currentMapsUrl = '';
 function openRoutePlanner(slot) {
   currentRunSlot = slot || 'mon';
   const orders = sampleOrders.filter(o => o.slot === currentRunSlot && o.status !== 'delivered');
-  const label = currentRunSlot === 'mon' ? 'Monday' : 'Thursday';
+  const label = currentRunSlot === 'mon' ? 'Monday' : currentRunSlot === 'wed' ? 'Wednesday' : 'Thursday';
 
   document.getElementById('rmTitle').textContent = `${label} Route`;
   document.getElementById('rmSubtitle').textContent = `${orders.length} stops · optimising…`;
@@ -3263,7 +3409,7 @@ let quickTempDate = '';
 function openQuickTemps(slot) {
   quickTempSlot = slot || currentRunSlot || 'mon';
   const orders = sampleOrders.filter(o => o.slot === quickTempSlot && o.status !== 'delivered');
-  const label  = quickTempSlot === 'mon' ? 'Monday' : 'Thursday';
+  const label  = quickTempSlot === 'mon' ? 'Monday' : quickTempSlot === 'wed' ? 'Wednesday' : 'Thursday';
 
   // Use today's date as the delivery date
   const today = new Date();
@@ -3318,10 +3464,11 @@ function quickTempInput(input, index) {
   if (num) { num.classList.toggle('logged', hasVal); num.textContent = hasVal ? '✓' : index + 1; }
 }
 
-function saveQuickTemps() {
+async function saveQuickTemps() {
   const inputs = document.querySelectorAll('.qts-input');
   let saved_count = 0;
 
+  // 1. Save to localStorage as before (immediate, offline-safe)
   inputs.forEach(input => {
     if (input.value === '') return;
     const storageKey = input.dataset.storage;
@@ -3332,7 +3479,7 @@ function saveQuickTemps() {
     saved_count++;
   });
 
-  // Flash confirmation
+  // Flash confirmation straight away
   const btn = document.querySelector('.qtp-foot .btn-gold');
   const orig = btn.textContent;
   btn.textContent = `✓ ${saved_count} temperature${saved_count !== 1 ? 's' : ''} saved`;
@@ -3340,12 +3487,60 @@ function saveQuickTemps() {
   setTimeout(() => {
     closeQuickTemps();
     btn.textContent = orig; btn.style.background = ''; btn.style.color = '';
-    // Refresh the full temp grid if it's open
     renderTempGrid();
   }, 1200);
 
-  // Note: quick-entry overlay saves to localStorage temporarily.
-  // Full temp log screen reads from Supabase delivery_temps table.
+  // 2. Also upsert to Supabase delivery_temps so the full log screen is in sync
+  if (!supabase) return;
+  try {
+    const dayLabel = quickTempSlot === 'mon' ? 'Monday' : quickTempSlot === 'wed' ? 'Wednesday' : 'Thursday';
+
+    // Look up the delivery slot for this day + date
+    const { data: slotRow } = await supabase
+      .from('delivery_slots').select('id')
+      .eq('day_label', dayLabel).eq('delivery_date', quickTempDate)
+      .maybeSingle();
+    const slotId = slotRow?.id || null;
+
+    const rows = [];
+    inputs.forEach(input => {
+      if (input.value === '') return;
+      const customerName = input.dataset.customer;
+      const custObj = sampleCustomers.find(c => c.name === customerName);
+      rows.push({
+        customer_id:      custObj?.id || null,
+        customer_name:    customerName,
+        delivery_date:    quickTempDate,
+        delivery_slot_id: slotId,
+        temp_celsius:     parseFloat(input.value),
+        logged_at:        new Date().toISOString(),
+      });
+    });
+
+    if (rows.length === 0) return;
+
+    // Upsert — if a row for this customer+date already exists, update it
+    for (const row of rows) {
+      // Check for existing row first (no unique constraint to rely on)
+      const { data: existing } = await supabase
+        .from('delivery_temps')
+        .select('id')
+        .eq('customer_name', row.customer_name)
+        .eq('delivery_date', row.delivery_date)
+        .maybeSingle();
+
+      if (existing?.id) {
+        await supabase.from('delivery_temps')
+          .update({ temp_celsius: row.temp_celsius, logged_at: row.logged_at })
+          .eq('id', existing.id);
+      } else {
+        await supabase.from('delivery_temps').insert(row);
+      }
+    }
+  } catch (err) {
+    console.error('Quick temps Supabase save failed:', err);
+    // localStorage save already succeeded — no need to alarm Jon
+  }
 }
 
 function closeQuickTemps() {
@@ -4185,7 +4380,7 @@ const HELP_PAGES = {
   runs: {
     label: 'Delivery Runs',
     sections: [
-      { icon:'🚚', title:'What is this page?', body:'Delivery Runs shows all orders grouped by delivery day — Monday and Thursday (Wednesday coming soon). Each card is one customer order.' },
+      { icon:'🚚', title:'What is this page?', body:'Delivery Runs shows all orders grouped by delivery day — Monday, Wednesday, and Thursday. Each card is one customer order.' },
       { icon:'📋', title:'Order cards', body:'Each card shows the customer\'s name, whether they\'re domestic or trade, the order status, and how the order came in (website, phone, social media). Tap a card to open the full order details.' },
       { icon:'📍', title:'Route planner', body:'Press <strong>Plan route</strong> to get an optimised delivery order for that day\'s run. It works out the most efficient order of stops to save you time and fuel.' },
       { icon:'✅', title:'Marking as delivered', body:'Open an order card and change the status to <strong>Delivered</strong> once you\'ve dropped it off. This keeps your records up to date.' },
@@ -4198,7 +4393,7 @@ const HELP_PAGES = {
       { icon:'✏️', title:'What is this page?', body:'Use Log Order to manually record any order that came in by phone, text, or social media — so everything ends up in one place.' },
       { icon:'👤', title:'Customer lookup', body:'Start typing a customer\'s name in the search box. If they\'ve ordered before, they\'ll appear in the list and their address will fill in automatically.' },
       { icon:'🛒', title:'Adding items', body:'Select a product from the dropdown, enter the quantity, and press <strong>Add item</strong>. Repeat for each product in the order. The total updates automatically.' },
-      { icon:'📅', title:'Delivery day', body:'Choose Monday or Thursday for the delivery slot. The order will appear in that day\'s delivery run.' },
+      { icon:'📅', title:'Delivery day', body:'Choose Monday, Wednesday, or Thursday for the delivery slot. The order will appear in that day\'s delivery run.' },
       { icon:'💬', title:'Notes', body:'Use the notes box for anything special — e.g. "leave by back gate" or "call on arrival". Jon will see this on the order card.' },
       { icon:'💰', title:'Minimum order', body:'Orders under £20 will automatically have the £5 small-order charge added. Customers marked as exempt (family/friends) won\'t see this charge.' },
     ]
