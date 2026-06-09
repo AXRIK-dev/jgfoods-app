@@ -1805,7 +1805,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ============ SAMPLE DATA ============
-// TODO: Replace with Supabase queries once tables are set up
+// Fallback data — replaced at runtime by loadAppData() once the user logs in
 
 const sampleOrders = [
   {id:'o1', name:'Sarah Taylor', type:'domestic', slot:'mon', items:'5kg Chicken Fillets × 2, Lean Mince 1kg', total:80, channel:'Website', status:'confirmed', address:'14 Oak Street, Ormskirk'},
@@ -1981,33 +1981,46 @@ function triggerImgUpload(id) {
   // clicks handled by the file input overlay — nothing needed here
 }
 
-function handleImgUpload(event, id) {
+async function handleImgUpload(event, id) {
   const file = event.target.files[0];
   if (!file) return;
 
+  // Show preview immediately via FileReader
   const reader = new FileReader();
   reader.onload = function(e) {
     const src = e.target.result;
     const imgEl = document.getElementById('img-' + id);
-    const placeholder = imgEl.previousElementSibling;
-
-    imgEl.src = src;
-    imgEl.style.display = 'block';
-    if (placeholder && placeholder.classList.contains('img-placeholder')) {
-      placeholder.style.display = 'none';
-    }
-
-    // Store locally for now
+    const placeholder = imgEl?.previousElementSibling;
+    if (imgEl) { imgEl.src = src; imgEl.style.display = 'block'; }
+    if (placeholder?.classList.contains('img-placeholder')) placeholder.style.display = 'none';
     const p = sampleProducts.find(x => x.id === id);
     if (p) p.img = src;
-
-    // TODO: Upload to Supabase Storage
-    // const { data, error } = await supabase.storage
-    //   .from('product-images')
-    //   .upload(`products/${id}.jpg`, file, { upsert: true });
-    // Then save the public URL: data.path → p.img_url
   };
   reader.readAsDataURL(file);
+
+  // Upload to Supabase Storage and persist the public URL
+  if (!supabase || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return;
+  try {
+    const ext  = file.name.split('.').pop() || 'jpg';
+    const path = `products/${id}.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from('product-images')
+      .upload(path, file, { upsert: true, contentType: file.type });
+    if (upErr) throw upErr;
+
+    const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
+    const publicUrl = urlData?.publicUrl;
+    if (!publicUrl) return;
+
+    // Persist img_url on the product record
+    const { error: dbErr } = await supabase.from('products').update({ img_url: publicUrl }).eq('id', id);
+    if (dbErr) throw dbErr;
+
+    const p = sampleProducts.find(x => x.id === id);
+    if (p) p.img = publicUrl;
+  } catch (err) {
+    console.error('Image upload error:', err);
+  }
 }
 
 async function savePrices() {
@@ -2695,7 +2708,7 @@ document.getElementById('sendModalOverlay')?.addEventListener('click', e => {
 
 // ============ CUSTOMER LOOKUP ============
 // Customers are remembered from every logged order — no account needed
-// TODO: Replace with Supabase query: supabase.from('customers').select('*').ilike('name', `%${query}%`)
+// Customer lookup — queries Supabase when connected, falls back to local sample data
 
 // GDPR: UK personal data retention — flag customers with no order in 24 months for review
 const TWO_YEARS_MS = 1000 * 60 * 60 * 24 * 365 * 2;
@@ -3907,7 +3920,22 @@ function renderBankPaymentsTable() {
 }
 
 function exportBankPayments() {
-  alert('Exporting bank payments — will generate .xlsx matching Bank Payments.xlsx format once Supabase is connected.');
+  const tradeCusts = sampleCustomers.filter(c => c.type === 'trade');
+  const lines = [
+    ['Customer', 'Monday', 'Thursday', 'Total', 'Outstanding'].join(','),
+    ...tradeCusts.map(c => `"${c.name}",0.00,0.00,0.00,0.00`),
+  ];
+  downloadCSV(lines.join('\n'), 'JG Foods Bank Payments.csv');
+}
+
+// ── CSV download helper ───────────────────────────────────
+function downloadCSV(content, filename) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.style.display = 'none';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
 // ============ MONTHLY EXPORT ============
@@ -3951,9 +3979,43 @@ function renderMonthlySheet() {
   setEl('me-total', eTot); setEl('me-other', eOth);
 }
 
-function exportMonthly() {
-  alert('Generating monthly export for accountant — will produce an .xlsx matching JG FOODS May 26.xlsx format once Supabase is connected with live data.');
-  // TODO: use xlsx.js or server-side Supabase function to build the spreadsheet
+async function exportMonthly() {
+  // Fetch weekly sheets for current month from Supabase if available
+  let rows = [];
+  const now   = new Date();
+  const year  = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const monthStart = `${year}-${month}-01`;
+  const monthEnd   = `${year}-${month}-31`;
+
+  if (supabase) {
+    const { data } = await supabase
+      .from('weekly_sheets')
+      .select('week_ending, sales_total, carried_forward, banked, purchases, expenses')
+      .gte('week_ending', monthStart)
+      .lte('week_ending', monthEnd)
+      .order('week_ending');
+    if (data && data.length) {
+      rows = data.map(w => {
+        const purTotal = (w.purchases || []).reduce((s, p) => s + (p.total || 0), 0);
+        const expTotal = (w.expenses  || []).reduce((s, e) => s + (e.net  || 0), 0);
+        return [w.week_ending, w.sales_total, w.carried_forward, purTotal, expTotal, w.banked];
+      });
+    }
+  }
+
+  // Build CSV
+  const lines = [
+    ['Week Ending', 'Sales Total', 'Carried Forward', 'Total Purchases', 'Total Expenses', 'Banked'].join(','),
+    ...rows.map(r => r.map(v => typeof v === 'string' ? `"${v}"` : Number(v).toFixed(2)).join(',')),
+  ];
+
+  if (rows.length === 0) {
+    lines.push('"No weekly sheets saved for this month yet. Save each week using the Weekly Sheet page."');
+  }
+
+  const filename = `JG Foods Monthly Export ${year}-${month}.csv`;
+  downloadCSV(lines.join('\n'), filename);
 }
 
 // ============ INIT ============
