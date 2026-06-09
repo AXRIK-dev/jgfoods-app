@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AXRIK — JG Foods Build Summary</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --dark:#0d1726;
+    --dark-2:#111f33;
+    --dark-3:#1a2d47;
+    --green:#15a36a;
+    --green-2:#12916000;
+    --green-soft:rgba(21,163,106,.12);
+    --green-border:rgba(21,163,106,.28);
+    --white:#ffffff;
+    --off-white:#f7f8fa;
+    --light-grey:#eef0f3;
+    --mid-grey:#9aa5b4;
+    --text:#1c2635;
+    --text-soft:#5a6a7a;
+    --border:#e2e6eb;
+    --font:'Inter',-apple-system,sans-serif;
+    --serif:'DM Serif Display',Georgia,serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{font-family:var(--font);color:var(--text);background:var(--off-white);-webkit-font-smoothing:antialiased}
+
+  /* ── AXRIK HEADER ── */
+  .axrik-header{
+    background:var(--dark);
+    padding:0;
+  }
+  .axrik-top-bar{
+    padding:14px 48px;
+    display:flex;align-items:center;justify-content:space-between;
+    border-bottom:1px solid rgba(255,255,255,.06);
+  }
+  .axrik-wordmark{
+    font-size:20px;font-weight:800;letter-spacing:.38em;padding-left:.38em;
+    color:var(--white);text-transform:uppercase;
+  }
+  .axrik-wordmark .x{color:var(--green)}
+  .axrik-top-right{
+    font-size:11px;font-weight:500;color:rgba(255,255,255,.4);
+    letter-spacing:.08em;text-transform:uppercase;
+  }
+
+  .header-body{
+    padding:64px 48px 72px;
+    max-width:900px;
+    position:relative;
+  }
+  .header-body::after{
+    content:"";position:absolute;right:0;top:0;bottom:0;width:320px;
+    background:linear-gradient(to bottom, rgba(21,163,106,.06), transparent);
+    pointer-events:none;
+  }
+  .build-pill{
+    display:inline-flex;align-items:center;gap:8px;
+    background:var(--green-soft);border:1px solid var(--green-border);
+    border-radius:20px;padding:5px 14px;margin-bottom:24px;
+  }
+  .build-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+  .build-pill span{font-size:12px;font-weight:600;color:var(--green);letter-spacing:.04em}
+  .header-body h1{
+    font-size:clamp(32px,4.5vw,52px);font-weight:800;color:var(--white);
+    line-height:1.08;letter-spacing:-.02em;margin-bottom:16px;
+  }
+  .header-body h1 em{font-style:normal;color:var(--green)}
+  .header-body p{
+    font-size:16px;color:rgba(255,255,255,.6);line-height:1.65;
+    max-width:540px;margin-bottom:28px;font-weight:400;
+  }
+  .header-meta{display:flex;gap:24px;flex-wrap:wrap}
+  .meta-item{display:flex;align-items:center;gap:8px}
+  .meta-item .mi-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.35)}
+  .meta-item .mi-val{font-size:13px;font-weight:600;color:rgba(255,255,255,.75)}
+  .meta-div{width:1px;height:20px;background:rgba(255,255,255,.1)}
+
+  /* ── GREEN RULE ── */
+  .green-rule{height:3px;background:linear-gradient(to right, var(--green), transparent);border:none;margin:0}
+
+  /* ── MAIN BODY ── */
+  .body{max-width:900px;margin:0 auto;padding:56px 48px 80px}
+
+  /* ── SECTION ── */
+  .section{margin-bottom:56px}
+  .section-label{
+    font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
+    color:var(--green);margin-bottom:8px;display:flex;align-items:center;gap:8px;
+  }
+  .section-label::after{content:"";flex:1;height:1px;background:var(--green-border)}
+  .section h2{
+    font-size:clamp(22px,3vw,28px);font-weight:700;color:var(--text);
+    letter-spacing:-.02em;margin-bottom:20px;
+  }
+
+  /* ── SOURCE CARDS ── */
+  .source-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:8px}
+  .source-card{
+    background:var(--white);border:1px solid var(--border);
+    border-radius:10px;padding:16px 18px;
+    border-top:3px solid var(--green);
+  }
+  .source-card h4{font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px}
+  .source-card p{font-size:12px;color:var(--text-soft);line-height:1.55}
+
+  /* ── FEATURE LIST ── */
+  .feature-list{display:flex;flex-direction:column;gap:0}
+  .feature-row{
+    display:grid;grid-template-columns:200px 1fr;gap:0;
+    border-bottom:1px solid var(--border);padding:14px 0;
+    align-items:start;
+  }
+  .feature-row:last-child{border-bottom:none}
+  .feature-row:hover{background:rgba(21,163,106,.03);margin:0 -12px;padding:14px 12px;border-radius:6px}
+  .fr-label{
+    font-size:12px;font-weight:700;color:var(--text);padding-right:20px;
+    padding-top:2px;
+    display:flex;align-items:flex-start;gap:10px;
+  }
+  .fr-label::before{
+    content:"";width:3px;height:14px;background:var(--green);
+    border-radius:2px;flex-shrink:0;margin-top:1px;
+  }
+  .fr-desc{font-size:13px;color:var(--text-soft);line-height:1.6}
+
+  /* ── AI CALLOUT ── */
+  .ai-callout{
+    background:var(--dark);border-radius:12px;
+    padding:32px 36px;margin:0 0 56px;
+    border:1px solid var(--green-border);
+    position:relative;overflow:hidden;
+  }
+  .ai-callout::before{
+    content:"";position:absolute;top:0;right:0;
+    width:200px;height:200px;
+    background:radial-gradient(circle, rgba(21,163,106,.15), transparent 70%);
+    pointer-events:none;
+  }
+  .ai-tag{
+    display:inline-block;background:var(--green);color:var(--white);
+    font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    padding:4px 12px;border-radius:20px;margin-bottom:14px;
+  }
+  .ai-callout h3{font-size:20px;font-weight:700;color:var(--white);margin-bottom:8px;letter-spacing:-.01em}
+  .ai-callout p{font-size:13.5px;color:rgba(255,255,255,.6);line-height:1.6;margin-bottom:20px;max-width:540px}
+  .ai-items{display:flex;flex-direction:column;gap:8px}
+  .ai-item{
+    display:flex;align-items:center;gap:12px;
+    font-size:13px;color:rgba(255,255,255,.85);font-weight:500;
+  }
+  .ai-item::before{
+    content:"";width:6px;height:6px;border-radius:50%;
+    background:var(--green);flex-shrink:0;
+  }
+
+  /* ── STEPS ── */
+  .steps{display:flex;flex-direction:column;gap:0;position:relative}
+  .steps::before{
+    content:"";position:absolute;left:18px;top:36px;bottom:36px;
+    width:2px;background:var(--border);
+  }
+  .step{display:flex;gap:20px;align-items:flex-start;padding:16px 0}
+  .step-num{
+    width:36px;height:36px;border-radius:50%;flex-shrink:0;
+    background:var(--white);border:2px solid var(--border);
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:700;color:var(--text);
+    position:relative;z-index:1;
+  }
+  .step.complete .step-num{background:var(--green);border-color:var(--green);color:var(--white)}
+  .step-body h4{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;padding-top:6px}
+  .step-body p{font-size:13px;color:var(--text-soft);line-height:1.55}
+
+  /* ── COMING SOON BADGE ── */
+  .badge-soon{
+    display:inline-block;font-size:10px;font-weight:700;
+    background:rgba(21,163,106,.12);color:var(--green);
+    border:1px solid var(--green-border);padding:2px 9px;border-radius:10px;
+    margin-left:8px;letter-spacing:.04em;vertical-align:middle;
+  }
+
+  /* ── FOOTER ── */
+  footer{background:var(--dark);padding:0}
+  .footer-inner{
+    padding:28px 48px;
+    display:flex;align-items:center;justify-content:space-between;
+    gap:20px;flex-wrap:wrap;
+    border-top:2px solid var(--green);
+  }
+  .footer-left .axrik-wordmark{font-size:17px}
+  .footer-left p{font-size:12px;color:rgba(255,255,255,.35);margin-top:4px}
+  .footer-right{text-align:right}
+  .footer-right p{font-size:12px;color:rgba(255,255,255,.45);line-height:1.7}
+  .footer-right a{color:var(--green);font-weight:600;text-decoration:none}
+
+  @media(max-width:800px){
+    .axrik-top-bar,.header-body,.body,.footer-inner{padding-left:24px;padding-right:24px}
+    .source-row{grid-template-columns:1fr}
+    .feature-row{grid-template-columns:1fr;gap:4px}
+    .fr-label{font-size:12px}
+    .header-body h1{font-size:30px}
+    .ai-callout{padding:22px}
+    .footer-right{text-align:left}
+  }
+  @media print{
+    .axrik-header,.ai-callout,footer{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+</style>
+</head>
+<body>
+
+<!-- AXRIK HEADER -->
+<header class="axrik-header">
+  <div class="axrik-top-bar">
+    <div class="axrik-wordmark">A<span class="x">X</span>RIK</div>
+    <div class="axrik-top-right">Web App Development &nbsp;·&nbsp; Client Build Report</div>
+  </div>
+  <div class="header-body">
+    <div class="build-pill"><span class="dot"></span><span>Build Summary — Session 4 &nbsp;·&nbsp; 3 June 2026</span></div>
+    <h1>JG Foods — <em>the database</em><br>is now built.</h1>
+    <p>Session 4: the full Supabase database schema written and ready to run. Temp log linked to delivery runs. Supabase client wired into the admin app. The system is ready to go live as soon as the migrations are run and the anon key is dropped in.</p>
+    <div class="header-meta">
+      <div class="meta-item"><span class="mi-label">Client</span><span class="mi-val">JG Foods</span></div>
+      <div class="meta-div"></div>
+      <div class="meta-item"><span class="mi-label">Built by</span><span class="mi-val">AXRIK</span></div>
+      <div class="meta-div"></div>
+      <div class="meta-item"><span class="mi-label">Contact</span><span class="mi-val">phil@axrik.com</span></div>
+      <div class="meta-div"></div>
+      <div class="meta-item"><span class="mi-label">Session date</span><span class="mi-val">3 June 2026</span></div>
+      <div class="meta-div"></div>
+      <div class="meta-item"><span class="mi-label">Last updated</span><span class="mi-val">3 June 2026 — 22:00</span></div>
+    </div>
+  </div>
+  <hr class="green-rule">
+</header>
+
+<!-- BODY -->
+<div class="body">
+
+  <!-- WHAT WE WORKED FROM -->
+  <section class="section">
+    <div class="section-label">Sources</div>
+    <h2>What we worked from tonight</h2>
+    <div class="source-row">
+      <div class="source-card">
+        <h4>Jon's email</h4>
+        <p>Detailed feedback on how he runs the business — ordering, pricing, seasonal priorities, the Christmas VIP process and his full weekly workflow.</p>
+      </div>
+      <div class="source-card">
+        <h4>Six spreadsheets</h4>
+        <p>Bank Payments, Invoices (50+ trade customers), Monthly accounts, Weekly reconciliation, Daily sales figures and the Delivery Temperature log.</p>
+      </div>
+      <div class="source-card">
+        <h4>New ideas</h4>
+        <p>Smart customer lookup, social post automation, WhatsApp link previews, About section, delivery temps linked to runs, and a new social graphic template.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- WEBSITE UPDATES -->
+  <section class="section">
+    <div class="section-label">Customer-facing website</div>
+    <h2>What changed on the website</h2>
+    <div class="feature-list">
+      <div class="feature-row"><div class="fr-label">Trade section</div><div class="fr-desc">Trade accounts now live as a proper section within the website — benefits, enquiry form, who we work with. One website, not two separate pages.</div></div>
+      <div class="feature-row"><div class="fr-label">Minimum order & delivery charge</div><div class="fr-desc">Orders under £20 get a £5 delivery charge added automatically. Shows clearly in the basket. Both values configurable by Jon in the admin — no developer needed.</div></div>
+      <div class="feature-row"><div class="fr-label">Standing orders</div><div class="fr-desc">Customers can set up weekly or fortnightly recurring orders, paid upfront and non-refundable if cancelled. Clearly explained at checkout.</div></div>
+      <div class="feature-row"><div class="fr-label">First order free gift</div><div class="fr-desc">New customers are offered a free pack of sausages or bacon with their first delivery. Banner on the homepage and a note in the order for Jon to action.</div></div>
+      <div class="feature-row"><div class="fr-label">Smart account types</div><div class="fr-desc">Domestic customers self-register and are automatically flagged as domestic. Trade accounts are created by Jon after an enquiry is approved. Nobody ever picks their own type.</div></div>
+      <div class="feature-row"><div class="fr-label">WhatsApp & social preview</div><div class="fr-desc">Sharing the website URL on WhatsApp, Facebook or iMessage now shows a branded preview card instead of a bare link.</div></div>
+      <div class="feature-row"><div class="fr-label">About section</div><div class="fr-desc">Jon's background and JG Foods' story added to the website — who he is, a quote from Jon, trust stats, and why customers choose him over a supermarket.</div></div>
+    </div>
+  </section>
+
+  <!-- MANAGEMENT TOOL -->
+  <section class="section">
+    <div class="section-label">Jon's management tool</div>
+    <h2>What changed in the admin</h2>
+    <div class="feature-list">
+      <div class="feature-row"><div class="fr-label">Smart customer lookup</div><div class="fr-desc">When Jon starts typing a name in Log Order, the system searches past orders and auto-fills phone, address and customer type. No account needed from the customer — it learns from every logged order.</div></div>
+      <div class="feature-row"><div class="fr-label">Auto social posts on save</div><div class="fr-desc">Saving the weekly availability automatically drafts both a Facebook and Instagram post — side by side, ready to copy. Better-worded copy that leads with the product, not just a price list.</div></div>
+      <div class="feature-row"><div class="fr-label">New social graphic template <span class="badge-soon">Coming soon</span></div><div class="fr-desc">Jon does a great job getting the word out on Facebook already — we're building a new graphic template that matches the website's navy and gold look. Same warm message, much stronger first impression.</div></div>
+      <div class="feature-row"><div class="fr-label">Christmas VIP list</div><div class="fr-desc">A dedicated page for Jon's top customers. Before Christmas marketing goes out, one button sends them all a personalised text with first access to last delivery slots.</div></div>
+      <div class="feature-row"><div class="fr-label">Delivery temperature log</div><div class="fr-desc">Required for environmental health. Monthly grid of every customer × every delivery date. Colour-coded by temperature range. Linked directly to the delivery run so the right customers appear automatically — Jon just enters the reading.</div></div>
+      <div class="feature-row"><div class="fr-label">Invoice generator</div><div class="fr-desc">Creates invoices matching Jon's existing format — bank details, VAT number (307458303), and per-customer invoice prefix all pre-filled. Every invoice has a dropdown: View, Print, Send via email, Send via message.</div></div>
+      <div class="feature-row"><div class="fr-label">Pre-written invoice messages</div><div class="fr-desc">When Jon sends an invoice by email or text, a warm friendly message is already written — different for trade and domestic customers. He just presses send. No typing needed.</div></div>
+      <div class="feature-row"><div class="fr-label">Daily sales logger</div><div class="fr-desc">Quick daily entry for bank and cash separately, with weekly totals auto-calculated. One button pushes the week's figures into the weekly reconciliation sheet.</div></div>
+      <div class="feature-row"><div class="fr-label">Weekly reconciliation</div><div class="fr-desc">Matches Jon's existing weekly sheet exactly — all 12 suppliers with cash/bank splits, expenses with VAT breakdowns, and a live banked total. Filled in every Friday, exactly as he does now.</div></div>
+      <div class="feature-row"><div class="fr-label">Bank payments tracker</div><div class="fr-desc">All trade customers in one table — payment by delivery day, outstanding balances, weekly totals. Matches the Bank Payments spreadsheet Jon currently fills in manually.</div></div>
+      <div class="feature-row"><div class="fr-label">Monthly accountant export</div><div class="fr-desc">Income and expenditure side by side, matching the format Jon's accountant already uses. One button at month end — no manual spreadsheet work.</div></div>
+      <div class="feature-row"><div class="fr-label">Friday end-of-week checklist</div><div class="fr-desc">Jon's full Friday routine as a tickable checklist that saves state as he works through it. Nothing gets missed, and it resets for the following week.</div></div>
+      <div class="feature-row"><div class="fr-label">GDPR data retention flag</div><div class="fr-desc">Customers who haven't ordered in over two years are flagged automatically on the Customers page. Jon can review and clear their data as required — keeps him GDPR compliant without thinking about it.</div></div>
+      <div class="feature-row"><div class="fr-label">Referral gift flag</div><div class="fr-desc">When adding a new customer, Jon fills in a "Referred by" field with the existing customer's name. The new customer's card is then automatically flagged with a 🎁 badge reminding Jon to include a free sausage or bacon on their first delivery. Once the first order is done, the flag clears itself.</div></div>
+      <div class="feature-row"><div class="fr-label">Minimum order exemption</div><div class="fr-desc">Each customer profile now has an "Exempt from minimum order charge" tick box. Tick it for family and friends and the £5 small-order surcharge will never apply to them — automatically, on every order, for ever. Jon only needs to tick it once.</div></div>
+      <div class="feature-row"><div class="fr-label">In-app help guide</div><div class="fr-desc">A floating ? button on every page of the admin opens a slide-in help panel. The guide automatically shows content relevant to whichever page Jon is on, with plain-English explanations for every feature. A search bar lets him find anything across all nine pages in seconds.</div></div>
+      <div class="feature-row"><div class="fr-label">Split payments on invoices</div><div class="fr-desc">A single invoice can now be paid in parts — for example £50 cash and £50 bank transfer against the same £100 invoice. Jon presses "Log payment", picks the method and enters the amount. The system tracks how much is paid and how much remains. The invoice automatically marks as paid when the balance reaches zero. Part-paid invoices show clearly in the invoice list with a blue "part paid" status and a breakdown of what's been received.</div></div>
+      <div class="feature-row"><div class="fr-label">Weekly cash tabs</div><div class="fr-desc">For customers who pay their week's deliveries as one lump sum on a set day — Jon marks them as a "cash tab" customer and records their daily orders against their tab. The Finance daily sheet shows a dedicated Cash Tabs section with each tab customer's running total for the week. On payment day, one tap settles the tab and adds the full amount to that day's cash total. The system correctly separates "cash in hand" from "cash owed on tab" — so Jon's daily reconciliation is always accurate.</div></div>
+      <div class="feature-row"><div class="fr-label">AXRIK client portal connected</div><div class="fr-desc">Build updates now post directly to the AXRIK client portal. Jon can log in at any time to see the latest progress without waiting for a summary email.</div></div>
+      <div class="feature-row"><div class="fr-label">Domain confirmed — jgfoodnorthwest.com</div><div class="fr-desc">Domain agreed and confirmed available. Jon will register it through Cloudflare (at-cost pricing, no markup) and add AXRIK as an account member so DNS can be managed remotely. The website will go live at jgfoodnorthwest.com and the admin app at admin.jgfoodnorthwest.com — both deployed as separate Netlify sites.</div></div>
+      <div class="feature-row"><div class="fr-label">Automated messaging — Twilio scoped</div><div class="fr-desc">Twilio identified as the messaging provider for all automated texts — scheduled reminders, the 5:30am Monday and Wednesday messages, invoice texts, and VIP sends. UK SMS cost is approximately 4.4p per message, roughly £8–10 per month at Jon's expected volume. All message UI is built and ready — Twilio connection is the next step once Supabase is live.</div></div>
+      <div class="feature-row"><div class="fr-label">Unbuilt features audit completed</div><div class="fr-desc">Full audit of everything in the codebase that is built but not yet functional. Features are prioritised into five tiers: (1) unlocks immediately on Supabase connection, (2) needs Twilio, (3) needs EmailJS, (4) needs Claude API, (5) not started. Scheduled messages, route optimisation, social graphic template, and Wednesday delivery slots are the main items not yet started.</div></div>
+    </div>
+  </section>
+
+  <!-- SESSION 4 -->
+  <section class="section">
+    <div class="section-label">Session 4 — Database &amp; wiring</div>
+    <h2>What we built this session</h2>
+    <div class="feature-list">
+      <div class="feature-row"><div class="fr-label">Full Supabase schema — 5 migrations</div><div class="fr-desc">Every table the system needs is now written and ready to run: products, customers, delivery_slots, orders, order_items, invoices, invoice_items, weekly_sheets, invoice_payments, cash_tab_entries, and delivery_temps. Run them in order in the Supabase SQL editor and the database is live.</div></div>
+      <div class="feature-row"><div class="fr-label">Automatic triggers</div><div class="fr-desc">Three database triggers keep everything consistent without any extra steps from Jon: order totals recalculate automatically when items change, delivery slot counts stay accurate when orders are placed or cancelled, and every table's "last updated" timestamp is maintained automatically.</div></div>
+      <div class="feature-row"><div class="fr-label">Row Level Security</div><div class="fr-desc">The public website can read products and open delivery slots — nothing else. Orders and customer records are admin-only. The public can place an order without ever having read access to the orders table. Account customers can see only their own record and history.</div></div>
+      <div class="feature-row"><div class="fr-label">place_order function</div><div class="fr-desc">Website visitors submit orders through a single secure database function — not by writing directly to any table. The function checks the slot is open, hasn't hit capacity, and the cut-off hasn't passed before creating the customer (or matching an existing one) and inserting the order atomically. Returns a human-readable reference (e.g. JGF-4A2F1C).</div></div>
+      <div class="feature-row"><div class="fr-label">Temp log linked to delivery runs</div><div class="fr-desc">When Jon confirms a delivery slot, the system automatically creates one temperature log entry per customer with an order on that run. Jon opens the Temp Log screen on his phone and sees exactly who he's delivering to that day — no manual list-building, no hunting for the right date. He just taps in the reading as he goes. Previously the temp log used a hardcoded customer list saved to local browser storage — it now reads from and writes to Supabase.</div></div>
+      <div class="feature-row"><div class="fr-label">Monthly compliance export ready</div><div class="fr-desc">A database view (monthly_temp_summary) produces the exact data needed for the monthly printed temperature log Jon files for environmental health — customer name, delivery date, temperature reading, and day label, for any given month.</div></div>
+      <div class="feature-row"><div class="fr-label">Supabase client wired into admin app</div><div class="fr-desc">The admin app now loads the Supabase JS client on startup. One placeholder (the anon key from the Supabase dashboard) needs dropping in — once that's done, every TODO in the code that references Supabase is ready to be activated. The app is connected in structure; the key makes it live.</div></div>
+      <div class="feature-row"><div class="fr-label">Go-live checklist created</div><div class="fr-desc">A full 36-item interactive checklist covering every step needed before the system goes live — Supabase migrations, Netlify deployment, third-party connections (EmailJS, Twilio, Google Maps, Claude API), data loading, pre-launch testing, and handover to Jon. Tickable in the browser with progress saved between sessions.</div></div>
+      <div class="feature-row"><div class="fr-label">SQL run order guide</div><div class="fr-desc">A plain-English guide to the 5 migrations — what each one does, the exact order to run them, and what to do with the anon key afterwards. Saved in the supabase folder alongside the migration files.</div></div>
+      <div class="feature-row"><div class="fr-label">Project folder reorganised</div><div class="fr-desc">The JG Foods project folder is now structured into clear subfolders — admin (app code), website (customer site), supabase (migrations), docs (all documents split into client-facing and internal), assets (logos and graphics), and scripts (portal update tools). Easier to navigate as the project grows.</div></div>
+    </div>
+  </section>
+
+  <!-- AI CALLOUT -->
+  <div class="ai-callout">
+    <span class="ai-tag">✦ AI — built by AXRIK</span>
+    <h3>AI features added this session</h3>
+    <p>More AI baked in tonight — each one removes a manual task Jon currently does by hand.</p>
+    <div class="ai-items">
+      <div class="ai-item">Customer name lookup auto-fills details from past orders — no account needed</div>
+      <div class="ai-item">Facebook & Instagram posts drafted automatically when availability is saved</div>
+      <div class="ai-item">Christmas VIP messages AI-drafted and sent to the whole list in one tap</div>
+      <div class="ai-item">Invoice emails and texts pre-written per customer type — Jon just presses send</div>
+      <div class="ai-item">Optimised delivery route planning via Google Maps API</div>
+      <div class="ai-item">Automated daily reminders to trade customers — coming once Twilio is connected</div>
+    </div>
+  </div>
+
+  <!-- NEXT STEPS -->
+  <section class="section">
+    <div class="section-label">What's next</div>
+    <h2>Next steps to go live</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h4>Run the SQL migrations in Supabase ✦ Next action</h4>
+          <p>Five migration files are written and ready. Open the Supabase SQL editor, run them in order (001 → 002 → 003 → 004 → 005), then paste the anon key into the admin app. The system goes live the moment this is done. A full run-order guide has been saved alongside this document.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h4>Per-customer invoice products loaded</h4>
+          <p>Jon has 50+ trade customers each with their own product list and pricing. Loading these from his existing spreadsheet into the database unlocks the full invoice generator.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h4>EmailJS — invoices & order notifications</h4>
+          <p>Wires up the send buttons on invoices and the order confirmation on the customer website. Quick setup, big impact.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h4>Twilio — automated reminders & VIP texts</h4>
+          <p>Jon's daily trade customer reminders and the Christmas VIP messaging both run through one Twilio account. Two high-value features unlocked at once.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <h4>Google Maps API key</h4>
+          <p>10-minute setup to activate the optimised delivery route planning. Phil handles this — nothing for Jon to do.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">6</div>
+        <div class="step-body">
+          <h4>Social media graphic template</h4>
+          <p>The new navy and gold graphic template wired into the admin so it generates automatically alongside the post copy when Jon saves his availability.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">7</div>
+        <div class="step-body">
+          <h4>Go live at jgfoods.co.uk</h4>
+          <p>Deploy to Netlify, walk through everything with Jon, load real products and prices, switch it on. Phil stays close in the first few weeks.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">
+      <div class="axrik-wordmark">A<span class="x">X</span>RIK</div>
+      <p>Bespoke web apps for businesses that need proper digital tools.</p>
+    </div>
+    <div class="footer-right">
+      <p><strong style="color:rgba(255,255,255,.7)">Phil Munro</strong><br>
+      <a href="mailto:phil@axrik.com">phil@axrik.com</a> &nbsp;·&nbsp; 07581 278408</p>
+      <p style="margin-top:6px;font-size:11px;color:rgba(255,255,255,.25)">Built for JG Foods &nbsp;·&nbsp; Jon Green &nbsp;·&nbsp; 07702 852704</p>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

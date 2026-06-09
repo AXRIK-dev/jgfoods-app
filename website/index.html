@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JG Foods — Fresh Meat Delivered to Your Door</title>
+<meta name="description" content="JG Foods — Mobile butcher delivering fresh meat across Ormskirk and West Lancashire. Order online for Monday or Thursday delivery.">
+
+<!-- Open Graph — WhatsApp, Facebook, iMessage, Twitter/X previews -->
+<meta property="og:type"        content="website">
+<meta property="og:url"         content="https://www.jgfoods.co.uk/">
+<meta property="og:title"       content="JG Foods — Fresh Meat Delivered to Your Door">
+<meta property="og:description" content="Quality cuts and packs delivered across Ormskirk &amp; West Lancashire. 5-star hygiene rated. Order online for Monday or Thursday delivery.">
+<meta property="og:image"       content="https://www.jgfoods.co.uk/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height"content="630">
+<meta property="og:site_name"   content="JG Foods">
+<meta property="og:locale"      content="en_GB">
+
+<!-- Twitter/X card -->
+<meta name="twitter:card"        content="summary_large_image">
+<meta name="twitter:title"       content="JG Foods — Fresh Meat Delivered to Your Door">
+<meta name="twitter:description" content="Quality cuts delivered across Ormskirk &amp; West Lancashire. 5-star hygiene rated. Order for Mon or Thu delivery.">
+<meta name="twitter:image"       content="https://www.jgfoods.co.uk/og-image.jpg">
+
+<!-- WhatsApp specifically uses og:image — 1200×630px works best -->
+<!-- TODO: Create og-image.jpg — 1200×630px branded image with JG Foods logo,
+     tagline and a product photo. Place in website/ folder before go-live. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Mulish:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#16273f; --navy-2:#1f3a5c; --navy-deep:#0d1726;
+    --gold:#c2954a; --gold-bright:#e0bd72; --gold-soft:#e8d5a8;
+    --cream:#f1e8d6; --paper:#fbf6ea; --paper-2:#ffffff;
+    --oxblood:#8c322c; --oxblood-2:#a23b34;
+    --ink:#262019; --ink-soft:#6a5f51;
+    --green:#46604a; --green-soft:#e5ecde;
+    --line:#e4d6b6; --line-soft:#ece2cc;
+    --shadow:0 24px 60px -24px rgba(13,23,38,.55);
+    --display:'Fraunces',Georgia,serif;
+    --body:'Mulish',-apple-system,sans-serif;
+    --radius:12px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{font-family:var(--body);color:var(--ink);background:var(--cream);-webkit-font-smoothing:antialiased}
+  ::selection{background:var(--gold-soft)}
+  button{font-family:var(--body);cursor:pointer;border:none;background:none;color:inherit}
+  input,select,textarea{font-family:var(--body)}
+  a{color:inherit;text-decoration:none}
+  img{display:block;max-width:100%}
+
+  /* ============ NAV ============ */
+  nav{
+    position:sticky;top:0;z-index:100;
+    background:linear-gradient(180deg,var(--navy),var(--navy-2));
+    border-bottom:1px solid rgba(224,189,114,.22);
+    box-shadow:0 8px 30px -12px rgba(13,23,38,.5);
+  }
+  .nav-inner{
+    max-width:1200px;margin:0 auto;padding:14px 24px;
+    display:flex;align-items:center;justify-content:space-between;gap:16px;
+  }
+  .brand{display:flex;align-items:center;gap:11px;cursor:pointer}
+  .seal{
+    width:42px;height:42px;border-radius:50%;flex-shrink:0;
+    background:radial-gradient(circle at 38% 32%,var(--navy-2),var(--navy-deep));
+    border:1.5px solid var(--gold);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-family:var(--display);color:var(--gold-bright);line-height:.92;
+  }
+  .seal b{font-size:13px;font-weight:600;letter-spacing:.5px}
+  .seal span{font-size:5px;letter-spacing:1.6px;color:var(--gold);text-transform:uppercase;margin-top:2px}
+  .brand-name{font-family:var(--display);font-size:18px;font-weight:600;color:#fff;line-height:1}
+  .brand-tagline{font-size:10px;color:var(--gold-soft);letter-spacing:1.4px;text-transform:uppercase;margin-top:2px}
+  .nav-links{display:flex;align-items:center;gap:2px}
+  .nav-link{font-size:13.5px;font-weight:700;color:rgba(255,255,255,.6);padding:7px 13px;border-radius:7px;cursor:pointer;transition:.15s}
+  .nav-link:hover{color:#fff;background:rgba(255,255,255,.07)}
+  .nav-link.active{color:var(--gold-bright)}
+  .nav-cta{background:var(--gold);color:var(--navy-deep);font-weight:800;font-size:13px;padding:9px 18px;border-radius:8px;transition:.15s}
+  .nav-cta:hover{background:var(--gold-bright)}
+  .nav-signin{font-size:13px;font-weight:700;color:rgba(255,255,255,.7);padding:8px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.18);transition:.15s;display:flex;align-items:center;gap:6px}
+  .nav-signin:hover{color:#fff;border-color:rgba(255,255,255,.4)}
+  .nav-signed-in{display:flex;align-items:center;gap:8px}
+  .nav-avatar{width:30px;height:30px;border-radius:50%;background:var(--gold);color:var(--navy-deep);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center}
+  .nav-welcome{font-size:12.5px;font-weight:700;color:var(--gold-soft)}
+  .nav-burger{display:none;flex-direction:column;gap:4.5px;padding:6px}
+  .nav-burger i{width:22px;height:2px;background:var(--gold-bright);display:block;border-radius:2px;transition:.2s}
+  .mobile-menu{
+    display:none;background:var(--navy-deep);border-top:1px solid rgba(224,189,114,.18);
+    padding:16px 24px 20px;flex-direction:column;gap:4px;
+  }
+  .mobile-menu.open{display:flex}
+  .mobile-menu .nav-link{color:rgba(255,255,255,.75);padding:11px 14px;border-radius:9px;font-size:14px}
+  .mobile-menu .nav-cta{margin-top:8px;text-align:center;padding:13px;border-radius:9px;font-size:14px}
+
+  /* ============ HERO ============ */
+  .hero{
+    background:linear-gradient(155deg,var(--navy),var(--navy-2));
+    padding:52px 24px 58px;position:relative;overflow:hidden;
+  }
+  .hero::after{
+    content:"";position:absolute;right:-80px;top:-80px;width:340px;height:340px;
+    border:1.5px solid rgba(224,189,114,.1);border-radius:50%;pointer-events:none;
+  }
+  .hero-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:48px}
+  .hero-text{flex:1}
+  .eyebrow{font-size:10.5px;letter-spacing:2.2px;text-transform:uppercase;color:var(--gold-bright);font-weight:800;margin-bottom:14px}
+  .hero h1{font-family:var(--display);color:#fff;font-size:clamp(34px,5vw,50px);font-weight:600;line-height:1.06;letter-spacing:.2px}
+  .hero h1 em{font-style:normal;color:var(--gold-bright)}
+  .hero-sub{color:rgba(255,255,255,.72);font-size:15px;margin-top:14px;line-height:1.6;max-width:460px}
+  .hero-btns{display:flex;gap:12px;margin-top:26px;flex-wrap:wrap}
+  .btn-primary{background:var(--oxblood);color:#fff;font-weight:800;font-size:14px;padding:13px 24px;border-radius:10px;transition:.16s}
+  .btn-primary:hover{background:var(--oxblood-2)}
+  .btn-sec{background:rgba(255,255,255,.08);color:#fff;font-weight:700;font-size:14px;padding:13px 24px;border-radius:10px;border:1px solid rgba(224,189,114,.28);transition:.15s}
+  .btn-sec:hover{background:rgba(255,255,255,.14)}
+  .trust-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;flex-shrink:0;width:260px}
+  .trust-card{background:rgba(255,255,255,.07);border:1px solid rgba(224,189,114,.28);border-radius:12px;padding:18px 14px;text-align:center}
+  .trust-card b{display:block;font-family:var(--display);color:var(--gold-bright);font-size:24px;font-weight:600}
+  .trust-card span{font-size:9.5px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.7px;margin-top:4px;display:block}
+  .trust-card.wide{grid-column:span 2;text-align:left;display:flex;align-items:center;gap:10px;padding:14px}
+  .trust-card.wide b{font-size:13px;display:block}
+  .trust-card.wide span{font-size:10px;margin-top:2px;color:rgba(255,255,255,.55);letter-spacing:0;text-transform:none}
+
+  /* ============ DELIVERY BANNER ============ */
+  .deliver-banner{
+    background:var(--oxblood);color:#fff;padding:11px 24px;
+    font-size:13px;font-weight:700;display:flex;align-items:center;
+    justify-content:center;gap:9px;text-align:center;
+  }
+
+  /* ============ SECTIONS ============ */
+  .section{padding:40px 24px}
+  .section-inner{max-width:1200px;margin:0 auto}
+  .section-alt{background:var(--paper)}
+  .sec-head{margin-bottom:22px}
+  .sec-head .eyebrow{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--oxblood);font-weight:800}
+  .sec-head h2{font-family:var(--display);font-size:clamp(22px,3.5vw,28px);font-weight:600;color:var(--navy);margin-top:4px}
+  .sec-rule{width:40px;height:3px;background:var(--gold);border-radius:2px;margin-top:9px}
+
+  /* ============ FILTER CHIPS ============ */
+  .chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:20px}
+  .chip{font-size:12px;font-weight:700;padding:7px 15px;border-radius:20px;background:#fff;border:1px solid var(--line);color:var(--ink-soft);cursor:pointer;transition:.14s}
+  .chip:hover{border-color:var(--navy);color:var(--navy)}
+  .chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+
+  /* ============ PRODUCT GRID ============ */
+  .shop-layout{display:grid;grid-template-columns:180px 1fr;gap:28px;align-items:start}
+  .filter-panel h3{font-family:var(--display);font-size:15px;font-weight:600;color:var(--navy);margin-bottom:12px}
+  .filter-list{display:flex;flex-direction:column;gap:3px}
+  .filter-item{font-size:13px;font-weight:700;padding:9px 12px;border-radius:8px;color:var(--ink-soft);cursor:pointer;transition:.14s}
+  .filter-item:hover{background:var(--cream)}
+  .filter-item.on{background:var(--navy);color:#fff}
+
+  .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+  .prod-card{background:#fff;border:1px solid var(--line-soft);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 20px -16px rgba(13,23,38,.5);transition:.2s}
+  .prod-card:hover{box-shadow:0 14px 32px -16px rgba(13,23,38,.3);transform:translateY(-2px)}
+  .prod-img{height:86px;position:relative;display:flex;align-items:flex-end;padding:9px;background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.14) 0 9px,transparent 9px 18px)}
+  .prod-img.chicken{background-color:#c98f3f}
+  .prod-img.steak{background-color:#8c322c}
+  .prod-img.bbq{background-color:#3f5340}
+  .prod-img.pack{background-color:#1f3a5c}
+  .prod-img.kebab{background-color:#9a6a2e}
+  .prod-img.pork{background-color:#a0522d}
+  .prod-img.lamb{background-color:#7b6d47}
+  .prod-img span{font-size:8.5px;letter-spacing:1.3px;text-transform:uppercase;color:#fff;font-weight:800;background:rgba(13,23,38,.42);padding:3px 8px;border-radius:5px}
+  .prod-body{padding:12px 13px 14px;display:flex;flex-direction:column;flex:1}
+  .prod-body h4{font-size:13.5px;font-weight:800;color:var(--ink);line-height:1.25}
+  .prod-desc{font-size:11px;color:var(--ink-soft);margin-top:3px;flex:1}
+  .prod-foot{display:flex;align-items:center;justify-content:space-between;margin-top:12px}
+  .price{font-family:var(--display);font-size:19px;font-weight:600;color:var(--navy)}
+  .price small{font-size:11px;font-family:var(--body);color:var(--ink-soft);font-weight:700}
+  .add-btn{background:var(--navy);color:#fff;font-size:12px;font-weight:700;padding:7px 14px;border-radius:8px;transition:.16s}
+  .add-btn:hover{background:var(--oxblood)}
+  .add-btn:active{transform:scale(.94)}
+  .prod-card.hidden{display:none}
+
+  /* ============ HOW IT WORKS ============ */
+  .how-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .how-card{background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:22px 20px;position:relative}
+  .how-num{width:34px;height:34px;border-radius:50%;background:var(--gold);color:var(--navy-deep);font-family:var(--display);font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+  .how-card h3{font-size:14px;font-weight:800;color:var(--ink);margin-bottom:6px}
+  .how-card p{font-size:13px;color:var(--ink-soft);line-height:1.55}
+
+  /* ============ TRADE CTA ============ */
+  .trade-cta-block{
+    background:linear-gradient(155deg,var(--navy-2),var(--navy));
+    border-radius:16px;padding:32px 30px;border:1px solid rgba(224,189,114,.28);
+    display:flex;align-items:center;gap:32px;
+  }
+  .tcb-text{flex:1}
+  .tcb-text .eyebrow{color:var(--gold-bright)}
+  .tcb-text h2{font-family:var(--display);color:#fff;font-size:clamp(20px,3vw,26px);font-weight:600;margin-top:8px}
+  .tcb-text p{color:rgba(255,255,255,.7);font-size:13.5px;margin-top:8px;line-height:1.55;max-width:460px}
+  .tcb-btn{background:var(--gold);color:var(--navy-deep);font-weight:800;font-size:13.5px;padding:13px 22px;border-radius:10px;white-space:nowrap;transition:.15s;flex-shrink:0}
+  .tcb-btn:hover{background:var(--gold-bright)}
+
+  /* ============ FOOTER ============ */
+  footer{background:var(--navy-deep);padding:28px 24px}
+  .footer-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+  .foot-brand{display:flex;align-items:center;gap:11px}
+  .foot-info p{color:rgba(255,255,255,.5);font-size:12px;line-height:1.8}
+  .foot-info b{color:var(--gold-bright);font-family:var(--display);font-weight:600}
+  .foot-links{display:flex;gap:16px;flex-wrap:wrap}
+  .foot-links a{color:rgba(255,255,255,.5);font-size:12px;font-weight:600;transition:.15s}
+  .foot-links a:hover{color:var(--gold-bright)}
+
+  /* ============ BASKET BAR ============ */
+  .basket-bar{
+    position:fixed;bottom:0;left:0;right:0;z-index:90;
+    background:var(--oxblood);color:#fff;padding:14px 24px;
+    display:flex;align-items:center;justify-content:space-between;
+    box-shadow:0 -10px 30px -10px rgba(13,23,38,.5);
+    cursor:pointer;transform:translateY(100%);transition:.3s cubic-bezier(.2,.8,.2,1);
+  }
+  .basket-bar.show{transform:translateY(0)}
+  .bb-left{display:flex;align-items:center;gap:10px;font-weight:700;font-size:14px}
+  .bb-count{background:#fff;color:var(--oxblood);width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
+  .bb-right{font-family:var(--display);font-weight:600;font-size:17px;display:flex;align-items:center;gap:8px}
+
+  /* ============ BASKET / ORDER PANEL ============ */
+  .panel-overlay{position:fixed;inset:0;background:rgba(13,23,38,.7);z-index:200;opacity:0;pointer-events:none;transition:.25s}
+  .panel-overlay.show{opacity:1;pointer-events:all}
+  .order-panel{
+    position:fixed;top:0;right:0;bottom:0;width:100%;max-width:520px;z-index:201;
+    background:var(--paper);overflow-y:auto;transform:translateX(100%);transition:.32s cubic-bezier(.2,.8,.2,1);
+    display:flex;flex-direction:column;
+  }
+  .order-panel.show{transform:translateX(0)}
+
+  .panel-head{background:var(--navy);padding:16px 22px;display:flex;align-items:center;gap:13px;flex-shrink:0}
+  .panel-back{width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:.15s}
+  .panel-back:hover{background:rgba(255,255,255,.18)}
+  .ph-text h3{font-family:var(--display);color:#fff;font-size:17px;font-weight:600}
+  .ph-text p{font-size:10.5px;color:var(--gold-soft);margin-top:1px}
+
+  .panel-body{padding:20px 22px;flex:1}
+  .p-label{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:var(--oxblood);font-weight:800;margin:22px 0 12px}
+  .p-label:first-child{margin-top:0}
+
+  /* basket items */
+  .basket-item{background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;margin-bottom:9px}
+  .bi-thumb{width:44px;height:44px;border-radius:9px;flex-shrink:0;background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.16) 0 7px,transparent 7px 14px)}
+  .bi-thumb.chicken{background-color:#c98f3f}
+  .bi-thumb.steak{background-color:#8c322c}
+  .bi-thumb.bbq{background-color:#3f5340}
+  .bi-thumb.pack{background-color:#1f3a5c}
+  .bi-thumb.kebab{background-color:#9a6a2e}
+  .bi-thumb.pork{background-color:#a0522d}
+  .bi-thumb.lamb{background-color:#7b6d47}
+  .bi-info{flex:1}
+  .bi-info h4{font-size:13px;font-weight:800;color:var(--ink)}
+  .bi-info span{font-size:11px;color:var(--ink-soft)}
+  .qty{display:flex;align-items:center;gap:9px}
+  .qty button{width:26px;height:26px;border-radius:7px;background:var(--cream);border:1px solid var(--line);font-weight:800;color:var(--navy);font-size:15px;display:flex;align-items:center;justify-content:center;transition:.14s}
+  .qty button:hover{background:var(--line)}
+  .qty b{font-size:13px;min-width:16px;text-align:center}
+  .bi-price{font-family:var(--display);font-weight:600;font-size:15px;color:var(--navy);min-width:56px;text-align:right}
+
+  /* delivery slots */
+  .slot-card{background:#fff;border:2px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:.16s}
+  .slot-card:hover{border-color:var(--gold)}
+  .slot-card.selected{border-color:var(--navy);background:#fbf9f3}
+  .slot-left{display:flex;align-items:center;gap:12px}
+  .slot-radio{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:.15s}
+  .slot-card.selected .slot-radio{border-color:var(--navy)}
+  .slot-card.selected .slot-radio::after{content:"";width:11px;height:11px;border-radius:50%;background:var(--navy)}
+  .slot-card h4{font-size:13.5px;font-weight:800;color:var(--ink)}
+  .slot-card .sd{font-size:11px;color:var(--ink-soft);margin-top:2px}
+  .slot-tag{font-size:10px;font-weight:800;padding:4px 9px;border-radius:14px;background:var(--green-soft);color:var(--green);white-space:nowrap}
+  .slot-tag.full{background:#fdecea;color:#a00}
+
+  /* form fields */
+  .field{margin-bottom:11px}
+  .field label{font-size:11px;font-weight:700;color:var(--ink-soft);display:block;margin-bottom:5px}
+  .field input,.field textarea,.field select{
+    width:100%;background:#fff;border:1.5px solid var(--line);
+    border-radius:9px;padding:11px 13px;font-size:13px;color:var(--ink);transition:.15s;
+  }
+  .field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--gold)}
+  .field textarea{min-height:70px;resize:vertical}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+  .pay-note{display:flex;gap:10px;align-items:center;background:#f4faf5;border:1px solid #cfdcc4;border-radius:11px;padding:13px}
+  .pay-dot{width:22px;height:22px;border-radius:50%;background:var(--green);flex-shrink:0;display:flex;align-items:center;justify-content:center}
+  .pay-note b{font-size:13px;color:var(--ink)}
+  .pay-note p{font-size:11px;color:var(--ink-soft);margin-top:2px}
+
+  .order-summary{background:var(--navy);border-radius:12px;padding:16px 17px;margin-top:18px}
+  .os-row{display:flex;justify-content:space-between;color:rgba(255,255,255,.72);font-size:12.5px;margin-bottom:7px}
+  .os-total{display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid rgba(224,189,114,.25);padding-top:10px;margin-top:4px}
+  .os-total span{color:#fff;font-weight:700;font-size:13px}
+  .os-total b{font-family:var(--display);color:var(--gold-bright);font-size:25px;font-weight:600}
+
+  .place-btn{width:100%;background:var(--oxblood);color:#fff;font-size:14.5px;font-weight:800;padding:15px;border-radius:11px;margin-top:14px;transition:.16s;display:flex;align-items:center;justify-content:center;gap:8px}
+  .place-btn:hover{background:var(--oxblood-2)}
+  .place-btn:disabled{opacity:.6;cursor:not-allowed}
+
+  /* empty basket */
+  .basket-empty{text-align:center;padding:40px 20px}
+  .basket-empty .be-icon{font-size:40px;margin-bottom:16px;opacity:.5}
+  .basket-empty h3{font-family:var(--display);font-size:19px;font-weight:600;color:var(--navy);margin-bottom:8px}
+  .basket-empty p{font-size:13px;color:var(--ink-soft);line-height:1.55}
+  .basket-empty button{margin-top:16px;background:var(--navy);color:#fff;font-weight:800;font-size:13px;padding:11px 20px;border-radius:9px}
+
+  /* ============ CONFIRMATION ============ */
+  .confirm-screen{
+    display:none;flex-direction:column;align-items:center;justify-content:center;
+    padding:40px 28px;text-align:center;flex:1;
+  }
+  .confirm-screen.show{display:flex}
+  .confirm-tick{width:80px;height:80px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;margin-bottom:22px;box-shadow:0 0 0 12px rgba(70,96,74,.15)}
+  .confirm-screen h3{font-family:var(--display);color:var(--navy);font-size:27px;font-weight:600}
+  .confirm-screen p{color:var(--ink-soft);font-size:14px;margin-top:10px;line-height:1.6;max-width:320px}
+  .confirm-ref{margin-top:18px;background:var(--cream);border:1px solid var(--line);border-radius:11px;padding:14px 24px;text-align:center;width:100%;max-width:280px}
+  .confirm-ref span{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft);font-weight:700}
+  .confirm-ref b{display:block;font-family:var(--display);color:var(--navy);font-size:22px;font-weight:600;margin-top:3px}
+  /* save account prompt */
+  .save-account-box{width:100%;max-width:360px;margin-top:20px;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:20px;text-align:left}
+  .sab-head{display:flex;align-items:flex-start;gap:11px;margin-bottom:14px}
+  .sab-icon{width:36px;height:36px;border-radius:10px;background:var(--gold-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:17px}
+  .sab-head h4{font-family:var(--display);font-size:15px;font-weight:600;color:var(--navy)}
+  .sab-head p{font-size:11.5px;color:var(--ink-soft);margin-top:3px;line-height:1.45}
+  .sab-field{margin-bottom:9px}
+  .sab-field label{font-size:10.5px;font-weight:700;color:var(--ink-soft);display:block;margin-bottom:4px}
+  .sab-field input{width:100%;background:var(--paper);border:1.5px solid var(--line);border-radius:8px;padding:9px 11px;font-size:13px;color:var(--ink);transition:.15s}
+  .sab-field input:focus{outline:none;border-color:var(--gold);background:#fff}
+  .sab-actions{display:flex;gap:8px;margin-top:12px}
+  .sab-save{flex:1;background:var(--navy);color:#fff;font-weight:800;font-size:13px;padding:11px;border-radius:9px;transition:.15s}
+  .sab-save:hover{background:var(--oxblood)}
+  .sab-skip{font-size:12px;font-weight:700;color:var(--ink-soft);padding:11px 14px;border-radius:9px;transition:.15s}
+  .sab-skip:hover{background:var(--cream)}
+  .confirm-screen .confirm-done{margin-top:16px;background:var(--navy);color:#fff;font-weight:800;font-size:13px;padding:11px 22px;border-radius:9px}
+
+  /* ============ SIGN IN PANEL ============ */
+  .signin-panel{
+    position:fixed;top:0;right:0;bottom:0;width:100%;max-width:400px;z-index:201;
+    background:var(--paper);transform:translateX(100%);transition:.32s cubic-bezier(.2,.8,.2,1);
+    display:flex;flex-direction:column;
+  }
+  .signin-panel.show{transform:translateX(0)}
+  .sp-body{padding:28px 24px;flex:1;display:flex;flex-direction:column}
+  .sp-tabs{display:flex;gap:3px;border-bottom:1px solid var(--line);margin-bottom:22px}
+  .sp-tab{padding:10px 16px;font-size:13.5px;font-weight:800;color:var(--ink-soft);border-bottom:3px solid transparent;margin-bottom:-1px;cursor:pointer;transition:.15s}
+  .sp-tab.active{color:var(--navy);border-color:var(--gold)}
+  .sp-panel{display:none}
+  .sp-panel.active{display:block}
+  /* reorder banner */
+  .reorder-banner{background:linear-gradient(160deg,var(--navy-2),var(--navy));border-radius:12px;padding:16px;margin-bottom:18px;border:1px solid rgba(224,189,114,.22)}
+  .rb-label{font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold-soft);font-weight:800;margin-bottom:8px}
+  .rb-items{font-size:12.5px;color:rgba(255,255,255,.8);line-height:1.6;margin-bottom:12px}
+  .rb-btn{width:100%;background:var(--gold);color:var(--navy-deep);font-weight:800;font-size:13px;padding:11px;border-radius:9px;display:flex;align-items:center;justify-content:center;gap:7px;transition:.15s}
+  .rb-btn:hover{background:var(--gold-bright)}
+
+  /* ============ RESPONSIVE ============ */
+  @media(max-width:900px){
+    .nav-links,.nav-cta{display:none}
+    .nav-burger{display:flex}
+    .hero-inner{flex-direction:column;gap:28px}
+    .trust-grid{width:100%;grid-template-columns:repeat(4,1fr)}
+    .trust-card.wide{grid-column:span 4}
+    .shop-layout{grid-template-columns:1fr}
+    .filter-panel{display:none}
+    .how-grid{grid-template-columns:1fr}
+    .trade-cta-block{flex-direction:column;align-items:flex-start;gap:18px}
+  }
+  @media(max-width:600px){
+    .trust-grid{grid-template-columns:repeat(2,1fr)}
+    .trust-card.wide{grid-column:span 2}
+    .prod-grid{grid-template-columns:1fr 1fr}
+    .hero h1{font-size:32px}
+    .hero-btns{flex-direction:column}
+    .hero-btns button{text-align:center}
+    .section{padding:30px 18px}
+    .footer-inner{flex-direction:column;gap:16px}
+  }
+  @media(max-width:380px){
+    .prod-grid{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<nav>
+  <div class="nav-inner">
+    <div class="brand" onclick="window.scrollTo({top:0,behavior:'smooth'})">
+      <div class="seal"><b>JG</b><span>Foods</span></div>
+      <div>
+        <div class="brand-name">JG Foods</div>
+        <div class="brand-tagline">Mobile Butcher</div>
+      </div>
+    </div>
+    <div class="nav-links">
+      <a class="nav-link active" href="#shop">Shop</a>
+      <a class="nav-link" href="#how">How it works</a>
+      <a class="nav-link" href="#trade">Trade accounts</a>
+      <a class="nav-link" href="#about">About</a>
+      <a class="nav-link" href="#contact">Contact</a>
+    </div>
+    <div style="display:flex;align-items:center;gap:9px">
+      <div id="navGuestButtons">
+        <button class="nav-signin" onclick="openSignInPanel('signin')">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="4.5" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M1 12c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          Sign in
+        </button>
+      </div>
+      <div id="navSignedIn" style="display:none" class="nav-signed-in">
+        <div class="nav-avatar" id="navAvatar">S</div>
+        <span class="nav-welcome" id="navWelcome">Hi Sarah</span>
+        <button style="font-size:11px;font-weight:700;color:rgba(255,255,255,.5);padding:4px 8px" onclick="signOut()">Sign out</button>
+      </div>
+      <button class="nav-cta" onclick="openOrderPanel()">Order now</button>
+    </div>
+    <button class="nav-burger" id="burgerBtn" onclick="toggleMobileMenu()" aria-label="Menu">
+      <i></i><i></i><i></i>
+    </button>
+  </div>
+  <div class="mobile-menu" id="mobileMenu">
+    <a class="nav-link" href="#shop" onclick="closeMobileMenu()">Shop</a>
+    <a class="nav-link" href="#how" onclick="closeMobileMenu()">How it works</a>
+    <a class="nav-link" href="#trade" onclick="closeMobileMenu()">Trade accounts</a>
+    <a class="nav-link" href="#contact" onclick="closeMobileMenu()">Contact</a>
+    <button class="nav-link" style="text-align:left" onclick="openSignInPanel('signin');closeMobileMenu()">Sign in / Register</button>
+    <button class="nav-cta" onclick="openOrderPanel();closeMobileMenu()">Order now</button>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-text">
+      <div class="eyebrow">Mobile Butcher · Ormskirk &amp; West Lancashire</div>
+      <h1>Fresh meat,<br><em>delivered to your door.</em></h1>
+      <p class="hero-sub">Quality cuts and packs delivered across the North-west in our refrigerated van. Order online and we'll come to you.</p>
+      <div class="hero-btns">
+        <button class="btn-primary" onclick="document.getElementById('shop').scrollIntoView({behavior:'smooth'})">Shop this week's selection</button>
+        <button class="btn-sec" onclick="document.getElementById('how').scrollIntoView({behavior:'smooth'})">How it works</button>
+      </div>
+    </div>
+    <div class="trust-grid">
+      <div class="trust-card"><b>5★</b><span>Hygiene Rating</span></div>
+      <div class="trust-card"><b>100%</b><span>Recommend</span></div>
+      <div class="trust-card"><b>579</b><span>Happy Locals</span></div>
+      <div class="trust-card"><b>14</b><span>5-Star Reviews</span></div>
+      <div class="trust-card wide">
+        <svg width="18" height="18" viewBox="0 0 14 14" fill="none"><path d="M1 9V3h7v6M8 6h3l2 3v0H8M3.5 11.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4zM10.5 11.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4z" stroke="#e0bd72" stroke-width="1.2" stroke-linejoin="round"/></svg>
+        <div>
+          <b style="color:#fff;font-family:var(--display)">Delivering every Mon &amp; Thu afternoon</b>
+          <span>Order before Sunday midnight (Mon) or Wednesday midnight (Thu)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DELIVERY BANNER ============ -->
+<div class="deliver-banner">
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 9V3h7v6M8 6h3l2 3v0H8M3.5 11.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4zM10.5 11.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4z" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/></svg>
+  Delivering every Monday &amp; Thursday afternoon — order by Sunday midnight for Mon, Wednesday midnight for Thu
+</div>
+
+<!-- ============ SHOP ============ -->
+<section class="section section-alt" id="shop">
+  <div class="section-inner">
+    <div class="sec-head">
+      <div class="eyebrow">Order by Sunday midnight · this week's list</div>
+      <h2>Fresh selection</h2>
+      <div class="sec-rule"></div>
+    </div>
+
+    <!-- mobile filter chips -->
+    <div class="chips" id="mobileChips" style="display:none">
+      <button class="chip on" data-cat="all" onclick="filterCategory(this,'all')">All</button>
+      <button class="chip" data-cat="chicken" onclick="filterCategory(this,'chicken')">Chicken</button>
+      <button class="chip" data-cat="steak" onclick="filterCategory(this,'steak')">Steak &amp; Beef</button>
+      <button class="chip" data-cat="bbq" onclick="filterCategory(this,'bbq')">BBQ &amp; Grill</button>
+      <button class="chip" data-cat="kebab" onclick="filterCategory(this,'kebab')">Kebabs</button>
+      <button class="chip" data-cat="pack" onclick="filterCategory(this,'pack')">Meat Packs</button>
+    </div>
+
+    <div class="shop-layout">
+      <!-- sidebar filter -->
+      <div class="filter-panel">
+        <h3>Browse by</h3>
+        <div class="filter-list">
+          <div class="filter-item on" onclick="filterCategory(this,'all')">All products</div>
+          <div class="filter-item" onclick="filterCategory(this,'chicken')">Chicken</div>
+          <div class="filter-item" onclick="filterCategory(this,'steak')">Steak &amp; Beef</div>
+          <div class="filter-item" onclick="filterCategory(this,'bbq')">BBQ &amp; Grill</div>
+          <div class="filter-item" onclick="filterCategory(this,'kebab')">Kebabs</div>
+          <div class="filter-item" onclick="filterCategory(this,'pack')">Meat Packs</div>
+        </div>
+      </div>
+
+      <!-- product grid -->
+      <div class="prod-grid" id="prodGrid">
+
+        <div class="prod-card" data-id="p1" data-cat="chicken" data-name="5kg Chicken Fillets" data-price="34.00" data-cls="chicken">
+          <div class="prod-img chicken"><span>Chicken</span></div>
+          <div class="prod-body">
+            <h4>5kg Chicken Fillets</h4>
+            <div class="prod-desc">Fresh skinless breast fillets</div>
+            <div class="prod-foot">
+              <span class="price">£34.00</span>
+              <button class="add-btn" onclick="addToBasket('p1','5kg Chicken Fillets',34.00,'chicken')">Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="prod-card" data-id="p2" data-cat="bbq" data-name="BBQ Pack" data-price="47.50" data-cls="bbq">
+          <div class="prod-img bbq"><span>BBQ &amp; Grill</span></div>
+          <div class="prod-body">
+            <h4>BBQ Pack</h4>
+            <div class="prod-desc">Burgers, sausages, kebabs &amp; more</div>
+            <div class="prod-foot">
+              <span class="price">£47.50</span>
+              <button class="add-btn" onclick="addToBasket('p2','BBQ Pack',47.50,'bbq')">Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="prod-card" data-id="p3" data-cat="steak" data-name="Ribeye Steaks ×5" data-price="30.00" data-cls="steak">
+          <div class="prod-img steak"><span>Steak &amp; Beef</span></div>
+          <div class="prod-body">
+            <h4>Ribeye Steaks ×5</h4>
+            <div class="prod-desc">Hand-cut, well-marbled</div>
+            <div class="prod-foot">
+              <span class="price">£30.00</span>
+              <button class="add-btn" onclick="addToBasket('p3','Ribeye Steaks ×5',30.00,'steak')">Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="prod-card" data-id="p4" data-cat="steak" data-name="Lean Mince 1kg" data-price="12.00" data-cls="steak">
+          <div class="prod-img steak"><span>Steak &amp; Beef</span></div>
+          <div class="prod-body">
+            <h4>Lean Mince 1kg</h4>
+            <div class="prod-desc">Freshly minced steak mince</div>
+            <div class="prod-foot">
+              <span class="price">£12.00</span>
+              <button class="add-btn" onclick="addToBasket('p4','Lean Mince 1kg',12.00,'steak')">Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="prod-card" data-id="p5" data-cat="pack" data-name="Extra Lean Meat Pack" data-price="38.50" data-cls="pack">
+          <div class="prod-img pack"><span>Meat Packs</span></div>
+          <div class="prod-body">
+            <h4>Extra Lean Meat Pack</h4>
+            <div class="prod-desc">A week of low-fat favourites</div>
+            <div class="prod-foot">
+              <span class="price">£38.50</span>
+              <button class="add-btn" onclick="addToBasket('p5','Extra Lean Meat Pack',38.50,'pack')">Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="prod-card" data-id="p6" data-cat="kebab" data-name="Kebab Pack ×5" data-price="20.00" data-cls="kebab">
+          <div class="prod-img kebab"><span>Kebabs</span></div>
+          <div class="prod-body">
+            <h4>Kebab Pack ×5</h4>
+            <div class="prod-desc">Chicken, lamb &amp; beef, all seasonings</div>
+            <div class="prod-foot">
+              <span class="price">£20.00</span>
+              <button class="add-btn" onclick="addToBasket('p6','Kebab Pack ×5',20.00,'kebab')">Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="prod-card" data-id="p7" data-cat="chicken" data-name="Chicken Thighs 3kg" data-price="18.00" data-cls="chicken">
+          <div class="prod-img chicken"><span>Chicken</span></div>
+          <div class="prod-body">
+            <h4>Chicken Thighs 3kg</h4>
+            <div class="prod-desc">Bone-in, skin-on thighs</div>
+            <div class="prod-foot">
+              <span class="price">£18.00</span>
+              <button class="add-btn" onclick="addToBasket('p7','Chicken Thighs 3kg',18.00,'chicken')">Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="prod-card" data-id="p8" data-cat="pack" data-name="Family Value Pack" data-price="52.00" data-cls="pack">
+          <div class="prod-img pack"><span>Meat Packs</span></div>
+          <div class="prod-body">
+            <h4>Family Value Pack</h4>
+            <div class="prod-desc">Mixed cuts for the whole week</div>
+            <div class="prod-foot">
+              <span class="price">£52.00</span>
+              <button class="add-btn" onclick="addToBasket('p8','Family Value Pack',52.00,'pack')">Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="prod-card" data-id="p9" data-cat="steak" data-name="Diced Beef 1kg" data-price="10.00" data-cls="steak">
+          <div class="prod-img steak"><span>Steak &amp; Beef</span></div>
+          <div class="prod-body">
+            <h4>Diced Beef 1kg</h4>
+            <div class="prod-desc">Perfect for stews and casseroles</div>
+            <div class="prod-foot">
+              <span class="price">£10.00</span>
+              <button class="add-btn" onclick="addToBasket('p9','Diced Beef 1kg',10.00,'steak')">Add</button>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /prod-grid -->
+    </div><!-- /shop-layout -->
+  </div>
+</section>
+
+<!-- ============ FIRST ORDER GIFT BANNER ============ -->
+<section class="section" style="padding:22px 24px;background:linear-gradient(160deg,var(--navy-2),var(--navy))">
+  <div class="section-inner">
+    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+      <span style="font-size:28px">🥓</span>
+      <div style="flex:1">
+        <p style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold-bright);font-weight:800;margin-bottom:4px">New customer offer</p>
+        <p style="font-family:var(--display);color:#fff;font-size:16px;font-weight:600">Free pack of sausages or bacon on your first order!</p>
+        <p style="font-size:12px;color:rgba(255,255,255,.7);margin-top:3px">Just mention it in your order notes — Jon will pop it in with your delivery.</p>
+      </div>
+      <button class="nav-cta" onclick="document.getElementById('shop').scrollIntoView({behavior:'smooth'})">Shop now</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS ============ -->
+<section class="section" id="how">
+  <div class="section-inner">
+    <div class="sec-head">
+      <div class="eyebrow">Simple as can be</div>
+      <h2>How it works</h2>
+      <div class="sec-rule"></div>
+    </div>
+    <div class="how-grid">
+      <div class="how-card">
+        <div class="how-num">1</div>
+        <h3>Browse this week's list</h3>
+        <p>See exactly what's available and the prices — updated fresh each week by Jon.</p>
+      </div>
+      <div class="how-card">
+        <div class="how-num">2</div>
+        <h3>Pick Monday or Thursday</h3>
+        <p>Choose the delivery day that suits you, leave your address and any notes.</p>
+      </div>
+      <div class="how-card">
+        <div class="how-num">3</div>
+        <h3>We deliver to your door</h3>
+        <p>Fresh meat, refrigerated all the way. Pay on delivery — cash or bank transfer.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TRADE SECTION ============ -->
+<section class="section section-alt" id="trade">
+  <div class="section-inner">
+
+    <div class="sec-head">
+      <div class="eyebrow">Pubs · Restaurants · Cafés · Food Businesses</div>
+      <h2>Trade accounts</h2>
+      <div class="sec-rule"></div>
+    </div>
+
+    <p style="font-size:14px;color:var(--ink-soft);max-width:600px;line-height:1.65;margin-bottom:28px">If you run a food business, we can supply you directly — with pricing agreed per client, twice-weekly delivery and a daily reminder text so you never miss an order.</p>
+
+    <!-- benefits -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-bottom:36px">
+      <div style="background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:20px;display:flex;gap:13px">
+        <span style="font-size:22px;flex-shrink:0">💷</span>
+        <div><h3 style="font-size:13.5px;font-weight:800;color:var(--ink);margin-bottom:4px">Trade pricing</h3><p style="font-size:12px;color:var(--ink-soft);line-height:1.5">Pricing agreed per client — not a fixed list. We work around your margins and your order volume.</p></div>
+      </div>
+      <div style="background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:20px;display:flex;gap:13px">
+        <span style="font-size:22px;flex-shrink:0">🚚</span>
+        <div><h3 style="font-size:13.5px;font-weight:800;color:var(--ink);margin-bottom:4px">Twice-weekly delivery</h3><p style="font-size:12px;color:var(--ink-soft);line-height:1.5">Monday and Thursday, refrigerated all the way. Reliable supply so you're never caught short mid-week.</p></div>
+      </div>
+      <div style="background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:20px;display:flex;gap:13px">
+        <span style="font-size:22px;flex-shrink:0">📲</span>
+        <div><h3 style="font-size:13.5px;font-weight:800;color:var(--ink);margin-bottom:4px">Daily reminders</h3><p style="font-size:12px;color:var(--ink-soft);line-height:1.5">We text you the day before delivery to confirm your order. Quick reply and you're sorted — no chasing.</p></div>
+      </div>
+      <div style="background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:20px;display:flex;gap:13px">
+        <span style="font-size:22px;flex-shrink:0">🤝</span>
+        <div><h3 style="font-size:13.5px;font-weight:800;color:var(--ink);margin-bottom:4px">A proper relationship</h3><p style="font-size:12px;color:var(--ink-soft);line-height:1.5">You deal with Jon directly. If something's not right, we'll fix it. No call centres, no runaround.</p></div>
+      </div>
+    </div>
+
+    <!-- enquiry form + aside -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:start">
+
+      <!-- form -->
+      <div style="background:#fff;border:1px solid var(--line-soft);border-radius:16px;padding:28px">
+        <div id="tradeFormBody">
+          <h3 style="font-family:var(--display);font-size:19px;font-weight:600;color:var(--navy);margin-bottom:18px">Open a trade account</h3>
+          <div class="field-row">
+            <div class="field"><label>Your name *</label><input type="text" id="tr-name" placeholder="Jon Smith"></div>
+            <div class="field"><label>Phone number *</label><input type="tel" id="tr-phone" placeholder="07700 000000"></div>
+          </div>
+          <div class="field"><label>Business name *</label><input type="text" id="tr-business" placeholder="The Crown Pub"></div>
+          <div class="field"><label>Business address *</label><input type="text" id="tr-address" placeholder="High Street, Ormskirk"></div>
+          <div class="field">
+            <label>Type of business</label>
+            <select id="tr-type">
+              <option value="">— select —</option>
+              <option>Pub or bar</option>
+              <option>Restaurant</option>
+              <option>Café or coffee shop</option>
+              <option>Hotel</option>
+              <option>Takeaway</option>
+              <option>Butcher or food retailer</option>
+              <option>Other food business</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Preferred delivery day</label>
+            <select id="tr-delivery">
+              <option value="">— select —</option>
+              <option>Monday</option>
+              <option>Thursday</option>
+              <option>Both Monday &amp; Thursday</option>
+            </select>
+          </div>
+          <div class="field"><label>What products do you mainly use?</label><textarea id="tr-products" placeholder="e.g. Chicken breast, ribeye steaks, mince — roughly how much per week" style="min-height:70px;resize:vertical"></textarea></div>
+          <button class="place-btn" onclick="submitTradeEnquiry()">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h10M9 5l3 3-3 3" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Send enquiry
+          </button>
+        </div>
+        <div id="tradeFormSuccess" style="display:none;text-align:center;padding:30px 10px">
+          <div style="width:64px;height:64px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;box-shadow:0 0 0 10px rgba(70,96,74,.15)">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M5 14l6 6 12-12" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h3 style="font-family:var(--display);font-size:20px;font-weight:600;color:var(--navy);margin-bottom:8px">Enquiry sent!</h3>
+          <p style="font-size:13px;color:var(--ink-soft);line-height:1.6">Jon will be in touch within 24 hours to have a chat and get your account set up.</p>
+        </div>
+      </div>
+
+      <!-- aside -->
+      <div>
+        <h3 style="font-family:var(--display);font-size:18px;font-weight:600;color:var(--navy);margin-bottom:14px">Who we work with</h3>
+        <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:20px">
+          <div style="background:#fff;border:1px solid var(--line-soft);border-radius:11px;padding:14px 16px;display:flex;align-items:center;gap:12px"><span style="font-size:20px">🍺</span><div><h4 style="font-size:13px;font-weight:800;color:var(--ink)">Pubs &amp; bars</h4><p style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">Reliable weekly supply of burgers, steaks and grills for your kitchen.</p></div></div>
+          <div style="background:#fff;border:1px solid var(--line-soft);border-radius:11px;padding:14px 16px;display:flex;align-items:center;gap:12px"><span style="font-size:20px">🍽️</span><div><h4 style="font-size:13px;font-weight:800;color:var(--ink)">Restaurants</h4><p style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">Consistent quality cuts delivered twice a week.</p></div></div>
+          <div style="background:#fff;border:1px solid var(--line-soft);border-radius:11px;padding:14px 16px;display:flex;align-items:center;gap:12px"><span style="font-size:20px">☕</span><div><h4 style="font-size:13px;font-weight:800;color:var(--ink)">Cafés &amp; delis</h4><p style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">Breakfast meats, sandwich fillings and daily-use cuts at trade prices.</p></div></div>
+          <div style="background:#fff;border:1px solid var(--line-soft);border-radius:11px;padding:14px 16px;display:flex;align-items:center;gap:12px"><span style="font-size:20px">🏨</span><div><h4 style="font-size:13px;font-weight:800;color:var(--ink)">Hotels &amp; catering</h4><p style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">Flexible order sizes to match your covers and seasonal demand.</p></div></div>
+        </div>
+        <div style="background:linear-gradient(155deg,var(--navy-2),var(--navy));border-radius:12px;padding:18px;border:1px solid rgba(224,189,114,.22)">
+          <p style="color:rgba(255,255,255,.85);font-size:13px;font-weight:700;margin-bottom:6px">Prefer to talk first?</p>
+          <p style="color:rgba(255,255,255,.65);font-size:12.5px;line-height:1.6">Give Jon a call or drop him a message — happy to chat before you commit to anything.</p>
+          <p style="margin-top:10px;font-size:13px"><a href="tel:07702852704" style="color:var(--gold-bright);font-weight:700">📞 07702 852704</a></p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============ ABOUT ============ -->
+<section class="section" id="about">
+  <div class="section-inner">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center">
+
+      <div>
+        <div class="sec-head">
+          <div class="eyebrow">About JG Foods</div>
+          <h2>A proper butcher.<br>On your doorstep.</h2>
+          <div class="sec-rule"></div>
+        </div>
+        <p style="font-size:14.5px;color:var(--ink-soft);line-height:1.7;margin-bottom:16px">JG Foods is a mobile butcher run by Jon Green, delivering quality fresh meat to homes and businesses across Ormskirk and West Lancashire. What started as a passion for proper, no-nonsense butchery has grown into a service that hundreds of local families and food businesses rely on every week.</p>
+        <p style="font-size:14.5px;color:var(--ink-soft);line-height:1.7;margin-bottom:16px">Jon delivers in a fully refrigerated van every Monday and Thursday — which means you're getting the same quality you'd expect from a high street butcher, without having to leave the house. Every cut is sourced carefully, and you'll always deal with Jon directly. No call centres, no middlemen.</p>
+        <p style="font-size:14.5px;color:var(--ink-soft);line-height:1.7">With a 5-star food hygiene rating, 100% recommendation score and hundreds of loyal customers across the region, JG Foods has built its reputation the old-fashioned way — by turning up on time, every time, with meat worth eating.</p>
+
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:24px">
+          <div style="background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:14px 18px;text-align:center;min-width:100px">
+            <b style="font-family:var(--display);font-size:22px;font-weight:600;color:var(--navy);display:block">5★</b>
+            <span style="font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.7px;font-weight:700">Hygiene rating</span>
+          </div>
+          <div style="background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:14px 18px;text-align:center;min-width:100px">
+            <b style="font-family:var(--display);font-size:22px;font-weight:600;color:var(--navy);display:block">100%</b>
+            <span style="font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.7px;font-weight:700">Recommend</span>
+          </div>
+          <div style="background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:14px 18px;text-align:center;min-width:100px">
+            <b style="font-family:var(--display);font-size:22px;font-weight:600;color:var(--navy);display:block">Mon &amp; Thu</b>
+            <span style="font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.7px;font-weight:700">Weekly delivery</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <!-- Profile card -->
+        <div style="background:linear-gradient(160deg,var(--navy-2),var(--navy));border-radius:18px;padding:30px;border:1px solid rgba(224,189,114,.22);margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:18px">
+            <div style="width:64px;height:64px;border-radius:50%;background:var(--gold);color:var(--navy-deep);font-family:var(--display);font-size:24px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:2px solid rgba(224,189,114,.5)">J</div>
+            <div>
+              <p style="font-family:var(--display);color:#fff;font-size:18px;font-weight:600">Jon Green</p>
+              <p style="font-size:11.5px;color:var(--gold-soft);margin-top:3px">Owner, JG Foods</p>
+            </div>
+          </div>
+          <p style="color:rgba(255,255,255,.8);font-size:13.5px;line-height:1.65;font-style:italic">"I've always believed that good meat at fair prices shouldn't be a luxury. I deliver to my customers the same way I'd want someone to deliver to my family — on time, fresh, and with a bit of a chat on the doorstep."</p>
+          <p style="color:var(--gold-soft);font-size:12px;margin-top:12px;font-weight:700">📍 Based in Ormskirk, West Lancashire</p>
+        </div>
+
+        <!-- What makes us different -->
+        <div style="background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:20px">
+          <h3 style="font-family:var(--display);font-size:15px;font-weight:600;color:var(--navy);margin-bottom:14px">Why customers choose JG Foods</h3>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;gap:10px;align-items:flex-start">
+              <span style="font-size:16px;flex-shrink:0">🚚</span>
+              <p style="font-size:12.5px;color:var(--ink-soft);line-height:1.5"><b style="color:var(--ink)">Refrigerated delivery, every time</b> — your meat stays fresh from our van to your door, no exceptions.</p>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start">
+              <span style="font-size:16px;flex-shrink:0">🤝</span>
+              <p style="font-size:12.5px;color:var(--ink-soft);line-height:1.5"><b style="color:var(--ink)">You deal with Jon directly</b> — not a website, not a warehouse. A real person who knows your order.</p>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start">
+              <span style="font-size:16px;flex-shrink:0">📍</span>
+              <p style="font-size:12.5px;color:var(--ink-soft);line-height:1.5"><b style="color:var(--ink)">Local and proud</b> — serving Ormskirk, Skelmersdale, Burscough and the surrounding area.</p>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start">
+              <span style="font-size:16px;flex-shrink:0">💷</span>
+              <p style="font-size:12.5px;color:var(--ink-soft);line-height:1.5"><b style="color:var(--ink)">Fair prices, no surprises</b> — what you see is what you pay, on delivery.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============ CONTACT ============ -->
+<section class="section" id="contact">
+  <div class="section-inner">
+    <div class="sec-head">
+      <div class="eyebrow">Get in touch</div>
+      <h2>We're easy to reach</h2>
+      <div class="sec-rule"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;max-width:680px">
+      <a href="tel:07702852704" style="display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:16px 18px;transition:.15s" onmouseover="this.style.borderColor='var(--navy)'" onmouseout="this.style.borderColor='var(--line-soft)'">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 4h4l1.5 3.5-2 1.5a9 9 0 004.5 4.5l1.5-2 3.5 1.5V17a1 1 0 01-1 1C7.163 18 2 12.837 2 6a1 1 0 011-1h1z" stroke="var(--navy)" stroke-width="1.5"/></svg>
+        <div><b style="font-size:13px;font-weight:800;color:var(--ink);display:block">Call or text</b><span style="font-size:12px;color:var(--ink-soft)">07702 852704</span></div>
+      </a>
+      <a href="https://www.facebook.com/JGFoodsLiverpool" target="_blank" rel="noopener" style="display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:16px 18px;transition:.15s" onmouseover="this.style.borderColor='var(--navy)'" onmouseout="this.style.borderColor='var(--line-soft)'">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="16" height="16" rx="4" stroke="var(--navy)" stroke-width="1.5"/><path d="M11 18v-7h2.5l.5-3H11V6.5c0-.83.33-1.5 1.5-1.5H14V2.5h-2C9.5 2.5 8 4 8 6.5V8H6v3h2v7h3z" fill="var(--navy)"/></svg>
+        <div><b style="font-size:13px;font-weight:800;color:var(--ink);display:block">Facebook</b><span style="font-size:12px;color:var(--ink-soft)">@JGFoodsLiverpool</span></div>
+      </a>
+      <a href="mailto:jongreen347@gmail.com" style="display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:16px 18px;transition:.15s" onmouseover="this.style.borderColor='var(--navy)'" onmouseout="this.style.borderColor='var(--line-soft)'">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="4" width="16" height="12" rx="2" stroke="var(--navy)" stroke-width="1.5"/><path d="M2 7l8 5 8-5" stroke="var(--navy)" stroke-width="1.5"/></svg>
+        <div><b style="font-size:13px;font-weight:800;color:var(--ink);display:block">Email</b><span style="font-size:12px;color:var(--ink-soft)">jongreen347@gmail.com</span></div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="footer-inner">
+    <div class="foot-brand">
+      <div class="seal"><b>JG</b><span>Foods</span></div>
+      <div class="foot-info">
+        <p><b>JG Foods</b> — Mobile Butcher<br>
+        Ormskirk &amp; West Lancashire · 07702 852704<br>
+        5-star rated hygiene · Refrigerated delivery</p>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="#shop">Shop</a>
+      <a href="#how">How it works</a>
+      <a href="#trade">Trade accounts</a>
+      <a href="#contact">Contact</a>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ FLOATING BASKET BAR ============ -->
+<div class="basket-bar" id="basketBar" onclick="openOrderPanel()">
+  <div class="bb-left">
+    <span class="bb-count" id="bbCount">0</span>
+    View your basket
+  </div>
+  <div class="bb-right">
+    <span id="bbTotal">£0.00</span>
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M4 4l5 3-5 3" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+</div>
+
+<!-- ============ ORDER PANEL ============ -->
+<div class="panel-overlay" id="panelOverlay" onclick="closeOrderPanel()"></div>
+<div class="order-panel" id="orderPanel">
+
+  <!-- header -->
+  <div class="panel-head">
+    <button class="panel-back" onclick="closeOrderPanel()">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="ph-text">
+      <h3 id="panelTitle">Your basket</h3>
+      <p id="panelSub">Review your items and choose delivery</p>
+    </div>
+  </div>
+
+  <!-- basket view -->
+  <div id="basketView" class="panel-body">
+    <!-- empty state -->
+    <div class="basket-empty" id="basketEmpty">
+      <div class="be-icon">🛒</div>
+      <h3>Your basket is empty</h3>
+      <p>Browse this week's selection and add items to your order.</p>
+      <button onclick="closeOrderPanel()">Browse selection</button>
+    </div>
+
+    <!-- items list -->
+    <div id="basketItems" style="display:none">
+      <div class="p-label">Your items</div>
+      <div id="itemsList"></div>
+
+      <div class="p-label">Choose delivery day</div>
+      <div class="slot-card selected" id="slot-mon" onclick="selectSlot('mon')">
+        <div class="slot-left">
+          <div class="slot-radio"></div>
+          <div>
+            <h4>Monday afternoon</h4>
+            <div class="sd">Order by Sunday midnight</div>
+          </div>
+        </div>
+        <span class="slot-tag">Available</span>
+      </div>
+      <div class="slot-card" id="slot-thu" onclick="selectSlot('thu')">
+        <div class="slot-left">
+          <div class="slot-radio"></div>
+          <div>
+            <h4>Thursday afternoon</h4>
+            <div class="sd">Order by Wednesday midnight</div>
+          </div>
+        </div>
+        <span class="slot-tag">Available</span>
+      </div>
+
+      <div class="p-label">Your details</div>
+      <div class="field-row">
+        <div class="field"><label>First name</label><input type="text" id="f-first" placeholder="Sarah"></div>
+        <div class="field"><label>Last name</label><input type="text" id="f-last" placeholder="Taylor"></div>
+      </div>
+      <div class="field"><label>Phone number</label><input type="tel" id="f-phone" placeholder="07700 000000"></div>
+      <div class="field"><label>Delivery address</label><input type="text" id="f-address" placeholder="14 Any Street, Ormskirk, WN8 0AA"></div>
+      <div class="field">
+        <label>Notes for Jon (optional)</label>
+        <textarea id="f-notes" placeholder="Gate code, leave with neighbour, first order free gift, etc."></textarea>
+      </div>
+      <div style="background:var(--green-soft);border:1px solid #cfdcc4;border-radius:10px;padding:10px 13px;font-size:11.5px;color:var(--green);margin-bottom:2px">
+        🥓 <b>New customer?</b> Add "free gift" to your notes and Jon will include a free pack of sausages or bacon with your first delivery.
+      </div>
+
+      <div class="p-label">Standing order</div>
+      <div style="background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:14px;margin-bottom:11px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div>
+            <b style="font-size:13px;color:var(--ink)">Make this a regular order?</b>
+            <p style="font-size:11px;color:var(--ink-soft);margin-top:2px">Set up a weekly or fortnightly standing order</p>
+          </div>
+          <div class="toggle" id="standingOrderToggle" onclick="toggleStandingOrder()" role="switch" aria-checked="false"></div>
+        </div>
+        <div id="standingOrderOptions" style="display:none;padding-top:10px;border-top:1px solid var(--line-soft)">
+          <div class="field" style="margin-bottom:8px">
+            <label>How often?</label>
+            <select id="so-frequency">
+              <option value="weekly">Every week</option>
+              <option value="fortnightly">Every two weeks</option>
+            </select>
+          </div>
+          <div style="background:#fff8ec;border:1px solid var(--gold);border-radius:9px;padding:11px 13px;font-size:11.5px;color:var(--ink-soft);line-height:1.55">
+            ⚠️ <b style="color:var(--ink)">Standing orders are paid upfront</b> and are non-refundable if cancelled. Jon will be in touch to confirm and arrange payment before your first delivery.
+          </div>
+        </div>
+      </div>
+
+      <div class="p-label">Payment</div>
+      <!-- delivery charge notice (shown if applicable) -->
+      <div id="deliveryChargeNotice" style="display:none;background:#fff8ec;border:1.5px solid var(--gold);border-radius:11px;padding:13px;margin-bottom:2px">
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <span style="font-size:18px;flex-shrink:0">📦</span>
+          <div>
+            <b style="font-size:13px;color:var(--ink)" id="deliveryChargeTitle">Delivery charge applies</b>
+            <p style="font-size:11px;color:var(--ink-soft);margin-top:2px" id="deliveryChargeDesc">A £5.00 delivery charge has been added to your order.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="pay-note">
+        <div class="pay-dot">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div>
+          <b>Pay on delivery</b>
+          <p>Cash or bank transfer accepted. No payment needed now.</p>
+        </div>
+      </div>
+
+      <div class="order-summary">
+        <div class="os-row"><span>Subtotal</span><span id="osSub">£0.00</span></div>
+        <div class="os-row" id="osDeliveryRow"><span>Delivery</span><span id="osDelivery">Free</span></div>
+        <div class="os-total"><span>Total to pay on delivery</span><b id="osTotal">£0.00</b></div>
+      </div>
+
+      <button class="place-btn" id="placeBtn" onclick="placeOrder()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h10M9 5l3 3-3 3" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Place order
+      </button>
+    </div>
+  </div>
+
+  <!-- confirmation -->
+  <div class="confirm-screen" id="confirmScreen">
+    <div class="confirm-tick">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M6 16l7 7 13-13" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <h3>Order placed!</h3>
+    <p>Thanks — Jon will be in touch to confirm your delivery slot and any details.</p>
+    <div class="confirm-ref">
+      <span>Your order reference</span>
+      <b id="orderRef">JG-0001</b>
+    </div>
+
+    <!-- Save account prompt — hidden if already signed in -->
+    <div class="save-account-box" id="saveAccountBox">
+      <div class="sab-head">
+        <div class="sab-icon">⚡</div>
+        <div>
+          <h4>Save your details for next time?</h4>
+          <p>One tap to reorder — no need to type your address again.</p>
+        </div>
+      </div>
+      <div class="sab-field">
+        <label>Email address</label>
+        <input type="email" id="sab-email" placeholder="you@example.com">
+      </div>
+      <div class="sab-field">
+        <label>Choose a password</label>
+        <input type="password" id="sab-password" placeholder="At least 8 characters">
+      </div>
+      <div class="sab-actions">
+        <button class="sab-save" onclick="createAccount()">Create account</button>
+        <button class="sab-skip" onclick="skipAccount()">No thanks</button>
+      </div>
+    </div>
+
+    <button class="confirm-done" id="confirmDoneBtn" style="display:none" onclick="resetPanel()">Done</button>
+  </div>
+
+</div><!-- /order-panel -->
+
+<!-- ============ SIGN IN PANEL ============ -->
+<div class="panel-overlay" id="signinOverlay" onclick="closeSignInPanel()"></div>
+<div class="signin-panel" id="signinPanel">
+  <div class="panel-head">
+    <button class="panel-back" onclick="closeSignInPanel()">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="ph-text">
+      <h3>My account</h3>
+      <p>Sign in or create an account</p>
+    </div>
+  </div>
+  <div class="sp-body">
+
+    <!-- Reorder banner — only shown when signed in -->
+    <div class="reorder-banner" id="reorderBanner" style="display:none">
+      <div class="rb-label">Your last order</div>
+      <div class="rb-items" id="reorderItems">5kg Chicken Fillets, Lean Mince 1kg</div>
+      <button class="rb-btn" onclick="reorderUsual()">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7a5 5 0 009.5-2M12 7a5 5 0 01-9.5 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M11.5 2v3h-3M2.5 12V9h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Reorder my usual
+      </button>
+    </div>
+
+    <div class="sp-tabs" id="spTabs">
+      <div class="sp-tab active" onclick="switchSpTab('signin')">Sign in</div>
+      <div class="sp-tab" onclick="switchSpTab('register')">Create account</div>
+    </div>
+
+    <!-- Sign in tab -->
+    <div class="sp-panel active" id="sp-signin">
+      <div class="field"><label>Email address</label><input type="email" id="si-email" placeholder="you@example.com"></div>
+      <div class="field"><label>Password</label><input type="password" id="si-password" placeholder="Your password"></div>
+      <button style="width:100%;background:var(--navy);color:#fff;font-weight:800;font-size:13.5px;padding:13px;border-radius:10px;margin-top:6px;transition:.15s" onclick="signIn()">Sign in</button>
+      <p style="font-size:11.5px;color:var(--ink-soft);text-align:center;margin-top:14px">
+        Don't have an account? <button onclick="switchSpTab('register')" style="color:var(--navy);font-weight:800;font-size:11.5px">Create one →</button>
+      </p>
+    </div>
+
+    <!-- Register tab -->
+    <div class="sp-panel" id="sp-register">
+      <div class="field-row">
+        <div class="field"><label>First name</label><input type="text" id="reg-first" placeholder="Sarah"></div>
+        <div class="field"><label>Last name</label><input type="text" id="reg-last" placeholder="Taylor"></div>
+      </div>
+      <div class="field"><label>Email address</label><input type="email" id="reg-email" placeholder="you@example.com"></div>
+      <div class="field"><label>Phone number</label><input type="tel" id="reg-phone" placeholder="07700 000000"></div>
+      <div class="field"><label>Delivery address</label><input type="text" id="reg-address" placeholder="14 Any Street, Ormskirk"></div>
+      <div class="field"><label>Password</label><input type="password" id="reg-password" placeholder="At least 8 characters"></div>
+      <button style="width:100%;background:var(--oxblood);color:#fff;font-weight:800;font-size:13.5px;padding:13px;border-radius:10px;margin-top:6px;transition:.15s" onclick="registerAccount()">Create account</button>
+    </div>
+
+    <!-- Signed in state -->
+    <div class="sp-panel" id="sp-signedin" style="display:none">
+      <div style="text-align:center;padding:20px 0">
+        <div style="width:60px;height:60px;border-radius:50%;background:var(--gold);color:var(--navy-deep);font-weight:800;font-size:22px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px" id="siAvatar">S</div>
+        <p style="font-family:var(--display);font-size:18px;font-weight:600;color:var(--navy)" id="siName">Sarah Taylor</p>
+        <p style="font-size:12px;color:var(--ink-soft);margin-top:4px" id="siEmail">sarah@example.com</p>
+      </div>
+      <div style="background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:14px;margin-top:4px">
+        <p style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--ink-soft);margin-bottom:10px">Your saved details</p>
+        <p style="font-size:12.5px;color:var(--ink);line-height:1.7" id="siDetails">—</p>
+      </div>
+      <button style="width:100%;margin-top:14px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);font-weight:800;font-size:13px;padding:12px;border-radius:10px" onclick="signOut()">Sign out</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- EmailJS SDK (configure with your IDs) -->
+<!-- <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script> -->
+
+<script>
+// ============ PRODUCT CATALOGUE ============
+// TODO: Replace with Supabase fetch once database is set up
+// const supabaseUrl = 'YOUR_SUPABASE_URL';
+// const supabaseKey = 'YOUR_SUPABASE_ANON_KEY';
+
+// ============ ORDER RULES ============
+// TODO: Load these from Supabase admin settings table so Jon can update them
+const ORDER_RULES = {
+  minOrderValue: 20.00,       // minimum order before free delivery
+  deliveryCharge: 5.00,       // charge if below minimum or outside radius
+  // Delivery radius is checked server-side via postcode lookup in production
+  // For now we flag it in the UI if the address looks outside Ormskirk/Skelmersdale/Burscough area
+  // TODO: integrate postcodes.io API for radius check
+  deliveryRadiusKm: 15,
+};
+
+let deliveryChargeActive = false;
+
+function checkOrderRules() {
+  const total = getBasketTotal();
+  const belowMin = total < ORDER_RULES.minOrderValue && total > 0;
+  deliveryChargeActive = belowMin;
+
+  const notice = document.getElementById('deliveryChargeNotice');
+  const deliveryEl = document.getElementById('osDelivery');
+  if (!notice) return;
+
+  if (belowMin) {
+    notice.style.display = 'block';
+    document.getElementById('deliveryChargeTitle').textContent = `Minimum order is £${ORDER_RULES.minOrderValue.toFixed(2)}`;
+    document.getElementById('deliveryChargeDesc').textContent =
+      `A £${ORDER_RULES.deliveryCharge.toFixed(2)} delivery charge has been added. Add £${(ORDER_RULES.minOrderValue - total).toFixed(2)} more to remove it.`;
+    if (deliveryEl) deliveryEl.textContent = formatGBP(ORDER_RULES.deliveryCharge);
+  } else {
+    notice.style.display = 'none';
+    if (deliveryEl) deliveryEl.textContent = 'Free';
+  }
+}
+
+function getOrderTotal() {
+  return getBasketTotal() + (deliveryChargeActive ? ORDER_RULES.deliveryCharge : 0);
+}
+
+// ============ BASKET STATE ============
+const basket = {};
+let selectedSlot = 'mon';
+
+function addToBasket(id, name, price, cls) {
+  if (basket[id]) {
+    basket[id].qty++;
+  } else {
+    basket[id] = { id, name, price, cls, qty: 1 };
+  }
+  updateBasketUI();
+
+  // animate button
+  const btn = document.querySelector(`[data-id="${id}"] .add-btn`);
+  if (btn) {
+    const orig = btn.textContent;
+    btn.textContent = '✓ Added';
+    btn.style.background = 'var(--green)';
+    setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 1000);
+  }
+}
+
+function removeFromBasket(id) {
+  delete basket[id];
+  updateBasketUI();
+}
+
+function changeQty(id, delta) {
+  if (!basket[id]) return;
+  basket[id].qty += delta;
+  if (basket[id].qty <= 0) { removeFromBasket(id); return; }
+  updateBasketUI();
+}
+
+function getBasketTotal() {
+  return Object.values(basket).reduce((s, i) => s + i.price * i.qty, 0);
+}
+
+function getBasketCount() {
+  return Object.values(basket).reduce((s, i) => s + i.qty, 0);
+}
+
+function formatGBP(n) { return '£' + n.toFixed(2); }
+
+function updateBasketUI() {
+  const count = getBasketCount();
+  const total = getBasketTotal();
+
+  // basket bar
+  const bar = document.getElementById('basketBar');
+  document.getElementById('bbCount').textContent = count;
+  document.getElementById('bbTotal').textContent = formatGBP(total);
+  bar.classList.toggle('show', count > 0);
+
+  // panel — items list
+  const itemsDiv = document.getElementById('itemsList');
+  const items = Object.values(basket);
+  document.getElementById('basketEmpty').style.display = items.length ? 'none' : 'block';
+  document.getElementById('basketItems').style.display = items.length ? 'block' : 'none';
+
+  itemsDiv.innerHTML = items.map(item => `
+    <div class="basket-item">
+      <div class="bi-thumb ${item.cls}"></div>
+      <div class="bi-info">
+        <h4>${item.name}</h4>
+        <span>${formatGBP(item.price)} each</span>
+      </div>
+      <div class="qty">
+        <button onclick="changeQty('${item.id}',-1)">−</button>
+        <b>${item.qty}</b>
+        <button onclick="changeQty('${item.id}',1)">+</button>
+      </div>
+      <div class="bi-price">${formatGBP(item.price * item.qty)}</div>
+    </div>
+  `).join('');
+
+  checkOrderRules();
+  const orderTotal = getOrderTotal();
+  document.getElementById('osSub').textContent = formatGBP(total);
+  document.getElementById('osTotal').textContent = formatGBP(orderTotal);
+}
+
+// ============ DELIVERY SLOT ============
+function selectSlot(slot) {
+  selectedSlot = slot;
+  document.getElementById('slot-mon').classList.toggle('selected', slot === 'mon');
+  document.getElementById('slot-thu').classList.toggle('selected', slot === 'thu');
+}
+
+// ============ PANEL ============
+function openOrderPanel() {
+  document.getElementById('panelOverlay').classList.add('show');
+  document.getElementById('orderPanel').classList.add('show');
+  document.body.style.overflow = 'hidden';
+  updateBasketUI();
+  prefillOrderForm();
+}
+
+function closeOrderPanel() {
+  document.getElementById('panelOverlay').classList.remove('show');
+  document.getElementById('orderPanel').classList.remove('show');
+  document.body.style.overflow = '';
+}
+
+function resetPanel() {
+  closeOrderPanel();
+  Object.keys(basket).forEach(k => delete basket[k]);
+  updateBasketUI();
+  document.getElementById('basketView').style.display = 'block';
+  document.getElementById('confirmScreen').classList.remove('show');
+  document.getElementById('panelTitle').textContent = 'Your basket';
+  document.getElementById('panelSub').textContent = 'Review your items and choose delivery';
+  // clear form
+  ['f-first','f-last','f-phone','f-address','f-notes'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+}
+
+// ============ PLACE ORDER ============
+function placeOrder() {
+  const first = document.getElementById('f-first').value.trim();
+  const last = document.getElementById('f-last').value.trim();
+  const phone = document.getElementById('f-phone').value.trim();
+  const address = document.getElementById('f-address').value.trim();
+
+  if (!first || !last || !phone || !address) {
+    alert('Please fill in all required fields (name, phone, and address).');
+    return;
+  }
+
+  const btn = document.getElementById('placeBtn');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+
+  const items = Object.values(basket);
+  const itemList = items.map(i => `${i.qty}× ${i.name} (${formatGBP(i.price * i.qty)})`).join('\n');
+  const total = formatGBP(getBasketTotal());
+  const slotLabel = selectedSlot === 'mon' ? 'Monday' : 'Thursday';
+  const ref = 'JG-' + Date.now().toString().slice(-4);
+  const notes = document.getElementById('f-notes').value.trim();
+
+  // ---- EmailJS integration ----
+  // TODO: initialise EmailJS and replace with real service/template IDs
+  // emailjs.init('YOUR_PUBLIC_KEY');
+  // emailjs.send('YOUR_SERVICE_ID', 'YOUR_TEMPLATE_ID', {
+  //   customer_name: `${first} ${last}`,
+  //   customer_phone: phone,
+  //   customer_address: address,
+  //   delivery_slot: slotLabel,
+  //   order_items: itemList,
+  //   order_total: total,
+  //   order_notes: notes,
+  //   order_ref: ref,
+  // })
+  // .then(() => { showConfirmation(ref); })
+  // .catch(() => { btn.disabled=false; btn.textContent='Place order'; alert('Something went wrong. Please call Jon on 07702 852704.'); });
+
+  // TEMP: simulate success until EmailJS is wired up
+  setTimeout(() => { showConfirmation(ref); }, 900);
+}
+
+function showConfirmation(ref) {
+  document.getElementById('orderRef').textContent = ref;
+  document.getElementById('basketView').style.display = 'none';
+  document.getElementById('confirmScreen').classList.add('show');
+  document.getElementById('panelTitle').textContent = 'Order confirmed';
+  document.getElementById('panelSub').textContent = 'We\'ll be in touch shortly';
+
+  // If already signed in, skip the account prompt
+  if (currentUser) {
+    document.getElementById('saveAccountBox').style.display = 'none';
+    document.getElementById('confirmDoneBtn').style.display = 'inline-flex';
+    // Update last order on account
+    currentUser.lastOrder = Object.values(basket).map(i => i.name);
+  } else {
+    document.getElementById('saveAccountBox').style.display = 'block';
+    document.getElementById('confirmDoneBtn').style.display = 'none';
+  }
+}
+
+// ============ CATEGORY FILTER ============
+function filterCategory(el, cat) {
+  // update sidebar
+  document.querySelectorAll('.filter-item').forEach(f => f.classList.remove('on'));
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('on'));
+
+  if (el.classList.contains('filter-item')) el.classList.add('on');
+  if (el.classList.contains('chip')) el.classList.add('on');
+
+  // sync the other control
+  document.querySelectorAll(`.filter-item`).forEach(f => {
+    if ((f.textContent.toLowerCase().includes('all') && cat === 'all') ||
+        f.textContent.toLowerCase().replace(/\s+&\s+/,' ').includes(cat.replace('steak','steak'))) {
+      f.classList.add('on');
+    }
+  });
+
+  document.querySelectorAll('.prod-card').forEach(card => {
+    card.classList.toggle('hidden', cat !== 'all' && card.dataset.cat !== cat);
+  });
+}
+
+// ============ TRADE ENQUIRY ============
+function submitTradeEnquiry() {
+  const name     = document.getElementById('tr-name').value.trim();
+  const phone    = document.getElementById('tr-phone').value.trim();
+  const business = document.getElementById('tr-business').value.trim();
+  const address  = document.getElementById('tr-address').value.trim();
+  if (!name || !phone || !business || !address) {
+    alert('Please fill in your name, phone, business name and address.');
+    return;
+  }
+  // TODO: EmailJS send — same service as order notifications
+  // emailjs.send('SERVICE_ID','TEMPLATE_TRADE',{ name, phone, business, address,
+  //   type: document.getElementById('tr-type').value,
+  //   delivery: document.getElementById('tr-delivery').value,
+  //   products: document.getElementById('tr-products').value });
+  document.getElementById('tradeFormBody').style.display = 'none';
+  document.getElementById('tradeFormSuccess').style.display = 'block';
+}
+
+// ============ MOBILE NAV ============
+function toggleMobileMenu() {
+  document.getElementById('mobileMenu').classList.toggle('open');
+}
+function closeMobileMenu() {
+  document.getElementById('mobileMenu').classList.remove('open');
+}
+
+// ============ RESPONSIVE: show chips on mobile ============
+function checkMobileChips() {
+  const chips = document.getElementById('mobileChips');
+  chips.style.display = window.innerWidth <= 900 ? 'flex' : 'none';
+}
+window.addEventListener('resize', checkMobileChips);
+checkMobileChips();
+
+// ============ STANDING ORDERS ============
+let standingOrderActive = false;
+function toggleStandingOrder() {
+  standingOrderActive = !standingOrderActive;
+  document.getElementById('standingOrderToggle').classList.toggle('on', standingOrderActive);
+  document.getElementById('standingOrderToggle').setAttribute('aria-checked', standingOrderActive);
+  document.getElementById('standingOrderOptions').style.display = standingOrderActive ? 'block' : 'none';
+}
+
+// ============ ESCAPE KEY ============
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeOrderPanel(); closeSignInPanel(); } });
+
+// ============ ACCOUNT STATE ============
+// TODO: Replace with Supabase Auth
+// import { createClient } from '@supabase/supabase-js'
+// const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+let currentUser = null; // { name, email, phone, address, lastOrder: [] }
+
+function updateNavForUser() {
+  const guest = document.getElementById('navGuestButtons');
+  const signedIn = document.getElementById('navSignedIn');
+  if (currentUser) {
+    guest.style.display = 'none';
+    signedIn.style.display = 'flex';
+    document.getElementById('navAvatar').textContent = currentUser.name.charAt(0).toUpperCase();
+    document.getElementById('navWelcome').textContent = 'Hi ' + currentUser.name.split(' ')[0];
+  } else {
+    guest.style.display = 'block';
+    signedIn.style.display = 'none';
+  }
+}
+
+function prefillOrderForm() {
+  if (!currentUser) return;
+  if (currentUser.name) {
+    const parts = currentUser.name.split(' ');
+    document.getElementById('f-first').value = parts[0] || '';
+    document.getElementById('f-last').value = parts.slice(1).join(' ') || '';
+  }
+  if (currentUser.phone) document.getElementById('f-phone').value = currentUser.phone;
+  if (currentUser.address) document.getElementById('f-address').value = currentUser.address;
+}
+
+// ============ SIGN IN PANEL ============
+function openSignInPanel(tab) {
+  document.getElementById('signinOverlay').classList.add('show');
+  document.getElementById('signinPanel').classList.add('show');
+  document.body.style.overflow = 'hidden';
+  if (currentUser) {
+    showSignedInState();
+  } else {
+    switchSpTab(tab || 'signin');
+  }
+}
+
+function closeSignInPanel() {
+  document.getElementById('signinOverlay').classList.remove('show');
+  document.getElementById('signinPanel').classList.remove('show');
+  document.body.style.overflow = '';
+}
+
+function switchSpTab(tab) {
+  document.querySelectorAll('.sp-tab').forEach((t, i) => {
+    t.classList.toggle('active', (i === 0 && tab === 'signin') || (i === 1 && tab === 'register'));
+  });
+  document.getElementById('sp-signin').classList.toggle('active', tab === 'signin');
+  document.getElementById('sp-register').classList.toggle('active', tab === 'register');
+  document.getElementById('sp-signedin').style.display = 'none';
+  document.getElementById('reorderBanner').style.display = 'none';
+  document.getElementById('spTabs').style.display = 'flex';
+}
+
+function showSignedInState() {
+  document.getElementById('sp-signin').classList.remove('active');
+  document.getElementById('sp-register').classList.remove('active');
+  document.getElementById('sp-signedin').style.display = 'block';
+  document.getElementById('spTabs').style.display = 'none';
+
+  const isTrade = currentUser.type === 'trade';
+
+  // Avatar + name
+  document.getElementById('siAvatar').textContent = currentUser.name.charAt(0).toUpperCase();
+  document.getElementById('siAvatar').style.background = isTrade ? 'var(--navy)' : 'var(--gold)';
+  document.getElementById('siAvatar').style.color = isTrade ? 'var(--gold-bright)' : 'var(--navy-deep)';
+  document.getElementById('siName').textContent = currentUser.name;
+  document.getElementById('siEmail').textContent = currentUser.email;
+
+  // Account type badge
+  const badge = isTrade
+    ? `<span style="display:inline-block;margin-top:4px;font-size:9.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;background:var(--navy);color:var(--gold-bright);padding:3px 9px;border-radius:10px">Trade account</span>`
+    : `<span style="display:inline-block;margin-top:4px;font-size:9.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;background:var(--green-soft);color:var(--green);padding:3px 9px;border-radius:10px">Home delivery</span>`;
+  document.getElementById('siEmail').insertAdjacentHTML('afterend', `<div style="margin-top:6px">${badge}</div>`);
+
+  // Saved details
+  document.getElementById('siDetails').innerHTML = [
+    currentUser.phone  ? `📞 ${currentUser.phone}`   : null,
+    currentUser.address? `📍 ${currentUser.address}` : null,
+    isTrade && currentUser.businessName ? `🏢 ${currentUser.businessName}` : null,
+  ].filter(Boolean).join('<br>') || '—';
+
+  // Reorder banner — trade customers see "your usual order", domestic see last order
+  if (currentUser.lastOrder && currentUser.lastOrder.length) {
+    document.getElementById('reorderBanner').style.display = 'block';
+    document.getElementById('reorderItems').textContent = currentUser.lastOrder.join(', ');
+    const reorderBtn = document.querySelector('.rb-btn');
+    if (reorderBtn) reorderBtn.textContent = isTrade ? '🔄 Reorder your usual' : '🛒 Reorder last order';
+  }
+}
+
+function signIn() {
+  const email = document.getElementById('si-email').value.trim();
+  const password = document.getElementById('si-password').value;
+  if (!email || !password) { alert('Please enter your email and password.'); return; }
+
+  // TODO: supabase.auth.signInWithPassword({ email, password })
+  // Then: supabase.from('customers').select('*').eq('email', email).single()
+  // The `type` field on the customer record ('domestic' or 'trade') is set by Jon in the admin
+  // — customers never set this themselves
+
+  // Simulate: trade account example (Jon would have created this after the enquiry)
+  const isTradeDemo = email.toLowerCase().includes('trade') || email.toLowerCase().includes('pub');
+  currentUser = isTradeDemo
+    ? { name: 'The Crown Pub', email, phone: '01695 123456', address: 'High Street, Skelmersdale',
+        businessName: 'The Crown Pub', type: 'trade',
+        lastOrder: ['Ribeye Steaks ×5', '5kg Chicken Fillets', 'Lean Mince 1kg'] }
+    : { name: 'Sarah Taylor', email, phone: '07711 111111', address: '14 Oak Street, Ormskirk',
+        type: 'domestic', lastOrder: ['5kg Chicken Fillets', 'Lean Mince 1kg'] };
+
+  updateNavForUser();
+  showSignedInState();
+}
+
+function registerAccount() {
+  const first = document.getElementById('reg-first').value.trim();
+  const last  = document.getElementById('reg-last').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const password = document.getElementById('reg-password').value;
+  if (!first || !last || !email || !password) { alert('Please fill in all required fields.'); return; }
+
+  // Self-registered accounts are always domestic — trade accounts are set up by Jon via the admin
+  // TODO: supabase.auth.signUp({ email, password })
+  // Then: supabase.from('customers').insert({ name, phone, address, email, type: 'domestic' })
+  // Trade accounts: Jon creates them in admin → type set to 'trade' → per-client pricing applied
+  currentUser = {
+    name:    `${first} ${last}`,
+    email,
+    phone:   document.getElementById('reg-phone').value.trim(),
+    address: document.getElementById('reg-address').value.trim(),
+    type:    'domestic', // always — trade accounts are created by Jon, never self-registered
+    lastOrder: []
+  };
+  updateNavForUser();
+  showSignedInState();
+}
+
+function signOut() {
+  // TODO: supabase.auth.signOut()
+  currentUser = null;
+  updateNavForUser();
+  closeSignInPanel();
+}
+
+// ============ ACCOUNT CREATION FROM CONFIRMATION ============
+function createAccount() {
+  const email = document.getElementById('sab-email').value.trim();
+  const password = document.getElementById('sab-password').value;
+  if (!email || !password) { alert('Please enter an email and password.'); return; }
+  if (password.length < 8) { alert('Password must be at least 8 characters.'); return; }
+
+  // TODO: supabase.auth.signUp({ email, password }) — pre-fill name/address from completed order
+  const name = (document.getElementById('f-first').value + ' ' + document.getElementById('f-last').value).trim();
+  currentUser = {
+    name: name || 'Customer',
+    email,
+    phone: document.getElementById('f-phone').value,
+    address: document.getElementById('f-address').value,
+    lastOrder: Object.values(basket).map(i => i.name)
+  };
+  updateNavForUser();
+  document.getElementById('saveAccountBox').innerHTML =
+    `<div style="text-align:center;padding:8px 0"><div style="font-size:28px;margin-bottom:8px">🎉</div><p style="font-family:var(--display);font-size:16px;font-weight:600;color:var(--navy)">Account created!</p><p style="font-size:12px;color:var(--ink-soft);margin-top:5px">Next time, your details will be saved and you can reorder in one tap.</p></div>`;
+  document.getElementById('confirmDoneBtn').style.display = 'inline-flex';
+}
+
+function skipAccount() {
+  document.getElementById('saveAccountBox').style.display = 'none';
+  document.getElementById('confirmDoneBtn').style.display = 'inline-flex';
+}
+
+// ============ REORDER USUAL ============
+function reorderUsual() {
+  if (!currentUser || !currentUser.lastOrder || !currentUser.lastOrder.length) return;
+  closeSignInPanel();
+  // Map last order names back to products and add to basket
+  currentUser.lastOrder.forEach(name => {
+    const prodEl = document.querySelector(`[data-name="${name}"]`);
+    if (prodEl) {
+      const id = prodEl.dataset.id;
+      const price = parseFloat(prodEl.dataset.price);
+      const cls = prodEl.dataset.cls;
+      addToBasket(id, name, price, cls);
+    }
+  });
+  openOrderPanel();
+  prefillOrderForm();
+}
+</script>
+</body>
+</html>

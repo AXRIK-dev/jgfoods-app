@@ -1,0 +1,2261 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JG Foods — Interactive Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Mulish:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#16273f; --navy-2:#1f3a5c; --navy-deep:#0d1726;
+    --gold:#c2954a; --gold-bright:#e0bd72; --gold-soft:#e8d5a8;
+    --cream:#f1e8d6; --paper:#fbf6ea; --paper-2:#ffffff;
+    --oxblood:#8c322c; --oxblood-2:#a23b34;
+    --ink:#262019; --ink-soft:#6a5f51;
+    --green:#46604a; --green-soft:#e5ecde;
+    --line:#e4d6b6; --line-soft:#ece2cc;
+    --shadow:0 24px 60px -24px rgba(13,23,38,.55);
+    --display:'Fraunces',Georgia,serif;
+    --body:'Mulish',-apple-system,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    font-family:var(--body); color:var(--ink);
+    background:
+      radial-gradient(900px 600px at 85% -5%, rgba(194,149,74,.16), transparent 60%),
+      radial-gradient(700px 500px at 5% 100%, rgba(22,39,63,.10), transparent 55%),
+      var(--cream);
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--gold-soft)}
+  button{font-family:var(--body);cursor:pointer;border:none;background:none;color:inherit}
+  input{font-family:var(--body)}
+
+  /* ============ PROTOTYPE NAVIGATOR ============ */
+  .proto-bar{
+    position:sticky;top:0;z-index:50;
+    background:linear-gradient(180deg,var(--navy-2),var(--navy));
+    border-bottom:1px solid rgba(224,189,114,.32);
+    box-shadow:0 8px 30px -12px rgba(13,23,38,.6);
+  }
+  .proto-inner{
+    max-width:1280px;margin:0 auto;padding:14px 28px;
+    display:flex;align-items:center;gap:26px;flex-wrap:wrap;
+  }
+  .proto-brand{display:flex;align-items:center;gap:13px}
+  .proto-seal{
+    width:46px;height:46px;border-radius:50%;flex-shrink:0;
+    background:radial-gradient(circle at 38% 32%,var(--navy-2),var(--navy-deep));
+    border:1.5px solid var(--gold);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-family:var(--display);color:var(--gold-bright);line-height:.92;
+  }
+  .proto-seal b{font-size:14px;font-weight:600;letter-spacing:.5px}
+  .proto-seal span{font-size:5.5px;letter-spacing:1.6px;color:var(--gold);
+    text-transform:uppercase;margin-top:2px}
+  .proto-brand h1{font-family:var(--display);font-size:19px;font-weight:600;
+    color:#fff;line-height:1}
+  .proto-brand p{font-size:11px;color:var(--gold-soft);letter-spacing:1.4px;
+    text-transform:uppercase;margin-top:3px}
+  .proto-tabs{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .tab-group-label{
+    font-size:9.5px;letter-spacing:1.6px;text-transform:uppercase;
+    color:rgba(232,213,168,.6);margin:0 8px 0 6px;font-weight:700;
+  }
+  .proto-tab{
+    padding:8px 15px;border-radius:8px;font-size:13px;font-weight:600;
+    color:rgba(255,255,255,.62);transition:.18s;white-space:nowrap;
+    border:1px solid transparent;
+  }
+  .proto-tab:hover{color:#fff;background:rgba(255,255,255,.07)}
+  .proto-tab.active{
+    background:var(--gold);color:var(--navy-deep);
+    box-shadow:0 6px 16px -6px rgba(194,149,74,.7);
+  }
+  .proto-divider{width:1px;height:26px;background:rgba(224,189,114,.3)}
+
+  /* ============ STAGE ============ */
+  .stage{max-width:1280px;margin:0 auto;padding:42px 28px 70px}
+  .view{display:none;animation:rise .5s cubic-bezier(.2,.7,.2,1)}
+  .view.active{display:block}
+  @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+
+  /* pitch note */
+  .pitch-note{
+    max-width:760px;margin:0 auto 34px;
+    background:linear-gradient(180deg,var(--paper-2),var(--paper));
+    border:1px solid var(--line);border-left:4px solid var(--gold);
+    border-radius:12px;padding:20px 26px;
+    box-shadow:0 14px 34px -22px rgba(13,23,38,.5);
+  }
+  .pitch-note .eyebrow{
+    font-size:10.5px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--oxblood);font-weight:800;margin-bottom:7px;
+  }
+  .pitch-note h2{font-family:var(--display);font-size:23px;font-weight:600;
+    color:var(--navy);margin-bottom:7px;line-height:1.18}
+  .pitch-note p{font-size:14.5px;line-height:1.6;color:var(--ink-soft)}
+  .pitch-note .tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}
+  .pitch-note .tags span{
+    font-size:11.5px;font-weight:700;color:var(--navy);
+    background:var(--green-soft);border:1px solid #cfdcc4;
+    padding:4px 11px;border-radius:20px;
+  }
+
+  /* ============ PHONE DEVICE ============ */
+  .device-phone{
+    width:420px;max-width:100%;margin:0 auto;
+    background:linear-gradient(160deg,#1c2c44,var(--navy-deep));
+    border-radius:50px;padding:14px;
+    box-shadow:var(--shadow), inset 0 0 0 2px rgba(224,189,114,.18);
+  }
+  .phone-screen{
+    background:var(--paper);border-radius:38px;overflow:hidden;
+    height:768px;overflow-y:auto;position:relative;
+    scrollbar-width:thin;scrollbar-color:var(--gold) transparent;
+  }
+  .phone-screen::-webkit-scrollbar{width:0}
+  .statusbar{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:11px 24px 6px;font-size:12px;font-weight:800;color:var(--navy);
+    background:var(--paper);
+  }
+  .statusbar .dots{display:flex;gap:3px;align-items:center}
+  .statusbar .dots i{width:4px;height:4px;border-radius:50%;background:var(--navy);display:block}
+  .statusbar .batt{width:22px;height:11px;border:1.5px solid var(--navy);
+    border-radius:3px;position:relative;display:inline-block}
+  .statusbar .batt::before{content:"";position:absolute;left:1.5px;top:1.5px;
+    bottom:1.5px;width:13px;background:var(--navy);border-radius:1px}
+
+  /* ============ BROWSER DEVICE ============ */
+  .device-browser{
+    max-width:1080px;margin:0 auto;border-radius:15px;overflow:hidden;
+    box-shadow:var(--shadow);border:1px solid var(--navy);
+  }
+  .browser-bar{
+    background:linear-gradient(180deg,#243a59,var(--navy));
+    padding:13px 18px;display:flex;align-items:center;gap:14px;
+  }
+  .browser-lights{display:flex;gap:7px}
+  .browser-lights i{width:12px;height:12px;border-radius:50%;display:block}
+  .browser-lights i:nth-child(1){background:#e0655a}
+  .browser-lights i:nth-child(2){background:#e6b94e}
+  .browser-lights i:nth-child(3){background:#5fb96b}
+  .browser-url{
+    flex:1;background:rgba(0,0,0,.28);border-radius:8px;
+    padding:7px 15px;font-size:12.5px;color:var(--gold-soft);
+    display:flex;align-items:center;gap:8px;
+  }
+  .browser-url svg{flex-shrink:0}
+  .browser-body{background:#fff;height:690px;overflow-y:auto;position:relative}
+  .browser-body::-webkit-scrollbar{width:9px}
+  .browser-body::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
+
+  /* ============ CUSTOMER SITE — shared ============ */
+  .c-head{
+    background:linear-gradient(180deg,var(--navy),var(--navy-2));
+    padding:15px 22px;display:flex;align-items:center;justify-content:space-between;
+  }
+  .c-logo{display:flex;align-items:center;gap:10px}
+  .c-seal{
+    width:38px;height:38px;border-radius:50%;
+    background:radial-gradient(circle at 38% 32%,var(--navy-2),var(--navy-deep));
+    border:1.4px solid var(--gold);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;font-family:var(--display);
+    color:var(--gold-bright);line-height:.9;
+  }
+  .c-seal b{font-size:11.5px;font-weight:600}
+  .c-seal span{font-size:4.4px;letter-spacing:1.1px;color:var(--gold);text-transform:uppercase;margin-top:1.5px}
+  .c-logo h3{font-family:var(--display);color:#fff;font-size:17px;font-weight:600;letter-spacing:.3px}
+  .c-burger{display:flex;flex-direction:column;gap:4px}
+  .c-burger i{width:21px;height:2px;background:var(--gold-bright);display:block;border-radius:2px}
+
+  .c-hero{
+    background:linear-gradient(175deg,var(--navy-2),var(--navy));
+    padding:30px 24px 34px;position:relative;overflow:hidden;
+  }
+  .c-hero::after{
+    content:"";position:absolute;right:-40px;top:-30px;width:170px;height:170px;
+    border:1.5px solid rgba(224,189,114,.16);border-radius:50%;
+  }
+  .c-hero .eyebrow{font-size:10px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--gold-bright);font-weight:800;margin-bottom:12px}
+  .c-hero h2{font-family:var(--display);color:#fff;font-size:33px;
+    font-weight:600;line-height:1.12;letter-spacing:.2px}
+  .c-hero h2 em{font-style:normal;color:var(--gold-bright)}
+  .c-hero p{color:rgba(255,255,255,.72);font-size:14px;margin-top:12px;line-height:1.55;max-width:300px}
+  .trust-strip{display:flex;gap:8px;margin-top:20px;flex-wrap:wrap}
+  .trust-strip div{
+    background:rgba(255,255,255,.07);border:1px solid rgba(224,189,114,.28);
+    border-radius:9px;padding:8px 11px;flex:1;min-width:96px;
+  }
+  .trust-strip b{display:block;font-family:var(--display);color:var(--gold-bright);
+    font-size:17px;font-weight:600}
+  .trust-strip span{font-size:9.5px;color:rgba(255,255,255,.6);
+    text-transform:uppercase;letter-spacing:.7px}
+
+  .deliver-banner{
+    background:var(--oxblood);color:#fff;padding:11px 22px;
+    font-size:12.5px;font-weight:700;display:flex;align-items:center;
+    justify-content:center;gap:8px;text-align:center;
+  }
+  .deliver-banner svg{flex-shrink:0}
+
+  .c-section{padding:24px 22px}
+  .sec-head{margin-bottom:16px}
+  .sec-head .eyebrow{font-size:10px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--oxblood);font-weight:800}
+  .sec-head h3{font-family:var(--display);font-size:22px;font-weight:600;
+    color:var(--navy);margin-top:3px}
+  .sec-rule{width:38px;height:3px;background:var(--gold);border-radius:2px;margin-top:8px}
+
+  .chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
+  .chip{font-size:11.5px;font-weight:700;padding:6px 13px;border-radius:20px;
+    background:#fff;border:1px solid var(--line);color:var(--ink-soft)}
+  .chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+
+  .prod-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .prod-card{
+    background:#fff;border:1px solid var(--line-soft);border-radius:14px;
+    overflow:hidden;display:flex;flex-direction:column;
+    box-shadow:0 8px 20px -16px rgba(13,23,38,.5);
+  }
+  .prod-img{
+    height:84px;position:relative;display:flex;align-items:flex-end;padding:9px;
+    background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.14) 0 9px,transparent 9px 18px);
+  }
+  .prod-img.chicken{background-color:#c98f3f}
+  .prod-img.steak{background-color:#8c322c}
+  .prod-img.bbq{background-color:#3f5340}
+  .prod-img.pack{background-color:#1f3a5c}
+  .prod-img.kebab{background-color:#9a6a2e}
+  .prod-img span{
+    font-size:8.5px;letter-spacing:1.3px;text-transform:uppercase;
+    color:#fff;font-weight:800;background:rgba(13,23,38,.42);
+    padding:3px 8px;border-radius:5px;
+  }
+  .prod-body{padding:11px 12px 13px;display:flex;flex-direction:column;flex:1}
+  .prod-body h4{font-size:13.5px;font-weight:800;color:var(--ink);line-height:1.25}
+  .prod-body .desc{font-size:11px;color:var(--ink-soft);margin-top:3px;flex:1}
+  .prod-foot{display:flex;align-items:center;justify-content:space-between;margin-top:11px}
+  .price{font-family:var(--display);font-size:18px;font-weight:600;color:var(--navy)}
+  .add-btn{
+    background:var(--navy);color:#fff;font-size:12px;font-weight:700;
+    padding:7px 14px;border-radius:8px;transition:.16s;
+  }
+  .add-btn:hover{background:var(--oxblood)}
+  .add-btn:active{transform:scale(.94)}
+
+  .howto{display:flex;flex-direction:column;gap:12px;margin-top:4px}
+  .howto-row{display:flex;gap:13px;align-items:flex-start}
+  .howto-num{
+    width:30px;height:30px;border-radius:50%;flex-shrink:0;
+    background:var(--gold);color:var(--navy-deep);font-family:var(--display);
+    font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;
+  }
+  .howto-row b{font-size:13.5px;color:var(--ink)}
+  .howto-row p{font-size:12px;color:var(--ink-soft);margin-top:2px;line-height:1.5}
+
+  .trade-cta{
+    margin:6px 22px 22px;background:linear-gradient(160deg,var(--navy-2),var(--navy));
+    border-radius:14px;padding:20px 20px 22px;border:1px solid rgba(224,189,114,.28);
+  }
+  .trade-cta .eyebrow{font-size:9.5px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--gold-bright);font-weight:800}
+  .trade-cta h4{font-family:var(--display);color:#fff;font-size:18px;
+    font-weight:600;margin-top:6px}
+  .trade-cta p{color:rgba(255,255,255,.7);font-size:12px;margin-top:6px;line-height:1.55}
+  .trade-cta button{
+    margin-top:13px;background:var(--gold);color:var(--navy-deep);
+    font-weight:800;font-size:12.5px;padding:9px 16px;border-radius:8px;
+  }
+
+  .c-foot{background:var(--navy-deep);padding:20px 22px;text-align:center}
+  .c-foot p{color:rgba(255,255,255,.5);font-size:11px;line-height:1.7}
+  .c-foot b{color:var(--gold-bright);font-family:var(--display);font-weight:600}
+
+  .basket-pill{
+    position:sticky;bottom:0;margin-top:-1px;
+    background:var(--oxblood);color:#fff;padding:14px 20px;
+    display:flex;align-items:center;justify-content:space-between;
+    box-shadow:0 -10px 24px -14px rgba(13,23,38,.6);cursor:pointer;
+  }
+  .basket-pill .l{display:flex;align-items:center;gap:9px;font-weight:700;font-size:13px}
+  .basket-pill .count{background:#fff;color:var(--oxblood);width:21px;height:21px;
+    border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:11px;font-weight:800}
+  .basket-pill .r{font-family:var(--display);font-weight:600;font-size:16px;
+    display:flex;align-items:center;gap:7px}
+
+  /* ============ ORDER VIEW ============ */
+  .o-head{background:var(--navy);padding:15px 22px;display:flex;
+    align-items:center;gap:13px}
+  .o-head .back{width:30px;height:30px;border-radius:8px;
+    background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center}
+  .o-head h3{font-family:var(--display);color:#fff;font-size:17px;font-weight:600}
+  .o-head p{font-size:10.5px;color:var(--gold-soft);margin-top:1px}
+
+  .o-body{padding:20px 22px}
+  .o-label{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;
+    color:var(--oxblood);font-weight:800;margin:20px 0 12px}
+  .o-label:first-child{margin-top:0}
+
+  .basket-item{
+    background:#fff;border:1px solid var(--line-soft);border-radius:12px;
+    padding:12px 13px;display:flex;align-items:center;gap:12px;margin-bottom:10px;
+  }
+  .bi-thumb{width:46px;height:46px;border-radius:9px;flex-shrink:0;
+    background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.16) 0 7px,transparent 7px 14px)}
+  .bi-thumb.chicken{background-color:#c98f3f}
+  .bi-thumb.steak{background-color:#8c322c}
+  .bi-thumb.bbq{background-color:#3f5340}
+  .bi-info{flex:1}
+  .bi-info h4{font-size:13px;font-weight:800;color:var(--ink)}
+  .bi-info span{font-size:11px;color:var(--ink-soft)}
+  .qty{display:flex;align-items:center;gap:9px}
+  .qty button{width:24px;height:24px;border-radius:6px;background:var(--cream);
+    border:1px solid var(--line);font-weight:800;color:var(--navy);font-size:14px;
+    display:flex;align-items:center;justify-content:center}
+  .qty b{font-size:13px;min-width:14px;text-align:center}
+  .bi-price{font-family:var(--display);font-weight:600;font-size:15px;
+    color:var(--navy);min-width:54px;text-align:right}
+
+  .slot-card{
+    background:#fff;border:2px solid var(--line);border-radius:12px;
+    padding:14px;margin-bottom:10px;display:flex;align-items:center;
+    justify-content:space-between;cursor:pointer;transition:.16s;
+  }
+  .slot-card:hover{border-color:var(--gold)}
+  .slot-card.selected{border-color:var(--navy);background:#fbf9f3}
+  .slot-card .sl{display:flex;align-items:center;gap:12px}
+  .slot-radio{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);
+    flex-shrink:0;display:flex;align-items:center;justify-content:center}
+  .slot-card.selected .slot-radio{border-color:var(--navy)}
+  .slot-card.selected .slot-radio::after{content:"";width:11px;height:11px;
+    border-radius:50%;background:var(--navy)}
+  .slot-card h4{font-size:13.5px;font-weight:800;color:var(--ink)}
+  .slot-card .sd{font-size:11px;color:var(--ink-soft);margin-top:2px}
+  .slot-tag{font-size:10px;font-weight:800;padding:4px 9px;border-radius:14px;
+    background:var(--green-soft);color:var(--green);white-space:nowrap}
+  .slot-tag.low{background:#f6e5cf;color:var(--oxblood)}
+
+  .field{margin-bottom:11px}
+  .field label{font-size:11px;font-weight:700;color:var(--ink-soft);
+    display:block;margin-bottom:4px}
+  .field input{width:100%;background:#fff;border:1px solid var(--line);
+    border-radius:9px;padding:10px 12px;font-size:13px;color:var(--ink)}
+  .field input:focus{outline:none;border-color:var(--gold)}
+  .field-row{display:flex;gap:10px}
+  .field-row .field{flex:1}
+
+  .pay-row{display:flex;gap:10px;align-items:center;background:#fbf9f3;
+    border:1px solid var(--line);border-radius:11px;padding:13px}
+  .pay-row .tick{width:24px;height:24px;border-radius:50%;background:var(--green);
+    flex-shrink:0;display:flex;align-items:center;justify-content:center}
+  .pay-row b{font-size:13px;color:var(--ink)}
+  .pay-row p{font-size:11px;color:var(--ink-soft);margin-top:1px}
+
+  .o-summary{background:var(--navy);border-radius:12px;padding:15px 16px;margin-top:18px}
+  .o-summary .row{display:flex;justify-content:space-between;
+    color:rgba(255,255,255,.72);font-size:12.5px;margin-bottom:7px}
+  .o-summary .total{display:flex;justify-content:space-between;
+    align-items:baseline;border-top:1px solid rgba(224,189,114,.25);
+    padding-top:10px;margin-top:4px}
+  .o-summary .total span{color:#fff;font-weight:700;font-size:13px}
+  .o-summary .total b{font-family:var(--display);color:var(--gold-bright);
+    font-size:24px;font-weight:600}
+
+  .place-btn{
+    width:100%;background:var(--oxblood);color:#fff;font-size:14.5px;
+    font-weight:800;padding:15px;border-radius:11px;margin-top:14px;transition:.16s;
+  }
+  .place-btn:hover{background:var(--oxblood-2)}
+  .place-btn:active{transform:scale(.99)}
+
+  /* confirmation overlay */
+  .confirm{
+    position:absolute;inset:0;background:var(--navy);z-index:5;
+    display:none;flex-direction:column;align-items:center;justify-content:center;
+    padding:40px 30px;text-align:center;
+  }
+  .confirm.show{display:flex;animation:rise .4s ease}
+  .confirm-tick{width:78px;height:78px;border-radius:50%;background:var(--green);
+    display:flex;align-items:center;justify-content:center;margin-bottom:22px;
+    box-shadow:0 0 0 10px rgba(70,96,74,.2)}
+  .confirm h3{font-family:var(--display);color:#fff;font-size:27px;font-weight:600}
+  .confirm p{color:rgba(255,255,255,.72);font-size:13.5px;margin-top:10px;line-height:1.6}
+  .confirm .ref{margin-top:20px;background:rgba(255,255,255,.08);
+    border:1px solid rgba(224,189,114,.3);border-radius:10px;padding:13px 22px}
+  .confirm .ref span{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+    color:var(--gold-soft)}
+  .confirm .ref b{display:block;font-family:var(--display);color:var(--gold-bright);
+    font-size:22px;font-weight:600;margin-top:3px}
+  .confirm button{margin-top:24px;background:var(--gold);color:var(--navy-deep);
+    font-weight:800;font-size:13px;padding:11px 22px;border-radius:9px}
+
+  /* ============ TRADE VIEW ============ */
+  .t-head{background:linear-gradient(160deg,var(--navy-2),var(--navy-deep));
+    padding:18px 22px}
+  .t-head .row1{display:flex;align-items:center;justify-content:space-between}
+  .t-badge{font-size:9.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;
+    background:var(--gold);color:var(--navy-deep);padding:4px 10px;border-radius:14px}
+  .t-head h3{font-family:var(--display);color:#fff;font-size:21px;
+    font-weight:600;margin-top:13px}
+  .t-head p{font-size:11.5px;color:var(--gold-soft);margin-top:3px}
+
+  .t-next{background:var(--oxblood);color:#fff;padding:11px 22px;
+    font-size:12px;font-weight:700;display:flex;align-items:center;
+    justify-content:center;gap:8px}
+
+  .t-body{padding:20px 22px}
+  .usual-card{
+    background:linear-gradient(165deg,#fff,var(--paper));
+    border:1px solid var(--line);border-radius:14px;padding:16px;
+    box-shadow:0 12px 26px -20px rgba(13,23,38,.5);
+  }
+  .usual-card .uc-top{display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:11px}
+  .usual-card h4{font-family:var(--display);font-size:17px;font-weight:600;color:var(--navy)}
+  .usual-card .uc-tag{font-size:10px;font-weight:800;color:var(--green);
+    background:var(--green-soft);padding:4px 9px;border-radius:12px}
+  .usual-line{display:flex;justify-content:space-between;font-size:12.5px;
+    padding:6px 0;border-bottom:1px dashed var(--line)}
+  .usual-line:last-of-type{border-bottom:none}
+  .usual-line span{color:var(--ink)}
+  .usual-line .ul-q{color:var(--ink-soft);font-weight:700}
+  .reorder-btn{width:100%;background:var(--navy);color:#fff;font-weight:800;
+    font-size:13px;padding:13px;border-radius:10px;margin-top:13px;
+    display:flex;align-items:center;justify-content:center;gap:8px;transition:.16s}
+  .reorder-btn:hover{background:var(--oxblood)}
+
+  .trade-price-row{display:flex;align-items:center;justify-content:space-between;
+    background:#fff;border:1px solid var(--line-soft);border-radius:11px;
+    padding:11px 13px;margin-bottom:9px}
+  .tpr-l h4{font-size:13px;font-weight:800;color:var(--ink)}
+  .tpr-l span{font-size:11px;color:var(--ink-soft)}
+  .tpr-r{text-align:right}
+  .tpr-r .retail{font-size:12px;color:var(--ink-soft);text-decoration:line-through}
+  .tpr-r .trade{font-family:var(--display);font-size:17px;font-weight:600;
+    color:var(--green);display:block}
+  .tpr-r .trade small{font-size:9px;letter-spacing:.8px;text-transform:uppercase;
+    color:var(--ink-soft);font-family:var(--body);font-weight:700}
+
+  .toggle-card{display:flex;align-items:center;justify-content:space-between;
+    background:#fbf9f3;border:1px solid var(--line);border-radius:12px;
+    padding:14px;margin-top:6px}
+  .toggle-card b{font-size:13px;color:var(--ink)}
+  .toggle-card p{font-size:11px;color:var(--ink-soft);margin-top:2px;max-width:210px}
+  .switch{width:46px;height:26px;border-radius:14px;background:var(--line);
+    flex-shrink:0;position:relative;transition:.18s;cursor:pointer}
+  .switch::after{content:"";position:absolute;width:20px;height:20px;border-radius:50%;
+    background:#fff;top:3px;left:3px;transition:.18s;box-shadow:0 2px 4px rgba(0,0,0,.25)}
+  .switch.on{background:var(--green)}
+  .switch.on::after{left:23px}
+
+  .acct-row{display:flex;gap:11px;align-items:center;background:var(--navy);
+    border-radius:11px;padding:13px 14px;margin-top:14px}
+  .acct-row svg{flex-shrink:0}
+  .acct-row b{color:#fff;font-size:12.5px}
+  .acct-row p{color:rgba(255,255,255,.65);font-size:11px;margin-top:1px}
+
+  /* ============ ADMIN — shared ============ */
+  .a-top{background:var(--navy);padding:13px 24px;display:flex;
+    align-items:center;justify-content:space-between}
+  .a-brand{display:flex;align-items:center;gap:18px}
+  .a-brand .am-logo{display:flex;align-items:center;gap:9px}
+  .am-seal{width:32px;height:32px;border-radius:50%;
+    background:radial-gradient(circle at 38% 32%,var(--navy-2),var(--navy-deep));
+    border:1.3px solid var(--gold);display:flex;align-items:center;justify-content:center;
+    font-family:var(--display);color:var(--gold-bright);font-size:10px;font-weight:600}
+  .am-logo b{font-family:var(--display);color:#fff;font-size:15px;font-weight:600}
+  .a-nav{display:flex;gap:3px}
+  .a-nav a{font-size:12.5px;font-weight:700;color:rgba(255,255,255,.55);
+    padding:6px 12px;border-radius:7px}
+  .a-nav a.on{background:rgba(224,189,114,.16);color:var(--gold-bright)}
+  .a-user{display:flex;align-items:center;gap:9px}
+  .a-user .av{width:32px;height:32px;border-radius:50%;background:var(--gold);
+    color:var(--navy-deep);display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:13px}
+  .a-user span{color:#fff;font-size:12.5px;font-weight:700}
+
+  .a-page{padding:24px 28px}
+  .a-pagehead{display:flex;align-items:flex-end;justify-content:space-between;
+    flex-wrap:wrap;gap:14px;margin-bottom:20px}
+  .a-pagehead .eyebrow{font-size:10px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--oxblood);font-weight:800}
+  .a-pagehead h2{font-family:var(--display);font-size:27px;font-weight:600;
+    color:var(--navy);margin-top:3px}
+  .a-pagehead p{font-size:12.5px;color:var(--ink-soft);margin-top:3px}
+  .a-add{background:var(--oxblood);color:#fff;font-weight:800;font-size:12.5px;
+    padding:10px 16px;border-radius:9px;display:flex;align-items:center;gap:7px}
+  .a-add:hover{background:var(--oxblood-2)}
+
+  /* run tabs */
+  .run-tabs{display:flex;gap:8px;margin-bottom:18px;border-bottom:1px solid var(--line);
+    padding-bottom:0}
+  .run-tab{padding:11px 18px;font-size:13.5px;font-weight:800;color:var(--ink-soft);
+    border-bottom:3px solid transparent;margin-bottom:-1px}
+  .run-tab.on{color:var(--navy);border-color:var(--gold)}
+  .run-tab span{font-weight:600;font-size:11.5px;color:var(--ink-soft);margin-left:5px}
+
+  .run-panel{display:none}
+  .run-panel.on{display:block}
+  .run-layout{display:grid;grid-template-columns:1.6fr 1fr;gap:20px}
+
+  .run-stats{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+  .run-stat{background:#fff;border:1px solid var(--line-soft);border-radius:11px;
+    padding:12px 15px;flex:1;min-width:120px}
+  .run-stat b{font-family:var(--display);font-size:21px;font-weight:600;color:var(--navy);display:block}
+  .run-stat span{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;
+    color:var(--ink-soft);font-weight:700}
+
+  .order-card{background:#fff;border:1px solid var(--line-soft);border-radius:12px;
+    padding:14px 15px;margin-bottom:10px;display:flex;align-items:center;gap:14px;
+    box-shadow:0 6px 16px -14px rgba(13,23,38,.5)}
+  .oc-main{flex:1;min-width:0}
+  .oc-main .oc-name{display:flex;align-items:center;gap:8px}
+  .oc-main h4{font-size:14px;font-weight:800;color:var(--ink)}
+  .type-badge{font-size:9px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;
+    padding:2.5px 7px;border-radius:10px}
+  .type-badge.home{background:var(--green-soft);color:var(--green)}
+  .type-badge.trade{background:var(--navy);color:var(--gold-bright)}
+  .oc-main .oc-items{font-size:11.5px;color:var(--ink-soft);margin-top:3px}
+  .oc-right{text-align:right;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+  .oc-total{font-family:var(--display);font-size:16px;font-weight:600;color:var(--navy)}
+  .oc-meta{display:flex;gap:6px;align-items:center}
+  .channel-pill{font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:10px;
+    background:var(--cream);color:var(--ink-soft);border:1px solid var(--line)}
+  .status-badge{font-size:9.5px;font-weight:800;padding:3px 9px;border-radius:10px;
+    text-transform:uppercase;letter-spacing:.5px}
+  .status-badge.new{background:#f6e5cf;color:var(--oxblood)}
+  .status-badge.confirmed{background:#d9e6f2;color:var(--navy-2)}
+  .status-badge.packed{background:var(--green-soft);color:var(--green)}
+
+  .pick-panel{background:linear-gradient(170deg,var(--navy),var(--navy-deep));
+    border-radius:13px;padding:18px 19px;align-self:start;
+    border:1px solid rgba(224,189,114,.22)}
+  .pick-panel h3{font-family:var(--display);color:#fff;font-size:17px;font-weight:600}
+  .pick-panel .ph-sub{font-size:11px;color:var(--gold-soft);margin:3px 0 14px}
+  .pick-line{display:flex;align-items:center;justify-content:space-between;
+    padding:8px 0;border-bottom:1px dashed rgba(224,189,114,.22)}
+  .pick-line span{color:rgba(255,255,255,.85);font-size:12.5px}
+  .pick-line b{font-family:var(--display);color:var(--gold-bright);font-size:15px;font-weight:600}
+  .pick-foot{margin-top:14px;display:flex;gap:8px}
+  .pick-foot button{flex:1;font-size:11.5px;font-weight:800;padding:9px;border-radius:8px}
+  .pf-print{background:var(--gold);color:var(--navy-deep)}
+  .pf-ai{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(224,189,114,.3)}
+
+  /* ============ STOCK VIEW ============ */
+  .stock-wrap{max-width:760px}
+  .stock-banner{background:linear-gradient(160deg,var(--navy-2),var(--navy));
+    border-radius:12px;padding:15px 18px;display:flex;align-items:center;gap:13px;
+    margin-bottom:18px}
+  .stock-banner svg{flex-shrink:0}
+  .stock-banner b{color:#fff;font-size:13px}
+  .stock-banner p{color:rgba(255,255,255,.68);font-size:11.5px;margin-top:2px}
+
+  .stock-row{display:flex;align-items:center;gap:14px;background:#fff;
+    border:1px solid var(--line-soft);border-radius:11px;padding:12px 15px;margin-bottom:9px}
+  .stock-row.off{opacity:.55;background:var(--paper)}
+  .sr-main{flex:1}
+  .sr-main h4{font-size:13.5px;font-weight:800;color:var(--ink)}
+  .cat-tag{font-size:9.5px;font-weight:700;color:var(--ink-soft);
+    background:var(--cream);padding:2.5px 8px;border-radius:9px;
+    display:inline-block;margin-top:4px}
+  .sr-price{display:flex;align-items:center;gap:5px;background:var(--cream);
+    border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+  .sr-price span{font-family:var(--display);font-weight:600;color:var(--navy);font-size:14px}
+  .sr-price input{width:48px;border:none;background:none;font-family:var(--display);
+    font-weight:600;color:var(--navy);font-size:14px}
+  .sr-price input:focus{outline:none}
+  .sr-state{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+    width:54px;text-align:center}
+  .sr-state.live{color:var(--green)}
+  .sr-state.hidden{color:var(--ink-soft)}
+
+  .stock-foot{display:flex;align-items:center;justify-content:space-between;
+    margin-top:18px;padding-top:18px;border-top:1px solid var(--line);flex-wrap:wrap;gap:12px}
+  .stock-foot .scount{font-size:13px;font-weight:700;color:var(--ink-soft)}
+  .stock-foot .scount b{font-family:var(--display);color:var(--navy);font-size:18px}
+  .stock-actions{display:flex;gap:9px}
+  .stock-actions button{font-size:12.5px;font-weight:800;padding:11px 17px;border-radius:9px}
+  .sa-post{background:var(--navy);color:#fff;display:flex;align-items:center;gap:7px}
+  .sa-save{background:var(--gold);color:var(--navy-deep)}
+
+  .proto-foot{text-align:center;padding:30px 20px 10px;color:var(--ink-soft);font-size:12px}
+  .proto-foot b{font-family:var(--display);color:var(--navy);font-weight:600}
+  .axrik-credit{display:block;margin-top:8px;font-size:11px;color:#9a8e7c}
+  .axrik-mark{font-weight:800;letter-spacing:.34em;color:var(--navy);padding-left:.34em}
+  .axrik-mark .x{color:#15a36a}
+
+  @media(max-width:880px){
+    .run-layout{grid-template-columns:1fr}
+    .stage{padding:30px 14px 60px}
+    .proto-inner{padding:12px 16px}
+  }
+
+  /* ============ FINANCE DASHBOARD ============ */
+  .fin-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+  .fin-stat{background:#fff;border:1px solid var(--line-soft);border-radius:13px;
+    padding:16px 18px;position:relative;overflow:hidden}
+  .fin-stat::after{content:"";position:absolute;right:-18px;top:-18px;
+    width:70px;height:70px;border-radius:50%;opacity:.07}
+  .fin-stat.green::after{background:var(--green);opacity:.12}
+  .fin-stat.amber::after{background:var(--gold)}
+  .fin-stat.red::after{background:var(--oxblood)}
+  .fin-stat.navy::after{background:var(--navy)}
+  .fin-stat .fs-label{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;
+    font-weight:800;color:var(--ink-soft);margin-bottom:8px}
+  .fin-stat .fs-val{font-family:var(--display);font-size:28px;font-weight:600;
+    color:var(--navy);line-height:1}
+  .fin-stat .fs-sub{font-size:11px;color:var(--ink-soft);margin-top:6px}
+  .fin-stat .fs-sub b{color:var(--green);font-weight:700}
+  .fin-stat.red .fs-val{color:var(--oxblood)}
+  .fin-stat.amber .fs-val{color:#b07d24}
+
+  .fin-layout{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}
+
+  .inv-filters{display:flex;gap:6px;margin-bottom:16px}
+  .inv-filter{font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;
+    background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer}
+  .inv-filter.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+
+  .inv-row{background:#fff;border:1px solid var(--line-soft);border-radius:11px;
+    padding:13px 15px;margin-bottom:8px;display:flex;align-items:center;gap:14px;
+    box-shadow:0 4px 12px -10px rgba(13,23,38,.4)}
+  .inv-main{flex:1;min-width:0}
+  .inv-ref{font-size:10px;letter-spacing:1px;text-transform:uppercase;
+    color:var(--ink-soft);font-weight:700}
+  .inv-name{font-size:14px;font-weight:800;color:var(--ink);margin-top:2px}
+  .inv-date{font-size:11px;color:var(--ink-soft);margin-top:2px}
+  .inv-amount{font-family:var(--display);font-size:17px;font-weight:600;
+    color:var(--navy);min-width:70px;text-align:right}
+  .inv-status{font-size:10px;font-weight:800;padding:4px 10px;border-radius:10px;
+    text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+  .inv-status.paid{background:#d9f0e0;color:#1a6640}
+  .inv-status.unpaid{background:#f6e5cf;color:var(--oxblood)}
+  .inv-status.overdue{background:#fdd;color:#a00}
+  .inv-actions{display:flex;gap:6px}
+  .inv-btn{font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;cursor:pointer}
+  .inv-btn.view{background:var(--cream);border:1px solid var(--line);color:var(--ink-soft)}
+  .inv-btn.send{background:var(--navy);color:#fff}
+  .inv-btn.chase{background:var(--oxblood);color:#fff}
+
+  .fin-side{display:flex;flex-direction:column;gap:16px}
+  .fin-card{background:#fff;border:1px solid var(--line-soft);border-radius:13px;padding:18px}
+  .fin-card h4{font-family:var(--display);font-size:16px;font-weight:600;
+    color:var(--navy);margin-bottom:14px}
+  .top-cust{display:flex;align-items:center;gap:11px;padding:8px 0;
+    border-bottom:1px solid var(--line-soft)}
+  .top-cust:last-child{border-bottom:none}
+  .tc-rank{width:22px;height:22px;border-radius:50%;background:var(--cream);
+    border:1px solid var(--line);font-size:11px;font-weight:800;color:var(--ink-soft);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .tc-rank.gold{background:var(--gold);border-color:var(--gold);color:var(--navy-deep)}
+  .tc-main{flex:1}
+  .tc-main b{font-size:13px;font-weight:800;color:var(--ink);display:block}
+  .tc-main span{font-size:11px;color:var(--ink-soft)}
+  .tc-val{font-family:var(--display);font-size:15px;font-weight:600;color:var(--navy)}
+
+  .quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .qa-btn{padding:12px 14px;border-radius:10px;font-size:12.5px;font-weight:800;
+    text-align:center;cursor:pointer;transition:.15s}
+  .qa-primary{background:var(--navy);color:#fff}
+  .qa-primary:hover{background:var(--oxblood)}
+  .qa-sec{background:var(--cream);border:1px solid var(--line);color:var(--navy)}
+  .qa-sec:hover{background:var(--line-soft)}
+
+  .mini-bar-chart{display:flex;align-items:flex-end;gap:5px;height:60px;margin-top:4px}
+  .mbc-bar{flex:1;border-radius:4px 4px 0 0;background:var(--navy);opacity:.18;
+    transition:.2s;position:relative}
+  .mbc-bar.this{background:var(--navy);opacity:1}
+  .mbc-label{font-size:9px;color:var(--ink-soft);text-align:center;
+    margin-top:4px;font-weight:700}
+  .mbc-wrap{display:flex;flex-direction:column}
+  /* ============ DEVICE TOGGLE ============ */
+  .device-toggle{
+    display:flex;gap:10px;justify-content:center;margin-bottom:22px;
+  }
+  .dtog-btn{
+    padding:9px 20px;border-radius:9px;font-size:13px;font-weight:700;
+    border:1.5px solid var(--line);color:var(--ink-soft);background:#fff;
+    display:flex;align-items:center;gap:8px;transition:.16s;cursor:pointer;
+    box-shadow:0 2px 8px -4px rgba(13,23,38,.15);
+  }
+  .dtog-btn.on{border-color:var(--navy);background:var(--navy);color:#fff}
+  .device-wrap{display:none}
+  .device-wrap.show{display:block}
+
+  /* ============ DESKTOP — SHARED NAV ============ */
+  .d-nav{
+    background:linear-gradient(180deg,var(--navy),var(--navy-2));
+    padding:14px 40px;display:flex;align-items:center;justify-content:space-between;
+    border-bottom:1px solid rgba(224,189,114,.18);
+  }
+  .d-nav-links{display:flex;align-items:center;gap:3px}
+  .d-nav-link{
+    font-size:13.5px;font-weight:700;color:rgba(255,255,255,.6);
+    padding:7px 13px;border-radius:7px;cursor:pointer;
+  }
+  .d-nav-link:hover{color:#fff;background:rgba(255,255,255,.07)}
+  .d-nav-link.on{color:var(--gold-bright)}
+  .d-nav-right{display:flex;align-items:center;gap:12px}
+  .d-nav-cta{
+    background:var(--gold);color:var(--navy-deep);font-weight:800;
+    font-size:13px;padding:9px 18px;border-radius:8px;
+  }
+
+  /* ============ DESKTOP — CUSTOMER WEBSITE ============ */
+  .d-hero{
+    background:linear-gradient(155deg,var(--navy),var(--navy-2));
+    padding:52px 40px 58px;display:flex;align-items:center;
+    gap:44px;position:relative;overflow:hidden;
+  }
+  .d-hero::after{
+    content:"";position:absolute;right:-70px;top:-70px;width:300px;height:300px;
+    border:1.5px solid rgba(224,189,114,.12);border-radius:50%;
+  }
+  .d-hero-text{flex:1}
+  .d-hero-text .eyebrow{font-size:10.5px;letter-spacing:2.2px;text-transform:uppercase;
+    color:var(--gold-bright);font-weight:800;margin-bottom:14px}
+  .d-hero-text h2{font-family:var(--display);color:#fff;font-size:44px;
+    font-weight:600;line-height:1.06}
+  .d-hero-text h2 em{font-style:normal;color:var(--gold-bright)}
+  .d-hero-text p{color:rgba(255,255,255,.72);font-size:15px;margin-top:14px;
+    line-height:1.6;max-width:440px}
+  .d-hero-btns{display:flex;gap:12px;margin-top:26px}
+  .d-btn-primary{background:var(--oxblood);color:#fff;font-weight:800;
+    font-size:14px;padding:13px 24px;border-radius:10px;transition:.16s}
+  .d-btn-primary:hover{background:var(--oxblood-2)}
+  .d-btn-sec{
+    background:rgba(255,255,255,.08);color:#fff;font-weight:700;
+    font-size:14px;padding:13px 24px;border-radius:10px;
+    border:1px solid rgba(224,189,114,.28);
+  }
+  .d-trust-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:14px;
+    flex-shrink:0;width:310px;
+  }
+  .d-trust-card{
+    background:rgba(255,255,255,.07);border:1px solid rgba(224,189,114,.28);
+    border-radius:12px;padding:18px 14px;text-align:center;
+  }
+  .d-trust-card b{display:block;font-family:var(--display);color:var(--gold-bright);
+    font-size:26px;font-weight:600}
+  .d-trust-card span{font-size:9.5px;color:rgba(255,255,255,.6);
+    text-transform:uppercase;letter-spacing:.7px;margin-top:4px;display:block}
+
+  .d-deliver-banner{
+    background:var(--oxblood);color:#fff;padding:11px 40px;
+    font-size:13px;font-weight:700;display:flex;align-items:center;
+    justify-content:center;gap:9px;
+  }
+
+  .d-body{padding:36px 40px}
+  .d-sec-head{margin-bottom:22px}
+  .d-sec-head .eyebrow{font-size:10px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--oxblood);font-weight:800}
+  .d-sec-head h3{font-family:var(--display);font-size:24px;font-weight:600;
+    color:var(--navy);margin-top:3px}
+  .d-sec-rule{width:42px;height:3px;background:var(--gold);border-radius:2px;margin-top:8px}
+
+  .d-shop-layout{display:grid;grid-template-columns:180px 1fr;gap:28px;align-items:start}
+  .d-filter-panel h4{font-family:var(--display);font-size:15px;font-weight:600;
+    color:var(--navy);margin-bottom:12px}
+  .d-filter-list{display:flex;flex-direction:column;gap:4px}
+  .d-filter-item{font-size:13px;font-weight:700;padding:9px 12px;border-radius:8px;
+    color:var(--ink-soft);cursor:pointer}
+  .d-filter-item:hover{background:var(--cream)}
+  .d-filter-item.on{background:var(--navy);color:#fff}
+  .d-prod-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+
+  .d-two-col{display:grid;grid-template-columns:1fr 1fr;gap:32px;
+    padding:0 40px 36px;align-items:start}
+  .d-howto{display:flex;flex-direction:column;gap:16px}
+  .d-howto-row{display:flex;gap:16px;align-items:flex-start}
+  .d-howto-num{width:34px;height:34px;border-radius:50%;flex-shrink:0;
+    background:var(--gold);color:var(--navy-deep);font-family:var(--display);
+    font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center}
+  .d-howto-row b{font-size:14px;color:var(--ink)}
+  .d-howto-row p{font-size:13px;color:var(--ink-soft);margin-top:3px;line-height:1.55}
+  .d-trade-cta{
+    background:linear-gradient(160deg,var(--navy-2),var(--navy));
+    border-radius:14px;padding:28px 26px;border:1px solid rgba(224,189,114,.28);
+    height:100%;box-sizing:border-box;
+  }
+  .d-trade-cta .eyebrow{font-size:9.5px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--gold-bright);font-weight:800}
+  .d-trade-cta h4{font-family:var(--display);color:#fff;font-size:22px;
+    font-weight:600;margin-top:8px}
+  .d-trade-cta p{color:rgba(255,255,255,.7);font-size:13px;margin-top:8px;line-height:1.55}
+  .d-trade-cta button{
+    margin-top:18px;background:var(--gold);color:var(--navy-deep);
+    font-weight:800;font-size:13px;padding:11px 18px;border-radius:9px;
+  }
+  .d-foot{background:var(--navy-deep);padding:18px 40px;
+    display:flex;align-items:center;justify-content:space-between}
+  .d-foot p{color:rgba(255,255,255,.5);font-size:12px;line-height:1.7}
+  .d-foot b{color:var(--gold-bright);font-family:var(--display);font-weight:600}
+  .d-basket-bar{
+    background:var(--oxblood);color:#fff;padding:13px 40px;
+    display:flex;align-items:center;justify-content:space-between;cursor:pointer;
+  }
+  .d-basket-bar .l{display:flex;align-items:center;gap:10px;font-weight:700;font-size:14px}
+  .d-basket-bar .count{background:#fff;color:var(--oxblood);width:22px;height:22px;
+    border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:12px;font-weight:800}
+  .d-basket-bar .r{font-family:var(--display);font-weight:600;font-size:17px;
+    display:flex;align-items:center;gap:8px}
+
+  /* ============ DESKTOP — ORDER FORM ============ */
+  .d-order-nav-sub{
+    background:var(--navy);padding:14px 40px;
+    display:flex;align-items:center;gap:13px;
+    border-bottom:1px solid rgba(224,189,114,.15);
+  }
+  .d-order-nav-sub .back{width:30px;height:30px;border-radius:8px;
+    background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center}
+  .d-order-nav-sub h3{font-family:var(--display);color:#fff;font-size:17px;font-weight:600}
+  .d-order-nav-sub p{font-size:11px;color:var(--gold-soft);margin-top:1px}
+  .d-order-body{display:grid;grid-template-columns:1fr 1fr;gap:0;
+    min-height:580px}
+  .d-order-left{padding:28px 32px;border-right:1px solid var(--line)}
+  .d-order-right{padding:28px 32px;background:var(--paper)}
+  .d-order-h{font-family:var(--display);font-size:17px;font-weight:600;
+    color:var(--navy);margin-bottom:14px}
+  .d-order-label{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;
+    color:var(--oxblood);font-weight:800;margin:18px 0 11px}
+  .d-order-label:first-child{margin-top:0}
+
+  /* ============ DESKTOP — TRADE ============ */
+  .d-trade-hd{
+    background:linear-gradient(160deg,var(--navy-2),var(--navy-deep));
+    padding:22px 40px;display:flex;align-items:center;justify-content:space-between;
+  }
+  .d-trade-hd h3{font-family:var(--display);color:#fff;font-size:22px;font-weight:600}
+  .d-trade-hd p{color:var(--gold-soft);font-size:12px;margin-top:4px}
+  .d-trade-next{
+    background:var(--oxblood);color:#fff;padding:10px 40px;
+    font-size:12.5px;font-weight:700;display:flex;align-items:center;
+    justify-content:center;gap:8px;
+  }
+  .d-trade-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;padding:28px 40px}
+  .d-trade-col h4{font-family:var(--display);font-size:17px;font-weight:600;
+    color:var(--navy);margin-bottom:14px}
+  .d-trade-col .o-label{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;
+    color:var(--oxblood);font-weight:800;margin:18px 0 11px}
+  .d-trade-col .o-label:first-child{margin-top:0}
+</style>
+</head>
+<body>
+
+<!-- ===================== PROTOTYPE NAVIGATOR ===================== -->
+<header class="proto-bar">
+  <div class="proto-inner">
+    <div class="proto-brand">
+      <div class="proto-seal"><b>JG</b><span>Foods</span></div>
+      <div>
+        <h1>JG Foods</h1>
+        <p>Interactive Prototype</p>
+      </div>
+    </div>
+    <nav class="proto-tabs">
+      <span class="tab-group-label">What customers see</span>
+      <button class="proto-tab active" data-go="site">Website</button>
+      <button class="proto-tab" data-go="order">Place an Order</button>
+      <button class="proto-tab" data-go="trade">Trade Ordering</button>
+      <div class="proto-divider"></div>
+      <span class="tab-group-label">What Jon uses</span>
+      <button class="proto-tab" data-go="runs">Delivery Runs</button>
+      <button class="proto-tab" data-go="stock">Weekly Availability</button>
+      <button class="proto-tab" data-go="finance">Finance</button>
+    </nav>
+  </div>
+</header>
+
+<main class="stage">
+
+  <!-- ===================== VIEW 1 — CUSTOMER WEBSITE ===================== -->
+  <section class="view active" data-view="site">
+    <div class="pitch-note">
+      <div class="eyebrow">What your customers see</div>
+      <h2>A proper shopfront — open on any device, any time</h2>
+      <p>Right now JG Foods lives inside Facebook. This is a website customers can find, trust and order from any time of day — whether they're on a phone, laptop or tablet. Your 5-star hygiene rating and reviews do the selling before they've even chosen a cut.</p>
+      <div class="tags"><span>Works on any device</span><span>Builds trust instantly</span><span>Open 24/7</span></div>
+    </div>
+
+    <div class="device-toggle">
+      <button class="dtog-btn on" data-toggle="site" data-target="site-phone">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="3" y="1" width="8" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="10.5" r=".8" fill="currentColor"/></svg>
+        Mobile
+      </button>
+      <button class="dtog-btn" data-toggle="site" data-target="site-desktop">
+        <svg width="16" height="14" viewBox="0 0 16 14" fill="none"><rect x="1" y="1" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5 13h6M8 10v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Desktop
+      </button>
+    </div>
+
+    <div class="device-wrap show" id="site-phone">
+    <div class="device-phone">
+      <div class="phone-screen">
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="dots"><i></i><i></i><i></i><span class="batt"></span></span>
+        </div>
+        <div class="c-head">
+          <div class="c-logo">
+            <div class="c-seal"><b>JG</b><span>Foods</span></div>
+            <h3>JG Foods</h3>
+          </div>
+          <div class="c-burger"><i></i><i></i><i></i></div>
+        </div>
+
+        <div class="c-hero">
+          <div class="eyebrow">Mobile Butcher · Ormskirk &amp; West Lancashire</div>
+          <h2>Fresh meat, <em>delivered to your door.</em></h2>
+          <p>Quality cuts and packs delivered across the North-west in our refrigerated van.</p>
+          <div class="trust-strip">
+            <div><b>5★</b><span>Hygiene Rating</span></div>
+            <div><b>100%</b><span>Recommended</span></div>
+            <div><b>579</b><span>Happy Locals</span></div>
+          </div>
+        </div>
+
+        <div class="deliver-banner">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 9V3h7v6M8 6h3l2 3v0H8M3.5 11.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4zM10.5 11.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4z" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          Delivering every Monday &amp; Thursday afternoon
+        </div>
+
+        <div class="c-section">
+          <div class="sec-head">
+            <div class="eyebrow">Order by Sun midnight</div>
+            <h3>This week's selection</h3>
+            <div class="sec-rule"></div>
+          </div>
+          <div class="chips">
+            <span class="chip on">All</span>
+            <span class="chip">Chicken</span>
+            <span class="chip">Steak &amp; Beef</span>
+            <span class="chip">BBQ</span>
+            <span class="chip">Packs</span>
+          </div>
+          <div class="prod-grid">
+            <div class="prod-card">
+              <div class="prod-img chicken"><span>Chicken</span></div>
+              <div class="prod-body">
+                <h4>5kg Chicken Fillets</h4>
+                <div class="desc">Fresh skinless breast fillets</div>
+                <div class="prod-foot"><span class="price">£34.00</span><button class="add-btn">Add</button></div>
+              </div>
+            </div>
+            <div class="prod-card">
+              <div class="prod-img bbq"><span>BBQ &amp; Grill</span></div>
+              <div class="prod-body">
+                <h4>BBQ Pack</h4>
+                <div class="desc">Burgers, sausages, kebabs &amp; more</div>
+                <div class="prod-foot"><span class="price">£47.50</span><button class="add-btn">Add</button></div>
+              </div>
+            </div>
+            <div class="prod-card">
+              <div class="prod-img steak"><span>Steak &amp; Beef</span></div>
+              <div class="prod-body">
+                <h4>Ribeye Steaks ×5</h4>
+                <div class="desc">Hand-cut, well-marbled</div>
+                <div class="prod-foot"><span class="price">£30.00</span><button class="add-btn">Add</button></div>
+              </div>
+            </div>
+            <div class="prod-card">
+              <div class="prod-img steak"><span>Steak &amp; Beef</span></div>
+              <div class="prod-body">
+                <h4>Lean Mince 1kg</h4>
+                <div class="desc">Freshly minced steak mince</div>
+                <div class="prod-foot"><span class="price">£12.00</span><button class="add-btn">Add</button></div>
+              </div>
+            </div>
+            <div class="prod-card">
+              <div class="prod-img pack"><span>Meat Packs</span></div>
+              <div class="prod-body">
+                <h4>Extra Lean Meat Pack</h4>
+                <div class="desc">A week of low-fat favourites</div>
+                <div class="prod-foot"><span class="price">£38.50</span><button class="add-btn">Add</button></div>
+              </div>
+            </div>
+            <div class="prod-card">
+              <div class="prod-img kebab"><span>Kebabs</span></div>
+              <div class="prod-body">
+                <h4>Kebab Pack ×5</h4>
+                <div class="desc">Chicken, lamb &amp; beef, all seasonings</div>
+                <div class="prod-foot"><span class="price">£20.00</span><button class="add-btn">Add</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="c-section" style="padding-top:6px">
+          <div class="sec-head">
+            <div class="eyebrow">Simple as can be</div>
+            <h3>How it works</h3>
+            <div class="sec-rule"></div>
+          </div>
+          <div class="howto">
+            <div class="howto-row"><div class="howto-num">1</div>
+              <div><b>Browse this week's list</b><p>See exactly what's available and the prices — updated fresh each week.</p></div></div>
+            <div class="howto-row"><div class="howto-num">2</div>
+              <div><b>Pick Monday or Thursday</b><p>Choose the delivery day that suits you and leave your details.</p></div></div>
+            <div class="howto-row"><div class="howto-num">3</div>
+              <div><b>We deliver to your door</b><p>Fresh meat, refrigerated all the way — pay on delivery.</p></div></div>
+          </div>
+        </div>
+
+        <div class="trade-cta">
+          <div class="eyebrow">Pubs · Cafes · Restaurants · Shops</div>
+          <h4>Run a business? Open a trade account.</h4>
+          <p>Trade pricing, one-tap reordering of your usual, and the option to order on account. Reliable supply, twice a week.</p>
+          <button data-go="trade">Explore trade ordering</button>
+        </div>
+
+        <div class="c-foot">
+          <p><b>JG Foods</b> — Mobile Butcher<br>
+          Ormskirk &amp; West Lancashire · 07702 852704<br>
+          5-star rated hygiene · Refrigerated delivery</p>
+        </div>
+
+        <div class="basket-pill" data-go="order">
+          <span class="l"><span class="count">3</span> View your basket</span>
+          <span class="r">£105.50
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M4 4l5 3-5 3" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+        </div>
+      </div>
+    </div>
+    </div><!-- /site-phone -->
+
+    <!-- DESKTOP VERSION -->
+    <div class="device-wrap" id="site-desktop">
+    <div class="device-browser">
+      <div class="browser-bar">
+        <div class="browser-lights"><i></i><i></i><i></i></div>
+        <div class="browser-url">
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="2" y="5" width="7" height="5" rx="1" stroke="#e8d5a8" stroke-width="1.1"/><path d="M3.5 5V3.5a2 2 0 014 0V5" stroke="#e8d5a8" stroke-width="1.1"/></svg>
+          www.jgfoods.co.uk
+        </div>
+      </div>
+      <div class="browser-body">
+        <!-- Nav -->
+        <div class="d-nav">
+          <div class="c-logo">
+            <div class="c-seal"><b>JG</b><span>Foods</span></div>
+            <h3 style="font-size:16px;color:#fff;font-family:var(--display);font-weight:600">JG Foods</h3>
+          </div>
+          <nav class="d-nav-links">
+            <span class="d-nav-link on">Home</span>
+            <span class="d-nav-link">Shop</span>
+            <span class="d-nav-link">How it works</span>
+            <span class="d-nav-link">Trade accounts</span>
+            <span class="d-nav-link">Contact</span>
+          </nav>
+          <div class="d-nav-right">
+            <button class="d-nav-cta">Order now</button>
+          </div>
+        </div>
+
+        <!-- Hero -->
+        <div class="d-hero">
+          <div class="d-hero-text">
+            <div class="eyebrow">Mobile Butcher · Ormskirk &amp; West Lancashire</div>
+            <h2>Fresh meat,<br><em>delivered to your door.</em></h2>
+            <p>Quality cuts and packs delivered across the North-west in our refrigerated van. Order by Sunday midnight for Monday, or by Wednesday for Thursday.</p>
+            <div class="d-hero-btns">
+              <button class="d-btn-primary">Shop this week's selection</button>
+              <button class="d-btn-sec">How it works</button>
+            </div>
+          </div>
+          <div class="d-trust-grid">
+            <div class="d-trust-card"><b>5★</b><span>Hygiene Rating</span></div>
+            <div class="d-trust-card"><b>100%</b><span>Recommend</span></div>
+            <div class="d-trust-card"><b>579</b><span>Happy Locals</span></div>
+            <div class="d-trust-card" style="grid-column:span 3;text-align:left;display:flex;align-items:center;gap:10px">
+              <svg width="18" height="18" viewBox="0 0 14 14" fill="none"><path d="M1 9V3h7v6M8 6h3l2 3v0H8M3.5 11.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4zM10.5 11.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4z" stroke="#e0bd72" stroke-width="1.2" stroke-linejoin="round"/></svg>
+              <div><b style="color:#fff;font-size:12px;display:block">Delivering every Mon &amp; Thu afternoon</b><span style="font-size:10px;color:rgba(255,255,255,.55)">Cut-off: Sunday &amp; Wednesday midnight</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Delivery banner -->
+        <div class="d-deliver-banner">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 9V3h7v6M8 6h3l2 3v0H8M3.5 11.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4zM10.5 11.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4z" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          Delivering every Monday &amp; Thursday afternoon — order before Sunday midnight for Mon, Wednesday midnight for Thu
+        </div>
+
+        <!-- Shop section -->
+        <div class="d-body">
+          <div class="d-sec-head">
+            <div class="eyebrow">Order by Sun midnight · this week's list</div>
+            <h3>Fresh selection</h3>
+            <div class="d-sec-rule"></div>
+          </div>
+          <div class="d-shop-layout">
+            <div class="d-filter-panel">
+              <h4>Browse by</h4>
+              <div class="d-filter-list">
+                <div class="d-filter-item on">All products</div>
+                <div class="d-filter-item">Chicken</div>
+                <div class="d-filter-item">Steak &amp; Beef</div>
+                <div class="d-filter-item">BBQ &amp; Grill</div>
+                <div class="d-filter-item">Kebabs</div>
+                <div class="d-filter-item">Meat Packs</div>
+              </div>
+            </div>
+            <div class="d-prod-grid-3">
+              <div class="prod-card"><div class="prod-img chicken"><span>Chicken</span></div>
+                <div class="prod-body"><h4>5kg Chicken Fillets</h4><div class="desc">Fresh skinless breast fillets</div>
+                  <div class="prod-foot"><span class="price">£34.00</span><button class="add-btn">Add</button></div></div></div>
+              <div class="prod-card"><div class="prod-img bbq"><span>BBQ &amp; Grill</span></div>
+                <div class="prod-body"><h4>BBQ Pack</h4><div class="desc">Burgers, sausages, kebabs &amp; more</div>
+                  <div class="prod-foot"><span class="price">£47.50</span><button class="add-btn">Add</button></div></div></div>
+              <div class="prod-card"><div class="prod-img steak"><span>Steak &amp; Beef</span></div>
+                <div class="prod-body"><h4>Ribeye Steaks ×5</h4><div class="desc">Hand-cut, well-marbled</div>
+                  <div class="prod-foot"><span class="price">£30.00</span><button class="add-btn">Add</button></div></div></div>
+              <div class="prod-card"><div class="prod-img steak"><span>Steak &amp; Beef</span></div>
+                <div class="prod-body"><h4>Lean Mince 1kg</h4><div class="desc">Freshly minced steak mince</div>
+                  <div class="prod-foot"><span class="price">£12.00</span><button class="add-btn">Add</button></div></div></div>
+              <div class="prod-card"><div class="prod-img pack"><span>Meat Packs</span></div>
+                <div class="prod-body"><h4>Extra Lean Meat Pack</h4><div class="desc">A week of low-fat favourites</div>
+                  <div class="prod-foot"><span class="price">£38.50</span><button class="add-btn">Add</button></div></div></div>
+              <div class="prod-card"><div class="prod-img kebab"><span>Kebabs</span></div>
+                <div class="prod-body"><h4>Kebab Pack ×5</h4><div class="desc">Chicken, lamb &amp; beef, all seasonings</div>
+                  <div class="prod-foot"><span class="price">£20.00</span><button class="add-btn">Add</button></div></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- How it works + Trade CTA -->
+        <div class="d-two-col">
+          <div>
+            <div class="d-sec-head">
+              <div class="eyebrow">Simple as can be</div>
+              <h3>How it works</h3>
+              <div class="d-sec-rule"></div>
+            </div>
+            <div class="d-howto">
+              <div class="d-howto-row"><div class="d-howto-num">1</div>
+                <div><b>Browse this week's list</b><p>See exactly what's available and the prices — updated fresh each week.</p></div></div>
+              <div class="d-howto-row"><div class="d-howto-num">2</div>
+                <div><b>Pick Monday or Thursday</b><p>Choose the delivery day that suits you and leave your details.</p></div></div>
+              <div class="d-howto-row"><div class="d-howto-num">3</div>
+                <div><b>We deliver to your door</b><p>Fresh meat, refrigerated all the way — pay on delivery.</p></div></div>
+            </div>
+          </div>
+          <div class="d-trade-cta">
+            <div class="eyebrow">Pubs · Cafes · Restaurants · Shops</div>
+            <h4>Run a business? Open a trade account.</h4>
+            <p>Trade pricing, one-tap reordering of your usual, and the option to order on account. Reliable supply, twice a week.</p>
+            <button>Explore trade ordering →</button>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="d-foot">
+          <p><b>JG Foods</b> — Mobile Butcher · Ormskirk &amp; West Lancashire</p>
+          <p>07702 852704 · jongreen347@gmail.com</p>
+          <p>5-star hygiene rating · Refrigerated delivery</p>
+        </div>
+
+        <!-- Basket bar -->
+        <div class="d-basket-bar">
+          <span class="l"><span class="count">3</span> View your basket</span>
+          <span class="r">£105.50
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M4 4l5 3-5 3" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+        </div>
+      </div>
+    </div>
+    </div><!-- /site-desktop -->
+  </section>
+
+  <!-- ===================== VIEW 2 — PLACE AN ORDER ===================== -->
+  <section class="view" data-view="order">
+    <div class="pitch-note">
+      <div class="eyebrow">Ordering in under a minute</div>
+      <h2>The order lands straight in your system</h2>
+      <p>No back-and-forth messages, no orders lost in a comment thread. Customers can check out as a guest or sign in to an account — whether they're on their phone or a computer. Either way the order appears instantly on your delivery run, ready to pack.</p>
+      <div class="tags"><span>Works on any device</span><span>Guest or account checkout</span><span>Pay on delivery</span><span>Nothing gets missed</span></div>
+    </div>
+
+    <div class="device-toggle">
+      <button class="dtog-btn on" data-toggle="order" data-target="order-phone">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="3" y="1" width="8" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="10.5" r=".8" fill="currentColor"/></svg>
+        Mobile
+      </button>
+      <button class="dtog-btn" data-toggle="order" data-target="order-desktop">
+        <svg width="16" height="14" viewBox="0 0 16 14" fill="none"><rect x="1" y="1" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5 13h6M8 10v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Desktop
+      </button>
+    </div>
+
+    <div class="device-wrap show" id="order-phone">
+    <div class="device-phone">
+      <div class="phone-screen">
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="dots"><i></i><i></i><i></i><span class="batt"></span></span>
+        </div>
+        <div class="o-head">
+          <div class="back" data-go="site">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke="#e0bd72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div><h3>Your Order</h3><p>Just a couple of details to finish</p></div>
+        </div>
+
+        <div class="o-body">
+          <div class="o-label">Your basket · 3 items</div>
+          <div class="basket-item">
+            <div class="bi-thumb chicken"></div>
+            <div class="bi-info"><h4>5kg Chicken Fillets</h4>
+              <div class="qty"><button>−</button><b>1</b><button>+</button></div></div>
+            <div class="bi-price">£34.00</div>
+          </div>
+          <div class="basket-item">
+            <div class="bi-thumb bbq"></div>
+            <div class="bi-info"><h4>BBQ Pack</h4>
+              <div class="qty"><button>−</button><b>1</b><button>+</button></div></div>
+            <div class="bi-price">£47.50</div>
+          </div>
+          <div class="basket-item">
+            <div class="bi-thumb steak"></div>
+            <div class="bi-info"><h4>Lean Mince 1kg</h4>
+              <div class="qty"><button>−</button><b>2</b><button>+</button></div></div>
+            <div class="bi-price">£24.00</div>
+          </div>
+
+          <div class="o-label">Choose your delivery day</div>
+          <div class="slot-card selected" data-slot>
+            <div class="sl"><div class="slot-radio"></div>
+              <div><h4>Monday 25 May</h4><div class="sd">Afternoon · 1pm – 6pm</div></div></div>
+            <span class="slot-tag low">4 slots left</span>
+          </div>
+          <div class="slot-card" data-slot>
+            <div class="sl"><div class="slot-radio"></div>
+              <div><h4>Thursday 28 May</h4><div class="sd">Afternoon · 1pm – 6pm</div></div></div>
+            <span class="slot-tag">Slots available</span>
+          </div>
+
+          <div class="o-label">How would you like to check out?</div>
+          <div class="checkout-opts">
+            <div class="slot-card selected" data-opt>
+              <div class="sl"><div class="slot-radio"></div>
+                <div><h4>Continue as guest</h4><div class="sd">Just your details this once — the quickest way to order</div></div></div>
+            </div>
+            <div class="slot-card" data-opt>
+              <div class="sl"><div class="slot-radio"></div>
+                <div><h4>Sign in to your account</h4><div class="sd">Saved details, one-tap reorders &amp; your order history</div></div></div>
+              <span class="slot-tag">Reorder faster</span>
+            </div>
+          </div>
+
+          <div class="o-label">Your delivery details</div>
+          <div class="field"><label>Name</label><input value="Sarah Green"></div>
+          <div class="field-row">
+            <div class="field"><label>Phone</label><input value="07700 900 461"></div>
+            <div class="field"><label>Postcode</label><input value="L39 2AB"></div>
+          </div>
+          <div class="field"><label>Address</label><input value="14 Mill Lane, Ormskirk"></div>
+          <div class="field"><label>Delivery notes (optional)</label><input value="Leave with next door if out" placeholder="Anything we should know?"></div>
+
+          <div class="o-label">Payment</div>
+          <div class="pay-row">
+            <div class="tick">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2.5 7l3 3 5-6.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div><b>Pay on delivery</b><p>Card or cash when Jon arrives — nothing to pay now</p></div>
+          </div>
+
+          <div class="o-summary">
+            <div class="row"><span>Subtotal</span><span>£105.50</span></div>
+            <div class="row"><span>Delivery — Monday 25 May</span><span>Free</span></div>
+            <div class="total"><span>Total to pay on delivery</span><b>£105.50</b></div>
+          </div>
+
+          <button class="place-btn" id="placeBtn">Place my order</button>
+        </div>
+
+        <div class="confirm" id="confirmScreen">
+          <div class="confirm-tick">
+            <svg width="34" height="34" viewBox="0 0 34 34" fill="none"><path d="M8 18l6 6 12-15" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h3>Order confirmed</h3>
+          <p>Thanks Sarah! Jon will text you to confirm your<br>Monday afternoon delivery.</p>
+          <div class="ref"><span>Your order reference</span><b>JG-2614</b></div>
+          <button id="confirmBack">Back to start</button>
+        </div>
+      </div>
+    </div>
+    </div><!-- /order-phone -->
+
+    <!-- DESKTOP ORDER FORM -->
+    <div class="device-wrap" id="order-desktop">
+    <div class="device-browser">
+      <div class="browser-bar">
+        <div class="browser-lights"><i></i><i></i><i></i></div>
+        <div class="browser-url">
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="2" y="5" width="7" height="5" rx="1" stroke="#e8d5a8" stroke-width="1.1"/><path d="M3.5 5V3.5a2 2 0 014 0V5" stroke="#e8d5a8" stroke-width="1.1"/></svg>
+          www.jgfoods.co.uk/order
+        </div>
+      </div>
+      <div class="browser-body">
+        <!-- Nav -->
+        <div class="d-nav">
+          <div class="c-logo">
+            <div class="c-seal"><b>JG</b><span>Foods</span></div>
+            <h3 style="font-size:16px;color:#fff;font-family:var(--display);font-weight:600">JG Foods</h3>
+          </div>
+          <nav class="d-nav-links">
+            <span class="d-nav-link on">Shop</span>
+            <span class="d-nav-link">How it works</span>
+            <span class="d-nav-link">Trade accounts</span>
+            <span class="d-nav-link">Contact</span>
+          </nav>
+          <div class="d-nav-right" style="font-size:13px;color:rgba(255,255,255,.6)">Delivering Mon &amp; Thu</div>
+        </div>
+
+        <!-- Order sub-header -->
+        <div class="d-order-nav-sub">
+          <div class="back">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke="#e0bd72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div><h3>Your Order</h3><p>Review your basket, choose a delivery day and enter your details</p></div>
+        </div>
+
+        <!-- Two-column order layout -->
+        <div class="d-order-body">
+          <!-- LEFT: basket + slot -->
+          <div class="d-order-left">
+            <div class="d-order-label">Your basket · 3 items</div>
+            <div class="basket-item">
+              <div class="bi-thumb chicken"></div>
+              <div class="bi-info"><h4>5kg Chicken Fillets</h4>
+                <div class="qty"><button>−</button><b>1</b><button>+</button></div></div>
+              <div class="bi-price">£34.00</div>
+            </div>
+            <div class="basket-item">
+              <div class="bi-thumb bbq"></div>
+              <div class="bi-info"><h4>BBQ Pack</h4>
+                <div class="qty"><button>−</button><b>1</b><button>+</button></div></div>
+              <div class="bi-price">£47.50</div>
+            </div>
+            <div class="basket-item">
+              <div class="bi-thumb steak"></div>
+              <div class="bi-info"><h4>Lean Mince 1kg</h4>
+                <div class="qty"><button>−</button><b>2</b><button>+</button></div></div>
+              <div class="bi-price">£24.00</div>
+            </div>
+
+            <div class="d-order-label" style="margin-top:22px">Choose your delivery day</div>
+            <div class="slot-card selected">
+              <div class="sl"><div class="slot-radio"></div>
+                <div><h4>Monday 25 May</h4><div class="sd">Afternoon · 1pm – 6pm</div></div></div>
+              <span class="slot-tag low">4 slots left</span>
+            </div>
+            <div class="slot-card">
+              <div class="sl"><div class="slot-radio"></div>
+                <div><h4>Thursday 28 May</h4><div class="sd">Afternoon · 1pm – 6pm</div></div></div>
+              <span class="slot-tag">Slots available</span>
+            </div>
+
+            <div class="d-order-label" style="margin-top:22px">Check out as</div>
+            <div class="slot-card selected">
+              <div class="sl"><div class="slot-radio"></div>
+                <div><h4>Continue as guest</h4><div class="sd">Just your details — quickest way</div></div></div>
+            </div>
+            <div class="slot-card">
+              <div class="sl"><div class="slot-radio"></div>
+                <div><h4>Sign in / create account</h4><div class="sd">Saved details &amp; order history</div></div></div>
+              <span class="slot-tag">Reorder faster</span>
+            </div>
+          </div>
+
+          <!-- RIGHT: details + summary -->
+          <div class="d-order-right">
+            <div class="d-order-label">Your delivery details</div>
+            <div class="field"><label>Full name</label><input value="Sarah Green"></div>
+            <div class="field-row">
+              <div class="field"><label>Phone number</label><input value="07700 900 461"></div>
+              <div class="field"><label>Postcode</label><input value="L39 2AB"></div>
+            </div>
+            <div class="field"><label>Delivery address</label><input value="14 Mill Lane, Ormskirk"></div>
+            <div class="field"><label>Delivery notes (optional)</label><input value="Leave with next door if out"></div>
+
+            <div class="d-order-label" style="margin-top:22px">Payment</div>
+            <div class="pay-row">
+              <div class="tick">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2.5 7l3 3 5-6.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div><b>Pay on delivery</b><p>Card or cash when Jon arrives — nothing to pay now</p></div>
+            </div>
+
+            <div class="o-summary" style="margin-top:20px">
+              <div class="row"><span>Subtotal</span><span>£105.50</span></div>
+              <div class="row"><span>Delivery — Monday 25 May</span><span>Free</span></div>
+              <div class="total"><span>Total to pay on delivery</span><b>£105.50</b></div>
+            </div>
+            <button class="place-btn" style="margin-top:14px">Place my order</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div><!-- /order-desktop -->
+  </section>
+
+  <!-- ===================== VIEW 3 — TRADE ORDERING ===================== -->
+  <section class="view" data-view="trade">
+    <div class="pitch-note">
+      <div class="eyebrow">Built for your pub &amp; restaurant clients</div>
+      <h2>Commercial ordering, designed around how you work</h2>
+      <p>Your commercial clients order the same things week after week. This gives them trade pricing, one-tap reordering of their usual, a standing order that repeats itself, and the option to order on account — accessible from any device. We'll shape the detail around exactly how you deal with trade customers.</p>
+      <div class="tags"><span>Works on any device</span><span>Trade pricing</span><span>One-tap reorder</span><span>Order on account</span></div>
+    </div>
+
+    <div class="device-toggle">
+      <button class="dtog-btn on" data-toggle="trade" data-target="trade-phone">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="3" y="1" width="8" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="10.5" r=".8" fill="currentColor"/></svg>
+        Mobile
+      </button>
+      <button class="dtog-btn" data-toggle="trade" data-target="trade-desktop">
+        <svg width="16" height="14" viewBox="0 0 16 14" fill="none"><rect x="1" y="1" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5 13h6M8 10v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Desktop
+      </button>
+    </div>
+
+    <div class="device-wrap show" id="trade-phone">
+    <div class="device-phone">
+      <div class="phone-screen">
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="dots"><i></i><i></i><i></i><span class="batt"></span></span>
+        </div>
+        <div class="t-head">
+          <div class="row1">
+            <div class="c-logo">
+              <div class="c-seal"><b>JG</b><span>Foods</span></div>
+              <h3 style="font-size:15px">JG Foods</h3>
+            </div>
+            <span class="t-badge">Trade Account</span>
+          </div>
+          <h3>Welcome back, The Red Lion</h3>
+          <p>Ormskirk · Trade pricing applied to every item</p>
+        </div>
+        <div class="t-next">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M1 9V3h7v6M8 6h3l2 3v0H8M3.5 11.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4zM10.5 11.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4z" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          Next delivery: Thursday 28 May · order by Wed 6pm
+        </div>
+
+        <div class="t-body">
+          <div class="o-label">Your usual order</div>
+          <div class="usual-card">
+            <div class="uc-top">
+              <h4>The Red Lion — weekly</h4>
+              <span class="uc-tag">8 lines</span>
+            </div>
+            <div class="usual-line"><span>5kg Chicken Fillets</span><span class="ul-q">×3</span></div>
+            <div class="usual-line"><span>Lean Mince 1kg</span><span class="ul-q">×6</span></div>
+            <div class="usual-line"><span>Sirloin Steaks ×5</span><span class="ul-q">×2</span></div>
+            <div class="usual-line"><span>Pork Sausages 1kg</span><span class="ul-q">×4</span></div>
+            <div class="usual-line"><span>Smash Burgers 1kg</span><span class="ul-q">×3</span></div>
+            <button class="reorder-btn">
+              Reorder usual — £132.00 trade
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M4 4l5 3-5 3" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+
+          <div class="o-label">Add more — trade prices</div>
+          <div class="trade-price-row">
+            <div class="tpr-l"><h4>Ribeye Steaks ×5</h4><span>Hand-cut</span></div>
+            <div class="tpr-r"><span class="retail">£30.00</span>
+              <span class="trade">£24.50 <small>trade</small></span></div>
+          </div>
+          <div class="trade-price-row">
+            <div class="tpr-l"><h4>BBQ Pack</h4><span>Catering quantity</span></div>
+            <div class="tpr-r"><span class="retail">£47.50</span>
+              <span class="trade">£39.00 <small>trade</small></span></div>
+          </div>
+          <div class="trade-price-row">
+            <div class="tpr-l"><h4>Extra Lean Meat Pack</h4><span>Low-fat selection</span></div>
+            <div class="tpr-r"><span class="retail">£38.50</span>
+              <span class="trade">£31.50 <small>trade</small></span></div>
+          </div>
+
+          <div class="o-label">Make it a standing order</div>
+          <div class="toggle-card">
+            <div><b>Repeat this order every Thursday</b>
+              <p>We'll prepare it each week — change or pause it any time.</p></div>
+            <div class="switch on" data-switch></div>
+          </div>
+
+          <div class="acct-row">
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2.5" y="5" width="17" height="12" rx="2" stroke="#e0bd72" stroke-width="1.5"/><path d="M2.5 9h17" stroke="#e0bd72" stroke-width="1.5"/></svg>
+            <div><b>On account</b><p>Added to your monthly invoice — nothing to pay on delivery</p></div>
+          </div>
+
+          <button class="place-btn" style="margin-top:18px">Place trade order</button>
+        </div>
+      </div>
+    </div>
+    </div><!-- /trade-phone -->
+
+    <!-- DESKTOP TRADE VIEW -->
+    <div class="device-wrap" id="trade-desktop">
+    <div class="device-browser">
+      <div class="browser-bar">
+        <div class="browser-lights"><i></i><i></i><i></i></div>
+        <div class="browser-url">
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="2" y="5" width="7" height="5" rx="1" stroke="#e8d5a8" stroke-width="1.1"/><path d="M3.5 5V3.5a2 2 0 014 0V5" stroke="#e8d5a8" stroke-width="1.1"/></svg>
+          www.jgfoods.co.uk/trade
+        </div>
+      </div>
+      <div class="browser-body">
+        <!-- Nav -->
+        <div class="d-nav">
+          <div class="c-logo">
+            <div class="c-seal"><b>JG</b><span>Foods</span></div>
+            <h3 style="font-size:16px;color:#fff;font-family:var(--display);font-weight:600">JG Foods</h3>
+          </div>
+          <nav class="d-nav-links">
+            <span class="d-nav-link">Home</span>
+            <span class="d-nav-link">Shop</span>
+            <span class="d-nav-link on">Trade accounts</span>
+            <span class="d-nav-link">Contact</span>
+          </nav>
+          <div class="d-nav-right">
+            <span class="t-badge">Trade Account</span>
+            <span style="font-size:13px;color:rgba(255,255,255,.65);margin-left:10px">The Red Lion</span>
+          </div>
+        </div>
+
+        <!-- Trade header -->
+        <div class="d-trade-hd">
+          <div>
+            <h3>Welcome back, The Red Lion</h3>
+            <p>Ormskirk · Trade pricing applied to every item</p>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:12px;color:var(--gold-soft)">Next delivery</div>
+            <div style="font-size:14px;font-weight:700;color:#fff;margin-top:3px">Thursday 28 May</div>
+            <div style="font-size:11px;color:rgba(255,255,255,.55)">Order by Wed 6pm</div>
+          </div>
+        </div>
+        <div class="d-trade-next">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M1 9V3h7v6M8 6h3l2 3v0H8M3.5 11.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4zM10.5 11.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4z" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          Next delivery: Thursday 28 May · order by Wednesday 6pm
+        </div>
+
+        <!-- Two-column trade body -->
+        <div class="d-trade-grid">
+          <!-- LEFT: usual order + add more -->
+          <div class="d-trade-col">
+            <div class="o-label">Your usual order</div>
+            <div class="usual-card">
+              <div class="uc-top">
+                <h4>The Red Lion — weekly</h4>
+                <span class="uc-tag">8 lines</span>
+              </div>
+              <div class="usual-line"><span>5kg Chicken Fillets</span><span class="ul-q">×3</span></div>
+              <div class="usual-line"><span>Lean Mince 1kg</span><span class="ul-q">×6</span></div>
+              <div class="usual-line"><span>Sirloin Steaks ×5</span><span class="ul-q">×2</span></div>
+              <div class="usual-line"><span>Pork Sausages 1kg</span><span class="ul-q">×4</span></div>
+              <div class="usual-line"><span>Smash Burgers 1kg</span><span class="ul-q">×3</span></div>
+              <button class="reorder-btn">
+                Reorder usual — £132.00 trade
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M4 4l5 3-5 3" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+
+            <div class="o-label" style="margin-top:22px">Add more — trade prices</div>
+            <div class="trade-price-row">
+              <div class="tpr-l"><h4>Ribeye Steaks ×5</h4><span>Hand-cut</span></div>
+              <div class="tpr-r"><span class="retail">£30.00</span>
+                <span class="trade">£24.50 <small>trade</small></span></div>
+            </div>
+            <div class="trade-price-row">
+              <div class="tpr-l"><h4>BBQ Pack</h4><span>Catering quantity</span></div>
+              <div class="tpr-r"><span class="retail">£47.50</span>
+                <span class="trade">£39.00 <small>trade</small></span></div>
+            </div>
+            <div class="trade-price-row">
+              <div class="tpr-l"><h4>Extra Lean Meat Pack</h4><span>Low-fat selection</span></div>
+              <div class="tpr-r"><span class="retail">£38.50</span>
+                <span class="trade">£31.50 <small>trade</small></span></div>
+            </div>
+          </div>
+
+          <!-- RIGHT: standing order + account + place order -->
+          <div class="d-trade-col">
+            <div class="o-label">Make it a standing order</div>
+            <div class="toggle-card">
+              <div><b>Repeat this order every Thursday</b>
+                <p>We'll prepare it each week — change or pause it any time.</p></div>
+              <div class="switch on" data-switch></div>
+            </div>
+
+            <div class="o-label" style="margin-top:22px">Payment</div>
+            <div class="acct-row">
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2.5" y="5" width="17" height="12" rx="2" stroke="#e0bd72" stroke-width="1.5"/><path d="M2.5 9h17" stroke="#e0bd72" stroke-width="1.5"/></svg>
+              <div><b>On account</b><p>Added to your monthly invoice — nothing to pay on delivery</p></div>
+            </div>
+
+            <div class="o-summary" style="margin-top:22px">
+              <div class="row"><span>Usual order (8 lines)</span><span>£132.00</span></div>
+              <div class="row"><span>Delivery — Thursday 28 May</span><span>Free</span></div>
+              <div class="total"><span>Total (trade pricing)</span><b>£132.00</b></div>
+            </div>
+            <button class="place-btn" style="margin-top:14px">Place trade order</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div><!-- /trade-desktop -->
+  </section>
+
+  <!-- ===================== VIEW 4 — DELIVERY RUNS (admin) ===================== -->
+  <section class="view" data-view="runs">
+    <div class="pitch-note">
+      <div class="eyebrow">Your Monday &amp; Thursday runs — built for you</div>
+      <h2>Every order, one place, sorted into the right run</h2>
+      <p>Website orders, Facebook orders, phone orders — they all land here, automatically grouped into Monday and Thursday. The picking list totals everything up so you know exactly what to prepare. No more scribbled notes or scrolling back through messages.</p>
+      <div class="tags"><span>Facebook orders included</span><span>Auto picking list</span><span>Nothing slips through</span></div>
+    </div>
+
+    <div class="device-browser">
+      <div class="browser-bar">
+        <div class="browser-lights"><i></i><i></i><i></i></div>
+        <div class="browser-url">
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="2" y="5" width="7" height="5" rx="1" stroke="#e8d5a8" stroke-width="1.1"/><path d="M3.5 5V3.5a2 2 0 014 0V5" stroke="#e8d5a8" stroke-width="1.1"/></svg>
+          app.jgfoods.co.uk/delivery-runs
+        </div>
+      </div>
+      <div class="browser-body">
+        <div class="a-top">
+          <div class="a-brand">
+            <div class="am-logo"><div class="am-seal">JG</div><b>JG Foods</b></div>
+            <nav class="a-nav">
+              <a class="on">Delivery Runs</a><a>Customers</a><a>Products</a><a>Messages</a>
+            </nav>
+          </div>
+          <div class="a-user"><span>Jon Green</span><div class="av">J</div></div>
+        </div>
+
+        <div class="a-page">
+          <div class="a-pagehead">
+            <div>
+              <div class="eyebrow">Week of 25 May 2026</div>
+              <h2>Delivery runs</h2>
+              <p>Orders sorted automatically into your two delivery days.</p>
+            </div>
+            <button class="a-add">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 2v9M2 6.5h9" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
+              Add order manually
+            </button>
+          </div>
+
+          <div class="run-tabs">
+            <button class="run-tab on" data-run="mon">Monday 25 May <span>9 orders</span></button>
+            <button class="run-tab" data-run="thu">Thursday 28 May <span>5 orders</span></button>
+          </div>
+
+          <!-- MONDAY -->
+          <div class="run-panel on" data-panel="mon">
+            <div class="run-stats">
+              <div class="run-stat"><b>9</b><span>Orders</span></div>
+              <div class="run-stat"><b>£487.50</b><span>Run value</span></div>
+              <div class="run-stat"><b>7 / 16</b><span>Slots free</span></div>
+              <div class="run-stat"><b>2</b><span>Trade clients</span></div>
+            </div>
+            <div class="run-layout">
+              <div>
+                <div class="order-card">
+                  <div class="oc-main"><div class="oc-name"><h4>The Red Lion</h4><span class="type-badge trade">Trade</span></div>
+                    <div class="oc-items">8 lines · chicken, mince, sirloin, sausages…</div></div>
+                  <div class="oc-right"><span class="oc-total">£148.00</span>
+                    <div class="oc-meta"><span class="channel-pill">Phone</span><span class="status-badge confirmed">Confirmed</span></div></div>
+                </div>
+                <div class="order-card">
+                  <div class="oc-main"><div class="oc-name"><h4>Sarah Green</h4><span class="type-badge home">Home</span></div>
+                    <div class="oc-items">3 items · chicken fillets, BBQ pack, mince</div></div>
+                  <div class="oc-right"><span class="oc-total">£105.50</span>
+                    <div class="oc-meta"><span class="channel-pill">Website</span><span class="status-badge confirmed">Confirmed</span></div></div>
+                </div>
+                <div class="order-card">
+                  <div class="oc-main"><div class="oc-name"><h4>John Hayward</h4><span class="type-badge home">Home</span></div>
+                    <div class="oc-items">2 items · ribeye steaks, lean mince</div></div>
+                  <div class="oc-right"><span class="oc-total">£46.00</span>
+                    <div class="oc-meta"><span class="channel-pill">Facebook</span><span class="status-badge new">New</span></div></div>
+                </div>
+                <div class="order-card">
+                  <div class="oc-main"><div class="oc-name"><h4>Empower Café</h4><span class="type-badge trade">Trade</span></div>
+                    <div class="oc-items">5 items · chicken fillets, sausages, burgers</div></div>
+                  <div class="oc-right"><span class="oc-total">£92.00</span>
+                    <div class="oc-meta"><span class="channel-pill">Website</span><span class="status-badge confirmed">Confirmed</span></div></div>
+                </div>
+                <div class="order-card">
+                  <div class="oc-main"><div class="oc-name"><h4>Amy Saville</h4><span class="type-badge home">Home</span></div>
+                    <div class="oc-items">4 items · BBQ pack, kebab pack, mince…</div></div>
+                  <div class="oc-right"><span class="oc-total">£61.00</span>
+                    <div class="oc-meta"><span class="channel-pill">Facebook</span><span class="status-badge new">New</span></div></div>
+                </div>
+                <div class="order-card">
+                  <div class="oc-main"><div class="oc-name"><h4>Mark Tanner</h4><span class="type-badge home">Home</span></div>
+                    <div class="oc-items">1 item · 5kg chicken fillets</div></div>
+                  <div class="oc-right"><span class="oc-total">£34.00</span>
+                    <div class="oc-meta"><span class="channel-pill">Phone</span><span class="status-badge packed">Packed</span></div></div>
+                </div>
+              </div>
+
+              <div class="pick-panel">
+                <h3>Picking list</h3>
+                <div class="ph-sub">Everything to prepare for Monday's run</div>
+                <div class="pick-line"><span>5kg Chicken Fillets</span><b>×6</b></div>
+                <div class="pick-line"><span>BBQ Pack</span><b>×4</b></div>
+                <div class="pick-line"><span>Lean Mince 1kg</span><b>×9</b></div>
+                <div class="pick-line"><span>Ribeye Steaks ×5</span><b>×3</b></div>
+                <div class="pick-line"><span>Sirloin Steaks ×5</span><b>×2</b></div>
+                <div class="pick-line"><span>Pork Sausages 1kg</span><b>×7</b></div>
+                <div class="pick-line"><span>Kebab Pack ×5</span><b>×2</b></div>
+                <div class="pick-foot">
+                  <button class="pf-print">Print run sheet</button>
+                  <button class="pf-ai">✦ AI summary</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- THURSDAY -->
+          <div class="run-panel" data-panel="thu">
+            <div class="run-stats">
+              <div class="run-stat"><b>5</b><span>Orders</span></div>
+              <div class="run-stat"><b>£583.50</b><span>Run value</span></div>
+              <div class="run-stat"><b>11 / 16</b><span>Slots free</span></div>
+              <div class="run-stat"><b>3</b><span>Trade clients</span></div>
+            </div>
+            <div class="run-layout">
+              <div>
+                <div class="order-card">
+                  <div class="oc-main"><div class="oc-name"><h4>The Red Lion</h4><span class="type-badge trade">Trade</span></div>
+                    <div class="oc-items">8 lines · standing order, repeats weekly</div></div>
+                  <div class="oc-right"><span class="oc-total">£148.00</span>
+                    <div class="oc-meta"><span class="channel-pill">Standing</span><span class="status-badge confirmed">Confirmed</span></div></div>
+                </div>
+                <div class="order-card">
+                  <div class="oc-main"><div class="oc-name"><h4>Greenfields Care Home</h4><span class="type-badge trade">Trade</span></div>
+                    <div class="oc-items">6 items · chicken, mince, sausages, packs</div></div>
+                  <div class="oc-right"><span class="oc-total">£210.00</span>
+                    <div class="oc-meta"><span class="channel-pill">Phone</span><span class="status-badge confirmed">Confirmed</span></div></div>
+                </div>
+                <div class="order-card">
+                  <div class="oc-main"><div class="oc-name"><h4>The Bricklayers Arms</h4><span class="type-badge trade">Trade</span></div>
+                    <div class="oc-items">4 items · burgers, sausages, BBQ pack</div></div>
+                  <div class="oc-right"><span class="oc-total">£96.00</span>
+                    <div class="oc-meta"><span class="channel-pill">Facebook</span><span class="status-badge new">New</span></div></div>
+                </div>
+                <div class="order-card">
+                  <div class="oc-main"><div class="oc-name"><h4>Lisa Marsh</h4><span class="type-badge home">Home</span></div>
+                    <div class="oc-items">3 items · ribeye steaks, mince, kebab pack</div></div>
+                  <div class="oc-right"><span class="oc-total">£71.50</span>
+                    <div class="oc-meta"><span class="channel-pill">Website</span><span class="status-badge new">New</span></div></div>
+                </div>
+                <div class="order-card">
+                  <div class="oc-main"><div class="oc-name"><h4>David Okafor</h4><span class="type-badge home">Home</span></div>
+                    <div class="oc-items">2 items · chicken fillets, BBQ pack</div></div>
+                  <div class="oc-right"><span class="oc-total">£58.00</span>
+                    <div class="oc-meta"><span class="channel-pill">Website</span><span class="status-badge new">New</span></div></div>
+                </div>
+              </div>
+
+              <div class="pick-panel">
+                <h3>Picking list</h3>
+                <div class="ph-sub">Everything to prepare for Thursday's run</div>
+                <div class="pick-line"><span>5kg Chicken Fillets</span><b>×8</b></div>
+                <div class="pick-line"><span>Lean Mince 1kg</span><b>×12</b></div>
+                <div class="pick-line"><span>Pork Sausages 1kg</span><b>×9</b></div>
+                <div class="pick-line"><span>BBQ Pack</span><b>×3</b></div>
+                <div class="pick-line"><span>Smash Burgers 1kg</span><b>×5</b></div>
+                <div class="pick-line"><span>Ribeye Steaks ×5</span><b>×2</b></div>
+                <div class="pick-foot">
+                  <button class="pf-print">Print run sheet</button>
+                  <button class="pf-ai">✦ AI summary</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== VIEW 5 — WEEKLY AVAILABILITY (admin) ===================== -->
+  <section class="view" data-view="stock">
+    <div class="pitch-note">
+      <div class="eyebrow">Two minutes of admin a week</div>
+      <h2>You control exactly what customers can order</h2>
+      <p>Switch items on or off, adjust a price — the website updates the moment you save. No technical knowledge needed. And when you're done, draft your weekly Facebook post in one click instead of typing it from scratch.</p>
+      <div class="tags"><span>Update in seconds</span><span>Website updates live</span><span>Auto Facebook post</span></div>
+    </div>
+
+    <div class="device-browser">
+      <div class="browser-bar">
+        <div class="browser-lights"><i></i><i></i><i></i></div>
+        <div class="browser-url">
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="2" y="5" width="7" height="5" rx="1" stroke="#e8d5a8" stroke-width="1.1"/><path d="M3.5 5V3.5a2 2 0 014 0V5" stroke="#e8d5a8" stroke-width="1.1"/></svg>
+          app.jgfoods.co.uk/products
+        </div>
+      </div>
+      <div class="browser-body">
+        <div class="a-top">
+          <div class="a-brand">
+            <div class="am-logo"><div class="am-seal">JG</div><b>JG Foods</b></div>
+            <nav class="a-nav">
+              <a>Delivery Runs</a><a>Customers</a><a class="on">Products</a><a>Messages</a>
+            </nav>
+          </div>
+          <div class="a-user"><span>Jon Green</span><div class="av">J</div></div>
+        </div>
+
+        <div class="a-page">
+          <div class="a-pagehead">
+            <div>
+              <div class="eyebrow">This week · 25 – 28 May 2026</div>
+              <h2>Weekly availability</h2>
+              <p>Switch items on or off — your website updates straight away.</p>
+            </div>
+          </div>
+
+          <div class="stock-wrap">
+            <div class="stock-banner">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#e0bd72" stroke-width="1.5"/><path d="M12 7v5l3 3" stroke="#e0bd72" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <div><b>Set this week's list before Sunday midnight</b>
+                <p>Whatever's switched on here is what customers see and can order.</p></div>
+            </div>
+
+            <div class="stock-row">
+              <div class="sr-main"><h4>5kg Chicken Fillets</h4><span class="cat-tag">Chicken</span></div>
+              <div class="sr-price"><span>£</span><input value="34.00"></div>
+              <div class="sr-state live">Live</div>
+              <div class="switch on" data-switch></div>
+            </div>
+            <div class="stock-row">
+              <div class="sr-main"><h4>BBQ Pack</h4><span class="cat-tag">BBQ &amp; Grill</span></div>
+              <div class="sr-price"><span>£</span><input value="47.50"></div>
+              <div class="sr-state live">Live</div>
+              <div class="switch on" data-switch></div>
+            </div>
+            <div class="stock-row">
+              <div class="sr-main"><h4>Ribeye Steaks ×5</h4><span class="cat-tag">Steak &amp; Beef</span></div>
+              <div class="sr-price"><span>£</span><input value="30.00"></div>
+              <div class="sr-state live">Live</div>
+              <div class="switch on" data-switch></div>
+            </div>
+            <div class="stock-row">
+              <div class="sr-main"><h4>Lean Mince 1kg</h4><span class="cat-tag">Steak &amp; Beef</span></div>
+              <div class="sr-price"><span>£</span><input value="12.00"></div>
+              <div class="sr-state live">Live</div>
+              <div class="switch on" data-switch></div>
+            </div>
+            <div class="stock-row">
+              <div class="sr-main"><h4>Kebab Pack ×5</h4><span class="cat-tag">Kebabs</span></div>
+              <div class="sr-price"><span>£</span><input value="20.00"></div>
+              <div class="sr-state live">Live</div>
+              <div class="switch on" data-switch></div>
+            </div>
+            <div class="stock-row off">
+              <div class="sr-main"><h4>Family Hamper</h4><span class="cat-tag">Seasonal</span></div>
+              <div class="sr-price"><span>£</span><input value="83.00"></div>
+              <div class="sr-state hidden">Hidden</div>
+              <div class="switch" data-switch></div>
+            </div>
+            <div class="stock-row off">
+              <div class="sr-main"><h4>Christmas Turkey</h4><span class="cat-tag">Seasonal</span></div>
+              <div class="sr-price"><span>£</span><input value="—"></div>
+              <div class="sr-state hidden">Hidden</div>
+              <div class="switch" data-switch></div>
+            </div>
+
+            <div class="stock-foot">
+              <div class="scount"><b>16</b> items live on the website this week</div>
+              <div class="stock-actions">
+                <button class="sa-post">✦ Draft Facebook post</button>
+                <button class="sa-save">Save &amp; publish</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== VIEW 6 — FINANCE (admin) ===================== -->
+  <section class="view" data-view="finance">
+    <div class="pitch-note">
+      <div class="eyebrow">Your business finances — at a glance</div>
+      <h2>Know exactly what you're owed and what's been paid</h2>
+      <p>Every order automatically creates a record. Generate a branded invoice in one click, send it by email or WhatsApp directly from the app, and track who's paid and who still owes you — no spreadsheets, no chasing through your phone.</p>
+      <div class="tags"><span>Auto-generate invoices</span><span>Send in one click</span><span>Paid vs outstanding</span><span>Trade monthly statements</span></div>
+    </div>
+
+    <div class="device-browser">
+      <div class="browser-bar">
+        <div class="browser-lights"><i></i><i></i><i></i></div>
+        <div class="browser-url">
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="2" y="5" width="7" height="5" rx="1" stroke="#e8d5a8" stroke-width="1.1"/><path d="M3.5 5V3.5a2 2 0 014 0V5" stroke="#e8d5a8" stroke-width="1.1"/></svg>
+          app.jgfoods.co.uk/finance
+        </div>
+      </div>
+      <div class="browser-body">
+        <div class="a-top">
+          <div class="a-brand">
+            <div class="am-logo"><div class="am-seal">JG</div><b>JG Foods</b></div>
+            <nav class="a-nav">
+              <a>Delivery Runs</a><a>Customers</a><a>Products</a><a class="on">Finance</a><a>Messages</a>
+            </nav>
+          </div>
+          <div class="a-user"><span>Jon Green</span><div class="av">J</div></div>
+        </div>
+
+        <div class="a-page">
+          <div class="a-pagehead">
+            <div>
+              <div class="eyebrow">May 2026</div>
+              <h2>Finance overview</h2>
+              <p>Revenue, invoices and outstanding payments.</p>
+            </div>
+            <div style="display:flex;gap:9px">
+              <button class="a-add" style="background:var(--green)">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 2v9M2 6.5h9" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
+                New invoice
+              </button>
+              <button class="a-add">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1v8M3 6l3.5 3.5L10 6M2 12h9" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Send statements
+              </button>
+            </div>
+          </div>
+
+          <!-- Stats row -->
+          <div class="fin-stats">
+            <div class="fin-stat green">
+              <div class="fs-label">Paid this month</div>
+              <div class="fs-val">£2,418</div>
+              <div class="fs-sub"><b>↑ 18%</b> vs last month</div>
+            </div>
+            <div class="fin-stat navy">
+              <div class="fs-label">This week's run</div>
+              <div class="fs-val">£1,071</div>
+              <div class="fs-sub">14 orders · Mon &amp; Thu</div>
+            </div>
+            <div class="fin-stat amber">
+              <div class="fs-label">Awaiting payment</div>
+              <div class="fs-val">£346</div>
+              <div class="fs-sub">3 invoices outstanding</div>
+            </div>
+            <div class="fin-stat red">
+              <div class="fs-label">Overdue</div>
+              <div class="fs-val">£148</div>
+              <div class="fs-sub">The Red Lion · 14 days</div>
+            </div>
+          </div>
+
+          <!-- Main layout: invoice list + sidebar -->
+          <div class="fin-layout">
+            <!-- Invoice list -->
+            <div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+                <h3 style="font-family:var(--display);font-size:18px;font-weight:600;color:var(--navy)">Invoices &amp; receipts</h3>
+                <div class="inv-filters">
+                  <span class="inv-filter on">All</span>
+                  <span class="inv-filter">Unpaid</span>
+                  <span class="inv-filter">Overdue</span>
+                  <span class="inv-filter">Paid</span>
+                </div>
+              </div>
+
+              <!-- Overdue -->
+              <div class="inv-row">
+                <div class="inv-main">
+                  <div class="inv-ref">INV-0041 · Trade</div>
+                  <div class="inv-name">The Red Lion</div>
+                  <div class="inv-date">Issued 6 May · Due 13 May · <span style="color:#a00;font-weight:700">14 days overdue</span></div>
+                </div>
+                <div class="inv-amount">£148.00</div>
+                <span class="inv-status overdue">Overdue</span>
+                <div class="inv-actions">
+                  <button class="inv-btn view">View</button>
+                  <button class="inv-btn chase">Chase</button>
+                </div>
+              </div>
+
+              <!-- Unpaid -->
+              <div class="inv-row">
+                <div class="inv-main">
+                  <div class="inv-ref">INV-0048 · Trade</div>
+                  <div class="inv-name">Greenfields Care Home</div>
+                  <div class="inv-date">Issued 20 May · Due 27 May · 5 days remaining</div>
+                </div>
+                <div class="inv-amount">£210.00</div>
+                <span class="inv-status unpaid">Unpaid</span>
+                <div class="inv-actions">
+                  <button class="inv-btn view">View</button>
+                  <button class="inv-btn send">Send</button>
+                </div>
+              </div>
+
+              <div class="inv-row">
+                <div class="inv-main">
+                  <div class="inv-ref">INV-0047 · Trade</div>
+                  <div class="inv-name">Empower Café</div>
+                  <div class="inv-date">Issued 19 May · Due 26 May · 6 days remaining</div>
+                </div>
+                <div class="inv-amount">£88.00</div>
+                <span class="inv-status unpaid">Unpaid</span>
+                <div class="inv-actions">
+                  <button class="inv-btn view">View</button>
+                  <button class="inv-btn send">Send</button>
+                </div>
+              </div>
+
+              <!-- Paid -->
+              <div class="inv-row">
+                <div class="inv-main">
+                  <div class="inv-ref">RCP-0046 · Domestic</div>
+                  <div class="inv-name">Sarah Green</div>
+                  <div class="inv-date">Monday 20 May · paid on delivery</div>
+                </div>
+                <div class="inv-amount">£105.50</div>
+                <span class="inv-status paid">Paid</span>
+                <div class="inv-actions">
+                  <button class="inv-btn view">View</button>
+                  <button class="inv-btn send">Resend</button>
+                </div>
+              </div>
+
+              <div class="inv-row">
+                <div class="inv-main">
+                  <div class="inv-ref">INV-0045 · Trade</div>
+                  <div class="inv-name">The Bricklayers Arms</div>
+                  <div class="inv-date">Issued 13 May · Paid 17 May</div>
+                </div>
+                <div class="inv-amount">£96.00</div>
+                <span class="inv-status paid">Paid</span>
+                <div class="inv-actions">
+                  <button class="inv-btn view">View</button>
+                  <button class="inv-btn send">Resend</button>
+                </div>
+              </div>
+
+              <div class="inv-row">
+                <div class="inv-main">
+                  <div class="inv-ref">RCP-0044 · Domestic</div>
+                  <div class="inv-name">Amy Saville</div>
+                  <div class="inv-date">Thursday 15 May · paid on delivery</div>
+                </div>
+                <div class="inv-amount">£61.00</div>
+                <span class="inv-status paid">Paid</span>
+                <div class="inv-actions">
+                  <button class="inv-btn view">View</button>
+                  <button class="inv-btn send">Resend</button>
+                </div>
+              </div>
+
+              <div class="inv-row">
+                <div class="inv-main">
+                  <div class="inv-ref">INV-0043 · Trade</div>
+                  <div class="inv-name">The Red Lion</div>
+                  <div class="inv-date">Issued 6 May · Paid 9 May</div>
+                </div>
+                <div class="inv-amount">£148.00</div>
+                <span class="inv-status paid">Paid</span>
+                <div class="inv-actions">
+                  <button class="inv-btn view">View</button>
+                  <button class="inv-btn send">Resend</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="fin-side">
+
+              <!-- Quick actions -->
+              <div class="fin-card">
+                <h4>Quick actions</h4>
+                <div class="quick-actions">
+                  <button class="qa-btn qa-primary">+ New invoice</button>
+                  <button class="qa-btn qa-sec">Send statements</button>
+                  <button class="qa-btn qa-sec">Export to CSV</button>
+                  <button class="qa-btn qa-sec">✦ AI summary</button>
+                </div>
+              </div>
+
+              <!-- Revenue chart -->
+              <div class="fin-card">
+                <h4>Weekly revenue</h4>
+                <div style="display:flex;align-items:flex-end;gap:5px;height:64px">
+                  <div style="display:flex;flex-direction:column;align-items:center;flex:1">
+                    <div style="width:100%;border-radius:4px 4px 0 0;background:var(--navy);opacity:.2;height:38px"></div>
+                    <div style="font-size:9px;color:var(--ink-soft);margin-top:4px;font-weight:700">W1</div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;align-items:center;flex:1">
+                    <div style="width:100%;border-radius:4px 4px 0 0;background:var(--navy);opacity:.3;height:50px"></div>
+                    <div style="font-size:9px;color:var(--ink-soft);margin-top:4px;font-weight:700">W2</div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;align-items:center;flex:1">
+                    <div style="width:100%;border-radius:4px 4px 0 0;background:var(--navy);opacity:.2;height:32px"></div>
+                    <div style="font-size:9px;color:var(--ink-soft);margin-top:4px;font-weight:700">W3</div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;align-items:center;flex:1">
+                    <div style="width:100%;border-radius:4px 4px 0 0;background:var(--navy);height:64px"></div>
+                    <div style="font-size:9px;color:var(--navy);margin-top:4px;font-weight:800">W4 ←</div>
+                  </div>
+                </div>
+                <div style="margin-top:10px;font-size:11px;color:var(--ink-soft)">This week: <b style="color:var(--navy);font-family:var(--display);font-size:15px">£1,071</b></div>
+              </div>
+
+              <!-- Top customers -->
+              <div class="fin-card">
+                <h4>Top customers · May</h4>
+                <div class="top-cust">
+                  <div class="tc-rank gold">1</div>
+                  <div class="tc-main"><b>Greenfields Care Home</b><span>Trade · 4 deliveries</span></div>
+                  <div class="tc-val">£840</div>
+                </div>
+                <div class="top-cust">
+                  <div class="tc-rank">2</div>
+                  <div class="tc-main"><b>The Red Lion</b><span>Trade · 4 deliveries</span></div>
+                  <div class="tc-val">£592</div>
+                </div>
+                <div class="top-cust">
+                  <div class="tc-rank">3</div>
+                  <div class="tc-main"><b>Empower Café</b><span>Trade · 3 deliveries</span></div>
+                  <div class="tc-val">£264</div>
+                </div>
+                <div class="top-cust">
+                  <div class="tc-rank">4</div>
+                  <div class="tc-main"><b>Sarah Green</b><span>Domestic · 2 orders</span></div>
+                  <div class="tc-val">£211</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="proto-foot">
+    Concept prototype · sample data shown for illustration
+    <span class="axrik-credit">Designed &amp; built by <span class="axrik-mark">A<span class="x">X</span>RIK</span> for <b>JG Foods</b> · May 2026</span>
+  </div>
+
+</main>
+
+<script>
+  // ---- view switching ----
+  const views = document.querySelectorAll('.view');
+  const tabs = document.querySelectorAll('.proto-tab');
+  function go(name){
+    views.forEach(v=>v.classList.toggle('active', v.dataset.view===name));
+    tabs.forEach(t=>t.classList.toggle('active', t.dataset.go===name));
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+  document.querySelectorAll('[data-go]').forEach(el=>{
+    el.addEventListener('click', ()=>go(el.dataset.go));
+  });
+
+  // ---- delivery slot select ----
+  document.querySelectorAll('[data-slot]').forEach(card=>{
+    card.addEventListener('click', ()=>{
+      card.parentElement.querySelectorAll('[data-slot]')
+        .forEach(c=>c.classList.remove('selected'));
+      card.classList.add('selected');
+    });
+  });
+
+  // ---- checkout type select (guest / account) ----
+  document.querySelectorAll('[data-opt]').forEach(card=>{
+    card.addEventListener('click', ()=>{
+      card.parentElement.querySelectorAll('[data-opt]')
+        .forEach(c=>c.classList.remove('selected'));
+      card.classList.add('selected');
+    });
+  });
+
+  // ---- place order → confirmation ----
+  const placeBtn = document.getElementById('placeBtn');
+  const confirmScreen = document.getElementById('confirmScreen');
+  if(placeBtn){
+    placeBtn.addEventListener('click', ()=>{
+      confirmScreen.classList.add('show');
+      confirmScreen.parentElement.scrollTo({top:0});
+    });
+  }
+  const confirmBack = document.getElementById('confirmBack');
+  if(confirmBack){
+    confirmBack.addEventListener('click', ()=>{
+      confirmScreen.classList.remove('show');
+      go('site');
+    });
+  }
+
+  // ---- toggle switches ----
+  document.querySelectorAll('[data-switch]').forEach(sw=>{
+    sw.addEventListener('click', ()=>{
+      sw.classList.toggle('on');
+      const row = sw.closest('.stock-row');
+      if(row){
+        row.classList.toggle('off', !sw.classList.contains('on'));
+        const state = row.querySelector('.sr-state');
+        const on = sw.classList.contains('on');
+        state.textContent = on ? 'Live' : 'Hidden';
+        state.className = 'sr-state ' + (on ? 'live' : 'hidden');
+      }
+    });
+  });
+
+  // ---- run tabs ----
+  document.querySelectorAll('.run-tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      document.querySelectorAll('.run-tab').forEach(t=>t.classList.remove('on'));
+      tab.classList.add('on');
+      document.querySelectorAll('.run-panel').forEach(p=>{
+        p.classList.toggle('on', p.dataset.panel===tab.dataset.run);
+      });
+    });
+  });
+
+  // ---- category chips ----
+  document.querySelectorAll('.chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      chip.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));
+      chip.classList.add('on');
+    });
+  });
+
+  // ---- device toggle (mobile / desktop) ----
+  document.querySelectorAll('.dtog-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const group = btn.dataset.toggle;
+      const target = btn.dataset.target;
+      // update button states for this group
+      document.querySelectorAll(`.dtog-btn[data-toggle="${group}"]`)
+        .forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      // show the right device wrap
+      const wraps = btn.closest('.view').querySelectorAll('.device-wrap');
+      wraps.forEach(w => {
+        w.classList.toggle('show', w.id === target);
+      });
+    });
+  });
+</script>
+</body>
+</html>

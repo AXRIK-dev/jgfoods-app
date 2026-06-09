@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-46 -10 600 200" width="600" height="200" role="img" aria-label="AXRIK">
+  <title>AXRIK</title>
+  <rect x="-46" y="-10" width="600" height="200" fill="#000000"/>
+  <g fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="6">
+    <!-- A -->
+    <path d="M0,150 L48,30 L96,150 M12,120 L84,120"/>
+    <!-- X — left half (white) -->
+    <path d="M142,30 L188,90 L142,150"/>
+    <!-- R -->
+    <path d="M284,30 L284,150 M284,30 L330,30 Q356,30 356,59 Q356,88 330,88 L284,88 M306,88 L356,150"/>
+    <!-- I -->
+    <path d="M402,30 L402,150"/>
+    <!-- K -->
+    <path d="M448,30 L448,150 M448,90 L508,30 M448,90 L508,150"/>
+  </g>
+  <!-- X — right half (green accent) -->
+  <path d="M238,30 L192,90 L238,150" fill="none" stroke="#18a06b" stroke-width="9" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="6"/>
+</svg>

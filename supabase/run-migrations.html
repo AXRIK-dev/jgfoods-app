@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JG Foods — Supabase Migrations</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; padding: 32px 24px; }
+  h1 { font-size: 1.4rem; font-weight: 700; color: #f8fafc; margin-bottom: 6px; }
+  .subtitle { font-size: 0.875rem; color: #94a3b8; margin-bottom: 36px; }
+  .subtitle a { color: #60a5fa; text-decoration: none; }
+  .subtitle a:hover { text-decoration: underline; }
+
+  .migration { background: #1e293b; border: 1px solid #334155; border-radius: 12px; margin-bottom: 24px; overflow: hidden; }
+  .migration-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #334155; }
+  .migration-title { display: flex; align-items: center; gap: 12px; }
+  .step-badge { background: #1d4ed8; color: #fff; font-size: 0.75rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+  .step-badge.done { background: #15803d; }
+  h2 { font-size: 1rem; font-weight: 600; color: #f1f5f9; }
+  .desc { font-size: 0.8rem; color: #94a3b8; margin-top: 2px; }
+
+  .copy-btn {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .copy-btn:hover { background: #1d4ed8; }
+  .copy-btn.copied { background: #15803d; }
+
+  pre {
+    background: #0f172a;
+    padding: 20px;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    color: #cbd5e1;
+    white-space: pre;
+  }
+
+  .warning { background: #422006; border: 1px solid #92400e; border-radius: 8px; padding: 14px 18px; margin-bottom: 24px; font-size: 0.85rem; color: #fde68a; }
+  .warning strong { color: #fbbf24; }
+
+  .post-run { background: #172554; border: 1px solid #1e40af; border-radius: 8px; padding: 14px 18px; margin: 0 20px 20px; font-size: 0.83rem; color: #93c5fd; }
+  .post-run strong { color: #60a5fa; display: block; margin-bottom: 4px; }
+  .post-run code { background: #1e3a8a; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+</style>
+</head>
+<body>
+
+<h1>JG Foods — Supabase Migrations</h1>
+<p class="subtitle">Run each one in order in the <a href="https://supabase.com" target="_blank">Supabase SQL Editor</a>. Wait for "Success" before moving to the next.</p>
+
+<div class="warning">
+  <strong>⚠ Important:</strong> Run in order — 001 first, 007 last. Each migration depends on the one before it.
+</div>
+
+<!-- 001 -->
+<div class="migration">
+  <div class="migration-header">
+    <div class="migration-title">
+      <span class="step-badge">Step 1 of 7</span>
+      <div>
+        <h2>001 — Base Schema</h2>
+        <div class="desc">Creates all core tables: products, customers, orders, invoices, delivery slots, weekly sheets</div>
+      </div>
+    </div>
+    <button class="copy-btn" onclick="copySQL(this, 'sql-001')">Copy SQL</button>
+  </div>
+  <pre id="sql-001">-- ============================================================
+-- Migration 001: Base schema
+-- JG Foods Admin App
+-- ============================================================
+
+-- ── Extensions ──────────────────────────────────────────────
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- ── products ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS products (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name          text NOT NULL,
+  description   text,
+  category      text NOT NULL DEFAULT 'Other',
+  price         numeric(10,2) NOT NULL CHECK (price >= 0),
+  trade_price   numeric(10,2),
+  unit          text NOT NULL DEFAULT 'pack',
+  is_available  boolean NOT NULL DEFAULT true,
+  img_url       text,
+  sort_order    integer NOT NULL DEFAULT 0,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── customers ───────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS customers (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  customer_type   text NOT NULL DEFAULT 'domestic' CHECK (customer_type IN ('domestic','commercial')),
+  name            text NOT NULL,
+  business_name   text,
+  price_tier      text NOT NULL DEFAULT 'standard' CHECK (price_tier IN ('standard','trade')),
+  billing         text NOT NULL DEFAULT 'per_delivery' CHECK (billing IN ('per_delivery','on_account')),
+  email           text,
+  phone           text,
+  address_line_1  text,
+  address_line_2  text,
+  city            text,
+  postcode        text,
+  notes           text,
+  invoice_prefix  text,
+  cash_tab        boolean NOT NULL DEFAULT false,
+  tab_settle_day  text,
+  is_active       boolean NOT NULL DEFAULT true,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── delivery_slots ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS delivery_slots (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  delivery_date   date NOT NULL,
+  day_label       text NOT NULL CHECK (day_label IN ('Monday','Wednesday','Thursday')),
+  capacity        integer NOT NULL DEFAULT 50,
+  orders_count    integer NOT NULL DEFAULT 0,
+  cutoff_at       timestamptz,
+  is_open         boolean NOT NULL DEFAULT true,
+  is_confirmed    boolean NOT NULL DEFAULT false,
+  notes           text,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (delivery_date)
+);
+
+-- ── orders ──────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS orders (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id       uuid NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
+  delivery_slot_id  uuid NOT NULL REFERENCES delivery_slots(id) ON DELETE RESTRICT,
+  channel           text NOT NULL DEFAULT 'website' CHECK (channel IN ('website','facebook','instagram','phone','whatsapp')),
+  status            text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','confirmed','packed','delivered','cancelled')),
+  total_amount      numeric(10,2) NOT NULL DEFAULT 0,
+  payment_method    text CHECK (payment_method IN ('cash','card','bacs','account')),
+  notes             text,
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── order_items ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS order_items (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id      uuid NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  product_id    uuid REFERENCES products(id) ON DELETE SET NULL,
+  product_name  text NOT NULL,
+  unit_price    numeric(10,2) NOT NULL,
+  quantity      integer NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  unit          text NOT NULL DEFAULT 'pack',
+  line_total    numeric(10,2) GENERATED ALWAYS AS (quantity * unit_price) STORED,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── invoices ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS invoices (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_number  text NOT NULL UNIQUE,
+  customer_id     uuid NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
+  order_id        uuid REFERENCES orders(id) ON DELETE SET NULL,
+  invoice_type    text NOT NULL DEFAULT 'invoice' CHECK (invoice_type IN ('invoice','receipt')),
+  status          text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','sent','paid','overdue')),
+  issued_at       timestamptz,
+  due_at          timestamptz,
+  paid_at         timestamptz,
+  subtotal        numeric(10,2) NOT NULL DEFAULT 0,
+  vat_amount      numeric(10,2) NOT NULL DEFAULT 0,
+  total_amount    numeric(10,2) NOT NULL DEFAULT 0,
+  notes           text,
+  pdf_url         text,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── invoice_items ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS invoice_items (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_id    uuid NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  description   text NOT NULL,
+  unit_price    numeric(10,2) NOT NULL,
+  quantity      integer NOT NULL DEFAULT 1,
+  line_total    numeric(10,2) GENERATED ALWAYS AS (quantity * unit_price) STORED,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── weekly_sheets ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS weekly_sheets (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  week_ending     date NOT NULL UNIQUE,
+  carried_forward numeric(10,2) NOT NULL DEFAULT 0,
+  sales_total     numeric(10,2) NOT NULL DEFAULT 0,
+  banked          numeric(10,2) NOT NULL DEFAULT 0,
+  purchases       jsonb NOT NULL DEFAULT '[]',
+  expenses        jsonb NOT NULL DEFAULT '[]',
+  notes           text,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── updated_at triggers ──────────────────────────────────────
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN NEW.updated_at = now(); RETURN NEW; END;
+$$;
+
+CREATE TRIGGER trg_products_updated_at       BEFORE UPDATE ON products       FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_customers_updated_at      BEFORE UPDATE ON customers      FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_delivery_slots_updated_at BEFORE UPDATE ON delivery_slots FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_orders_updated_at         BEFORE UPDATE ON orders         FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_invoices_updated_at       BEFORE UPDATE ON invoices       FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_weekly_sheets_updated_at  BEFORE UPDATE ON weekly_sheets  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ── orders_count trigger ─────────────────────────────────────
+CREATE OR REPLACE FUNCTION update_slot_orders_count()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'INSERT' AND NEW.status != 'cancelled' THEN
+    UPDATE delivery_slots SET orders_count = orders_count + 1 WHERE id = NEW.delivery_slot_id;
+  ELSIF TG_OP = 'UPDATE' THEN
+    IF OLD.status != 'cancelled' AND NEW.status = 'cancelled' THEN
+      UPDATE delivery_slots SET orders_count = orders_count - 1 WHERE id = NEW.delivery_slot_id;
+    ELSIF OLD.status = 'cancelled' AND NEW.status != 'cancelled' THEN
+      UPDATE delivery_slots SET orders_count = orders_count + 1 WHERE id = NEW.delivery_slot_id;
+    END IF;
+  ELSIF TG_OP = 'DELETE' AND OLD.status != 'cancelled' THEN
+    UPDATE delivery_slots SET orders_count = orders_count - 1 WHERE id = OLD.delivery_slot_id;
+  END IF;
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+CREATE TRIGGER trg_slot_orders_count
+AFTER INSERT OR UPDATE OF status OR DELETE ON orders
+FOR EACH ROW EXECUTE FUNCTION update_slot_orders_count();
+
+-- ── order total trigger ──────────────────────────────────────
+CREATE OR REPLACE FUNCTION update_order_total()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE v_order_id uuid;
+BEGIN
+  v_order_id := COALESCE(NEW.order_id, OLD.order_id);
+  UPDATE orders
+  SET total_amount = COALESCE((SELECT SUM(line_total) FROM order_items WHERE order_id = v_order_id), 0)
+  WHERE id = v_order_id;
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+CREATE TRIGGER trg_order_total
+AFTER INSERT OR UPDATE OR DELETE ON order_items
+FOR EACH ROW EXECUTE FUNCTION update_order_total();</pre>
+</div>
+
+<!-- 002 -->
+<div class="migration">
+  <div class="migration-header">
+    <div class="migration-title">
+      <span class="step-badge">Step 2 of 7</span>
+      <div>
+        <h2>002 — Row Level Security</h2>
+        <div class="desc">Locks down who can see what — public reads products/slots, Jon reads everything</div>
+      </div>
+    </div>
+    <button class="copy-btn" onclick="copySQL(this, 'sql-002')">Copy SQL</button>
+  </div>
+  <pre id="sql-002">-- ============================================================
+-- Migration 002: Row Level Security policies
+-- JG Foods Admin App
+-- ============================================================
+
+ALTER TABLE products        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customers       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE delivery_slots  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_items     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invoices        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invoice_items   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE weekly_sheets   ENABLE ROW LEVEL SECURITY;
+
+-- products
+CREATE POLICY "Public read available products"
+  ON products FOR SELECT
+  USING (is_available = true);
+
+CREATE POLICY "Admin full access to products"
+  ON products FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+-- delivery_slots
+CREATE POLICY "Public read open slots"
+  ON delivery_slots FOR SELECT
+  USING (is_open = true AND cutoff_at > now());
+
+CREATE POLICY "Admin full access to delivery_slots"
+  ON delivery_slots FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+-- orders
+CREATE POLICY "Admin full access to orders"
+  ON orders FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Account customers read own orders"
+  ON orders FOR SELECT
+  USING (
+    customer_id IN (
+      SELECT id FROM customers WHERE user_id = auth.uid()
+    )
+  );
+
+-- order_items
+CREATE POLICY "Admin full access to order_items"
+  ON order_items FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Account customers read own order_items"
+  ON order_items FOR SELECT
+  USING (
+    order_id IN (
+      SELECT o.id FROM orders o
+      JOIN customers c ON c.id = o.customer_id
+      WHERE c.user_id = auth.uid()
+    )
+  );
+
+-- customers
+CREATE POLICY "Admin full access to customers"
+  ON customers FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Account customers read own record"
+  ON customers FOR SELECT
+  USING (user_id = auth.uid());
+
+-- invoices
+CREATE POLICY "Admin full access to invoices"
+  ON invoices FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Account customers read own invoices"
+  ON invoices FOR SELECT
+  USING (
+    customer_id IN (
+      SELECT id FROM customers WHERE user_id = auth.uid()
+    )
+  );
+
+-- invoice_items
+CREATE POLICY "Admin full access to invoice_items"
+  ON invoice_items FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+-- weekly_sheets
+CREATE POLICY "Admin full access to weekly_sheets"
+  ON weekly_sheets FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');</pre>
+</div>
+
+<!-- 003 -->
+<div class="migration">
+  <div class="migration-header">
+    <div class="migration-title">
+      <span class="step-badge">Step 3 of 7</span>
+      <div>
+        <h2>003 — Place Order RPC</h2>
+        <div class="desc">The function website visitors use to submit orders — checks slot, creates customer if new, inserts order atomically</div>
+      </div>
+    </div>
+    <button class="copy-btn" onclick="copySQL(this, 'sql-003')">Copy SQL</button>
+  </div>
+  <pre id="sql-003">-- ============================================================
+-- Migration 003: place_order RPC
+-- JG Foods Admin App
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION place_order(
+  p_name           text,
+  p_email          text,
+  p_phone          text,
+  p_address        text,
+  p_postcode       text,
+  p_customer_type  text DEFAULT 'domestic',
+  p_slot_id        uuid,
+  p_channel        text DEFAULT 'website',
+  p_notes          text DEFAULT NULL,
+  p_items          jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_customer_id  uuid;
+  v_order_id     uuid;
+  v_slot         record;
+  v_item         jsonb;
+  v_ref          text;
+BEGIN
+
+  SELECT * INTO v_slot FROM delivery_slots WHERE id = p_slot_id;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'Delivery slot not found');
+  END IF;
+
+  IF NOT v_slot.is_open THEN
+    RETURN jsonb_build_object('error', 'Sorry, this delivery slot is now closed');
+  END IF;
+
+  IF v_slot.cutoff_at IS NOT NULL AND now() > v_slot.cutoff_at THEN
+    RETURN jsonb_build_object('error', 'The order cut-off for this slot has passed');
+  END IF;
+
+  IF v_slot.orders_count >= v_slot.capacity THEN
+    RETURN jsonb_build_object('error', 'Sorry, this delivery slot is fully booked');
+  END IF;
+
+  SELECT id INTO v_customer_id
+  FROM customers
+  WHERE (email = p_email AND p_email IS NOT NULL AND p_email != '')
+     OR (phone = p_phone AND p_phone IS NOT NULL AND p_phone != '')
+  LIMIT 1;
+
+  IF v_customer_id IS NULL THEN
+    INSERT INTO customers (name, email, phone, address_line_1, postcode, customer_type)
+    VALUES (p_name, p_email, p_phone, p_address, p_postcode, p_customer_type)
+    RETURNING id INTO v_customer_id;
+  END IF;
+
+  INSERT INTO orders (customer_id, delivery_slot_id, channel, status, notes)
+  VALUES (v_customer_id, p_slot_id, p_channel, 'pending', p_notes)
+  RETURNING id INTO v_order_id;
+
+  FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
+  LOOP
+    INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity, unit)
+    VALUES (
+      v_order_id,
+      (v_item->>'product_id')::uuid,
+      v_item->>'product_name',
+      (v_item->>'unit_price')::numeric,
+      (v_item->>'quantity')::integer,
+      COALESCE(v_item->>'unit', 'pack')
+    );
+  END LOOP;
+
+  v_ref := 'JGF-' || upper(substring(v_order_id::text, 1, 6));
+
+  RETURN jsonb_build_object(
+    'success',    true,
+    'order_id',   v_order_id,
+    'reference',  v_ref,
+    'slot_date',  v_slot.delivery_date,
+    'slot_day',   v_slot.day_label
+  );
+
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION place_order TO anon;</pre>
+</div>
+
+<!-- 004 -->
+<div class="migration">
+  <div class="migration-header">
+    <div class="migration-title">
+      <span class="step-badge">Step 4 of 7</span>
+      <div>
+        <h2>004 — Split Payments &amp; Cash Tabs</h2>
+        <div class="desc">Adds invoice_payments table, cash_tab_entries, and helper views for customers who pay a weekly lump sum</div>
+      </div>
+    </div>
+    <button class="copy-btn" onclick="copySQL(this, 'sql-004')">Copy SQL</button>
+  </div>
+  <pre id="sql-004">-- ============================================================
+-- Migration 004: Split payments & cash tab support
+-- JG Foods Admin App
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS invoice_payments (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_id   uuid NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  method       text NOT NULL CHECK (method IN ('cash','bacs')),
+  amount       numeric(10,2) NOT NULL CHECK (amount > 0),
+  note         text,
+  paid_at      timestamptz NOT NULL DEFAULT now(),
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_invoice_payments_invoice
+  ON invoice_payments (invoice_id);
+
+ALTER TABLE invoice_payments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can manage payments"
+  ON invoice_payments
+  FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+ALTER TABLE customers
+  ADD COLUMN IF NOT EXISTS cash_tab       boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS tab_settle_day text;
+
+CREATE TABLE IF NOT EXISTS cash_tab_entries (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id  uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  delivery_date date NOT NULL,
+  amount       numeric(10,2) NOT NULL CHECK (amount > 0),
+  items        text,
+  settled      boolean NOT NULL DEFAULT false,
+  settled_at   timestamptz,
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_cash_tab_entries_customer
+  ON cash_tab_entries (customer_id, settled);
+
+ALTER TABLE cash_tab_entries ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can manage tab entries"
+  ON cash_tab_entries
+  FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+CREATE OR REPLACE VIEW invoice_payment_summary AS
+SELECT
+  i.id                                          AS invoice_id,
+  i.total_amount,
+  COALESCE(SUM(p.amount), 0)                    AS paid_total,
+  i.total_amount - COALESCE(SUM(p.amount), 0)   AS balance,
+  CASE
+    WHEN COALESCE(SUM(p.amount), 0) <= 0 THEN 'unpaid'
+    WHEN COALESCE(SUM(p.amount), 0) >= i.total_amount THEN 'paid'
+    ELSE 'part_paid'
+  END                                           AS payment_status,
+  bool_or(p.method = 'cash')                    AS has_cash,
+  bool_or(p.method = 'bacs')                    AS has_bacs
+FROM invoices i
+LEFT JOIN invoice_payments p ON p.invoice_id = i.id
+GROUP BY i.id, i.total_amount;
+
+CREATE OR REPLACE VIEW unsettled_tab_totals AS
+SELECT
+  c.id          AS customer_id,
+  c.name        AS customer_name,
+  c.tab_settle_day,
+  COUNT(e.id)   AS entry_count,
+  COALESCE(SUM(e.amount), 0) AS tab_total
+FROM customers c
+LEFT JOIN cash_tab_entries e ON e.customer_id = c.id AND NOT e.settled
+WHERE c.cash_tab = true
+GROUP BY c.id, c.name, c.tab_settle_day;</pre>
+</div>
+
+<!-- 005 -->
+<div class="migration">
+  <div class="migration-header">
+    <div class="migration-title">
+      <span class="step-badge">Step 5 of 7</span>
+      <div>
+        <h2>005 — Delivery Temperature Log</h2>
+        <div class="desc">Creates the temp log table — auto-populates when a delivery run is confirmed, no manual list-building</div>
+      </div>
+    </div>
+    <button class="copy-btn" onclick="copySQL(this, 'sql-005')">Copy SQL</button>
+  </div>
+  <pre id="sql-005">-- ============================================================
+-- Migration 005: Delivery temperature log
+-- JG Foods Admin App
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS delivery_temps (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  delivery_slot_id  uuid NOT NULL REFERENCES delivery_slots(id) ON DELETE CASCADE,
+  customer_id       uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  customer_name     text NOT NULL,
+  delivery_date     date NOT NULL,
+  logged_at         timestamptz,
+  temp_celsius      numeric(4,1),
+  notes             text,
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (delivery_slot_id, customer_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_delivery_temps_slot
+  ON delivery_temps (delivery_slot_id);
+
+CREATE INDEX IF NOT EXISTS idx_delivery_temps_date
+  ON delivery_temps (delivery_date);
+
+CREATE TRIGGER trg_delivery_temps_updated_at
+  BEFORE UPDATE ON delivery_temps
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+ALTER TABLE delivery_temps ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admin full access to delivery_temps"
+  ON delivery_temps FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+CREATE OR REPLACE FUNCTION populate_delivery_temps()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.is_confirmed = false AND NEW.is_confirmed = true THEN
+    INSERT INTO delivery_temps (delivery_slot_id, customer_id, customer_name, delivery_date)
+    SELECT
+      NEW.id,
+      c.id,
+      c.name,
+      NEW.delivery_date
+    FROM orders o
+    JOIN customers c ON c.id = o.customer_id
+    WHERE o.delivery_slot_id = NEW.id
+      AND o.status != 'cancelled'
+    ON CONFLICT (delivery_slot_id, customer_id) DO NOTHING;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_populate_delivery_temps
+  AFTER UPDATE OF is_confirmed ON delivery_slots
+  FOR EACH ROW EXECUTE FUNCTION populate_delivery_temps();
+
+CREATE OR REPLACE VIEW monthly_temp_summary AS
+SELECT
+  dt.delivery_date,
+  dt.customer_name,
+  dt.temp_celsius,
+  dt.notes,
+  dt.logged_at,
+  ds.day_label,
+  to_char(dt.delivery_date, 'YYYY-MM') AS month
+FROM delivery_temps dt
+JOIN delivery_slots ds ON ds.id = dt.delivery_slot_id
+ORDER BY dt.customer_name, dt.delivery_date;</pre>
+</div>
+
+<!-- 006 -->
+<div class="migration">
+  <div class="migration-header">
+    <div class="migration-title">
+      <span class="step-badge">Step 6 of 7</span>
+      <div>
+        <h2>006 — User Roles</h2>
+        <div class="desc">Admin (Jon) vs Driver access — drivers can't see invoices or finance</div>
+      </div>
+    </div>
+    <button class="copy-btn" onclick="copySQL(this, 'sql-006')">Copy SQL</button>
+  </div>
+  <pre id="sql-006">-- ============================================================
+-- Migration 006: User roles — admin and driver
+-- JG Foods Admin App
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS user_profiles (
+  id          uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  role        text NOT NULL DEFAULT 'driver' CHECK (role IN ('admin', 'driver')),
+  full_name   text,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER trg_user_profiles_updated_at
+  BEFORE UPDATE ON user_profiles
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE OR REPLACE FUNCTION create_user_profile()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  INSERT INTO user_profiles (id, full_name)
+  VALUES (NEW.id, NEW.raw_user_meta_data->>'full_name')
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_create_user_profile
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION create_user_profile();
+
+CREATE OR REPLACE FUNCTION current_user_role()
+RETURNS text LANGUAGE sql SECURITY DEFINER STABLE AS $$
+  SELECT COALESCE(
+    (SELECT role FROM user_profiles WHERE id = auth.uid()),
+    'driver'
+  );
+$$;
+
+ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users read own profile"
+  ON user_profiles FOR SELECT
+  USING (id = auth.uid());
+
+CREATE POLICY "Admin manages all profiles"
+  ON user_profiles FOR ALL
+  USING (current_user_role() = 'admin')
+  WITH CHECK (current_user_role() = 'admin');
+
+-- Tighten financial tables to admin-only
+DROP POLICY IF EXISTS "Admin full access to invoices" ON invoices;
+CREATE POLICY "Admin full access to invoices"
+  ON invoices FOR ALL
+  USING (current_user_role() = 'admin')
+  WITH CHECK (current_user_role() = 'admin');
+
+DROP POLICY IF EXISTS "Account customers read own invoices" ON invoices;
+CREATE POLICY "Account customers read own invoices"
+  ON invoices FOR SELECT
+  USING (customer_id IN (SELECT id FROM customers WHERE user_id = auth.uid()));
+
+DROP POLICY IF EXISTS "Admin full access to invoice_items" ON invoice_items;
+CREATE POLICY "Admin full access to invoice_items"
+  ON invoice_items FOR ALL
+  USING (current_user_role() = 'admin')
+  WITH CHECK (current_user_role() = 'admin');
+
+DROP POLICY IF EXISTS "Admin full access to weekly_sheets" ON weekly_sheets;
+CREATE POLICY "Admin full access to weekly_sheets"
+  ON weekly_sheets FOR ALL
+  USING (current_user_role() = 'admin')
+  WITH CHECK (current_user_role() = 'admin');
+
+DROP POLICY IF EXISTS "Authenticated users can manage payments" ON invoice_payments;
+CREATE POLICY "Admin manages invoice_payments"
+  ON invoice_payments FOR ALL
+  USING (current_user_role() = 'admin')
+  WITH CHECK (current_user_role() = 'admin');
+
+DROP POLICY IF EXISTS "Authenticated users can manage tab entries" ON cash_tab_entries;
+CREATE POLICY "Admin manages cash_tab_entries"
+  ON cash_tab_entries FOR ALL
+  USING (current_user_role() = 'admin')
+  WITH CHECK (current_user_role() = 'admin');
+
+-- Driver read access
+CREATE POLICY "Driver read orders"
+  ON orders FOR SELECT
+  USING (current_user_role() = 'driver');
+
+CREATE POLICY "Driver read order_items"
+  ON order_items FOR SELECT
+  USING (current_user_role() = 'driver');
+
+CREATE POLICY "Driver read and update delivery_temps"
+  ON delivery_temps FOR SELECT
+  USING (current_user_role() = 'driver');
+
+CREATE POLICY "Driver update delivery_temps"
+  ON delivery_temps FOR UPDATE
+  USING (current_user_role() = 'driver')
+  WITH CHECK (current_user_role() = 'driver');
+
+CREATE POLICY "Driver read customers"
+  ON customers FOR SELECT
+  USING (current_user_role() = 'driver');</pre>
+  <div class="post-run">
+    <strong>⚠ After running this — set Jon's account to admin</strong>
+    Run this separately in the SQL editor, replacing the email with Jon's actual Supabase account email:<br><br>
+    <code>UPDATE user_profiles SET role = 'admin' WHERE id = (SELECT id FROM auth.users WHERE email = 'jon@example.com');</code>
+  </div>
+</div>
+
+<!-- 007 -->
+<div class="migration">
+  <div class="migration-header">
+    <div class="migration-title">
+      <span class="step-badge">Step 7 of 7</span>
+      <div>
+        <h2>007 — Pie Supplier Cut-offs</h2>
+        <div class="desc">Adds supplier type to products and cut-off rules — powers the pie order alert banner</div>
+      </div>
+    </div>
+    <button class="copy-btn" onclick="copySQL(this, 'sql-007')">Copy SQL</button>
+  </div>
+  <pre id="sql-007">-- ============================================================
+-- Migration 007: Pie supplier cut-offs
+-- JG Foods Admin App
+-- ============================================================
+
+ALTER TABLE products
+  ADD COLUMN IF NOT EXISTS supplier_type text NOT NULL DEFAULT 'meat'
+  CONSTRAINT products_supplier_type_check CHECK (supplier_type IN ('meat', 'pie'));
+
+CREATE TABLE IF NOT EXISTS supplier_cutoffs (
+  supplier_type          text PRIMARY KEY,
+  label                  text NOT NULL,
+  cutoff_hour            integer NOT NULL DEFAULT 12,
+  days_before_delivery   integer NOT NULL DEFAULT 1,
+  friday_covers_monday   boolean NOT NULL DEFAULT false
+);
+
+ALTER TABLE supplier_cutoffs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admins have full access"
+  ON supplier_cutoffs FOR ALL
+  USING  ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin')
+  WITH CHECK ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
+
+INSERT INTO supplier_cutoffs
+  (supplier_type, label, cutoff_hour, days_before_delivery, friday_covers_monday)
+VALUES
+  ('pie',  'Pie Supplier',  12, 1, true),
+  ('meat', 'Meat Supplier', 17, 0, false)
+ON CONFLICT (supplier_type) DO NOTHING;</pre>
+</div>
+
+<script>
+function copySQL(btn, id) {
+  const text = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✓ Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = 'Copy SQL';
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+}
+</script>
+</body>
+</html>

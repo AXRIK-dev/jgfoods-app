@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JG Foods — Go-Live Checklist</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --dark:#0d1726; --dark-2:#111f33; --dark-3:#1a2d47;
+    --green:#15a36a; --green-soft:rgba(21,163,106,.12); --green-border:rgba(21,163,106,.28);
+    --amber:#e8a020; --amber-soft:rgba(232,160,32,.12); --amber-border:rgba(232,160,32,.3);
+    --red:#d63c3c; --red-soft:rgba(214,60,60,.1); --red-border:rgba(214,60,60,.28);
+    --white:#fff; --off-white:#f7f8fa; --light-grey:#eef0f3;
+    --mid-grey:#9aa5b4; --text:#1c2635; --text-soft:#5a6a7a;
+    --border:#e2e6eb; --font:'Inter',-apple-system,sans-serif; --serif:'DM Serif Display',Georgia,serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--font);color:var(--text);background:var(--off-white);-webkit-font-smoothing:antialiased}
+
+  /* HEADER */
+  .header{background:var(--dark);padding:0}
+  .top-bar{padding:14px 48px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.06)}
+  .wordmark{font-size:20px;font-weight:800;letter-spacing:.38em;padding-left:.38em;color:#fff;text-transform:uppercase}
+  .wordmark .x{color:var(--green)}
+  .top-right{font-size:11px;font-weight:500;color:rgba(255,255,255,.4);letter-spacing:.08em;text-transform:uppercase}
+  .header-body{padding:52px 48px 44px}
+  .pill{display:inline-flex;align-items:center;gap:8px;background:var(--green-soft);border:1px solid var(--green-border);border-radius:100px;padding:6px 14px;margin-bottom:24px}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+  .pill span{font-size:12px;font-weight:600;color:var(--green);letter-spacing:.04em}
+  .header-body h1{font-family:var(--serif);font-size:clamp(32px,4vw,52px);color:#fff;line-height:1.15;margin-bottom:14px}
+  .header-body h1 em{color:var(--green);font-style:normal}
+  .header-body p{font-size:15px;color:rgba(255,255,255,.55);max-width:560px;line-height:1.6}
+  .green-rule{border:none;border-top:2px solid var(--green);opacity:.35;margin:0}
+
+  /* PROGRESS BAR */
+  .progress-bar-wrap{background:#fff;border-bottom:1px solid var(--border);padding:16px 48px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50}
+  .progress-label{font-size:12px;font-weight:600;color:var(--text-soft);white-space:nowrap}
+  .progress-track{flex:1;height:8px;background:var(--light-grey);border-radius:8px;overflow:hidden}
+  .progress-fill{height:100%;background:var(--green);border-radius:8px;transition:width .4s ease;width:0%}
+  .progress-pct{font-size:13px;font-weight:700;color:var(--green);white-space:nowrap;min-width:36px;text-align:right}
+
+  /* BODY */
+  .body{max-width:840px;margin:0 auto;padding:40px 24px 80px}
+
+  /* PHASE HEADERS */
+  .phase{margin-bottom:48px}
+  .phase-header{display:flex;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid var(--border)}
+  .phase-num{width:32px;height:32px;border-radius:50%;background:var(--dark);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .phase-title{font-size:19px;font-weight:700;color:var(--text)}
+  .phase-subtitle{font-size:13px;color:var(--text-soft);margin-top:2px}
+  .phase-badge{margin-left:auto;font-size:11px;font-weight:700;padding:4px 10px;border-radius:100px;letter-spacing:.04em}
+  .badge-must{background:var(--red-soft);color:var(--red);border:1px solid var(--red-border)}
+  .badge-config{background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber-border)}
+  .badge-data{background:var(--green-soft);color:var(--green);border:1px solid var(--green-border)}
+  .badge-test{background:#f0f0ff;color:#5b5bd6;border:1px solid #c7c7f0}
+  .badge-hand{background:#fff5f0;color:#c04a1a;border:1px solid #f5cdb6}
+
+  /* CHECKLIST ITEMS */
+  .checklist{display:flex;flex-direction:column;gap:6px}
+  .check-item{display:flex;align-items:flex-start;gap:14px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;cursor:pointer;transition:border-color .15s,box-shadow .15s;user-select:none}
+  .check-item:hover{border-color:#c5cdd6;box-shadow:0 1px 6px rgba(0,0,0,.06)}
+  .check-item.done{background:#f7fdf9;border-color:var(--green-border)}
+  .check-item.done .ci-label{text-decoration:line-through;color:var(--text-soft)}
+  .check-box{width:22px;height:22px;border:2px solid var(--border);border-radius:6px;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s}
+  .check-item.done .check-box{background:var(--green);border-color:var(--green)}
+  .check-tick{display:none;color:#fff;font-size:13px;font-weight:800}
+  .check-item.done .check-tick{display:block}
+  .ci-body{flex:1}
+  .ci-label{font-size:14px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:4px}
+  .ci-desc{font-size:12px;color:var(--text-soft);line-height:1.5}
+  .ci-tag{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:100px;margin-bottom:6px;letter-spacing:.04em;text-transform:uppercase}
+  .tag-critical{background:var(--red-soft);color:var(--red)}
+  .tag-5min{background:var(--green-soft);color:var(--green)}
+  .tag-phil{background:#f0f0ff;color:#5b5bd6}
+  .tag-jon{background:#fff5f0;color:#c04a1a}
+
+  /* FOOTER */
+  footer{background:var(--dark);padding:40px 48px;margin-top:0}
+  .footer-inner{max-width:840px;margin:0 auto;display:flex;justify-content:space-between;align-items:flex-start;gap:32px}
+  .footer-left .wordmark{font-size:16px}
+  .footer-left p{font-size:13px;color:rgba(255,255,255,.35);margin-top:8px}
+  .footer-right{text-align:right;font-size:13px;color:rgba(255,255,255,.4);line-height:1.7}
+  .footer-right a{color:var(--green);text-decoration:none}
+
+  @media(max-width:600px){
+    .top-bar,.header-body{padding-left:20px;padding-right:20px}
+    .body{padding:24px 16px 60px}
+    .progress-bar-wrap{padding:12px 20px}
+    footer,.footer-inner{padding:24px 20px;flex-direction:column;text-align:left}
+    .footer-right{text-align:left}
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="top-bar">
+    <div class="wordmark">A<span class="x">X</span>RIK</div>
+    <div class="top-right">JG Foods — Go-Live Checklist</div>
+  </div>
+  <div class="header-body">
+    <div class="pill"><span class="dot"></span><span>Go-Live Checklist &nbsp;·&nbsp; JG Foods</span></div>
+    <h1>Everything needed<br>to go <em>live.</em></h1>
+    <p>Work through this top to bottom. Tick each item as it's done. Nothing gets missed, nothing gets skipped. The system isn't live until this list is green.</p>
+  </div>
+  <hr class="green-rule">
+</header>
+
+<!-- PROGRESS -->
+<div class="progress-bar-wrap">
+  <span class="progress-label">Progress</span>
+  <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+  <span class="progress-pct" id="progressPct">0%</span>
+</div>
+
+<div class="body">
+
+  <!-- PHASE 1: SUPABASE -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num">1</div>
+      <div>
+        <div class="phase-title">Supabase — database setup</div>
+        <div class="phase-subtitle">Must be done first. Everything else depends on this.</div>
+      </div>
+      <span class="phase-badge badge-must">Must do first</span>
+    </div>
+    <div class="checklist">
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Run migration 001_base_schema.sql</div>
+          <div class="ci-desc">Supabase → SQL Editor → paste the full contents of 001_base_schema.sql → Run. Creates all core tables: products, customers, delivery_slots, orders, order_items, invoices, invoice_items, weekly_sheets.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Run migration 002_rls_policies.sql</div>
+          <div class="ci-desc">Locks down the database. Public can read products and open slots only. Admin sees everything. Run immediately after 001 — tables are wide open until this is done.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Run migration 003_place_order_rpc.sql</div>
+          <div class="ci-desc">Creates the place_order function. The customer website cannot submit orders without this.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Run migration 004_split_payments_and_cash_tabs.sql</div>
+          <div class="ci-desc">Adds invoice payment tracking and cash tab support. Adds columns to the customers table.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Run migration 005_delivery_temps.sql</div>
+          <div class="ci-desc">Creates the temperature log table linked to delivery runs, and the auto-population trigger.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-critical">Critical</div>
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Run migration 006_user_roles.sql</div>
+          <div class="ci-desc">Creates the role system — admin (Jon) and driver (delivery friend). Blocks all financial data from driver accounts at the database level. Must be run before creating any user accounts.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Create Jon's admin account in Supabase Auth</div>
+          <div class="ci-desc">Supabase → Authentication → Users → Invite user. Use Jon's email. He'll receive a link to set his password. This is his login for the admin app.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-critical">Critical</div>
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Set Jon's role to admin in the database</div>
+          <div class="ci-desc">Jon defaults to 'driver' until this is done — he won't be able to see Finance or Invoices without it. In Supabase SQL Editor run: UPDATE user_profiles SET role = 'admin' WHERE id = (SELECT id FROM auth.users WHERE email = 'jons-email-here'); replacing with Jon's actual email address.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Create delivery friend's account in Supabase Auth</div>
+          <div class="ci-desc">Supabase → Authentication → Users → Invite user → their email. They set their own password via the invite link. Their role defaults to 'driver' automatically — no SQL needed. They will see Orders, Delivery Runs, Customers, and Temp Log only. Finance and Invoices are hidden both in the UI and blocked at the database level.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Test driver login — confirm finance is hidden</div>
+          <div class="ci-desc">Log into the admin app using the delivery friend's account. Confirm Finance and Invoices are not visible in the nav. Try navigating to those pages directly — they should redirect to Orders. This must pass before handing the system to Jon.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Copy anon key into admin/index.html</div>
+          <div class="ci-desc">Supabase → Settings → API → copy the anon/public key. Find the line REPLACE_WITH_ANON_KEY in admin/index.html and paste it in. Do the same in website/index.html when it's ready.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Enable Supabase Storage for product images</div>
+          <div class="ci-desc">Supabase → Storage → New bucket → name it "product-images" → set to public. Enables Jon to upload product photos in the admin.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 2: NETLIFY -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num">2</div>
+      <div>
+        <div class="phase-title">Netlify — deploy both sites</div>
+        <div class="phase-subtitle">Admin app and customer website are two separate Netlify deployments.</div>
+      </div>
+      <span class="phase-badge badge-must">Infrastructure</span>
+    </div>
+    <div class="checklist">
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Push admin app to GitHub (AXRIK-dev repo)</div>
+          <div class="ci-desc">Commit admin/index.html with the anon key in place. Push to the AXRIK-dev repo on GitHub.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Deploy admin app on Netlify → admin.jgfoodnorthwest.com</div>
+          <div class="ci-desc">Netlify → New site from GitHub → select repo → deploy. Once live, add the custom domain admin.jgfoodnorthwest.com and point DNS in Cloudflare.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Deploy customer website on Netlify → jgfoodnorthwest.com</div>
+          <div class="ci-desc">Same process as admin. Separate Netlify site. Custom domain jgfoodnorthwest.com. Cloudflare DNS records for both root and www.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Confirm SSL certificates are active on both domains</div>
+          <div class="ci-desc">Netlify provisions these automatically — check both sites show a padlock in the browser before going further.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Add Supabase URL to Netlify allowed origins (CORS)</div>
+          <div class="ci-desc">Supabase → Settings → API → under "Allowed Origins" add both https://jgfoodnorthwest.com and https://admin.jgfoodnorthwest.com. Prevents CORS errors when the site goes live.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 3: THIRD-PARTY CONNECTIONS -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num">3</div>
+      <div>
+        <div class="phase-title">Third-party connections</div>
+        <div class="phase-subtitle">Each one unlocks a set of features. Do them in order of priority.</div>
+      </div>
+      <span class="phase-badge badge-config">Configuration</span>
+    </div>
+    <div class="checklist">
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">EmailJS — set up account and wire in</div>
+          <div class="ci-desc">Create account at emailjs.com. Add an email service (Jon's Gmail or a JG Foods address). Create two templates: order confirmation (to customer) and new order alert (to Jon). Drop the SERVICE_ID and TEMPLATE_IDs into the admin app. Unlocks: invoice emails, order confirmations.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Twilio — set up account and wire in</div>
+          <div class="ci-desc">Create Twilio account, get a UK SMS number (~£1/month). Add the Account SID, Auth Token, and sender number to a Netlify environment variable. Wire into the SMS send buttons in the admin. Unlocks: invoice texts, VIP messages, 5:30am automated reminders.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Google Maps API key — route optimisation</div>
+          <div class="ci-desc">Google Cloud Console → enable Routes API → create API key restricted to the admin domain. Drop it into the route planning section of the admin. Unlocks: optimised delivery run ordering.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Claude API key — AI features via Netlify Function</div>
+          <div class="ci-desc">Anthropic console → create API key → add to Netlify environment variables. Write a single Netlify Function (functions/claude.js) that proxies requests to the API. Unlocks: paste-to-parse order extraction, AI message redrafting, VIP text generation.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 4: DATA LOADING -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num">4</div>
+      <div>
+        <div class="phase-title">Load real data</div>
+        <div class="phase-subtitle">The system runs on sample data until this is done. Don't go live until these are in.</div>
+      </div>
+      <span class="phase-badge badge-data">Data</span>
+    </div>
+    <div class="checklist">
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-jon">Jon + Phil</div>
+          <div class="ci-label">Load product catalogue with real prices</div>
+          <div class="ci-desc">Jon confirms the full product list, categories, and current prices. Phil enters them into the products table (or Jon does it himself in the admin once the Supabase connection is live). Include trade prices where they differ from retail.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-jon">Jon + Phil</div>
+          <div class="ci-label">Load trade customers from Jon's spreadsheet</div>
+          <div class="ci-desc">Import the 35+ trade customers from Bank Payments.xlsx and the invoice workbook — name, address, invoice prefix, billing type, and any per-customer pricing. Phil can write a one-off import script from the CSV to speed this up.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Create first delivery slots (Mon/Thu for next 4 weeks)</div>
+          <div class="ci-desc">Insert the next 8 delivery slots into delivery_slots (4 Mondays, 4 Thursdays) with sensible cut-off times. Jon can manage these himself in the admin going forward.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-jon">Jon</div>
+          <div class="ci-label">Confirm delivery postcodes for postcode validation</div>
+          <div class="ci-desc">Jon provides the full list of postcodes he covers. Phil adds these to the order form so customers outside the area get a clear "sorry, not your area" message rather than placing an order Jon can't fulfil.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-jon">Jon</div>
+          <div class="ci-label">Upload product photos</div>
+          <div class="ci-desc">Jon uses the product image upload in the admin to add a photo to each product. Supabase Storage must be set up first (Phase 1). Photos make the website significantly more appealing.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-jon">Jon</div>
+          <div class="ci-label">Set the current week's availability</div>
+          <div class="ci-desc">Jon goes into the admin → Products and toggles on everything available this week. This powers the customer-facing availability page. Do this before sending anyone to the website.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 5: PRE-LAUNCH TESTING -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num">5</div>
+      <div>
+        <div class="phase-title">Pre-launch testing</div>
+        <div class="phase-subtitle">Phil tests end-to-end before Jon touches it.</div>
+      </div>
+      <span class="phase-badge badge-test">Testing</span>
+    </div>
+    <div class="checklist">
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Place a test order on the customer website</div>
+          <div class="ci-desc">Go to jgfoodnorthwest.com, pick a product, pick a delivery slot, fill in details, submit. Confirm the order appears in the admin, confirmation email arrives, and the slot count increments.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Test admin login as Jon</div>
+          <div class="ci-desc">Log into admin.jgfoodnorthwest.com with Jon's credentials. Confirm he can see orders, mark them through statuses, and access all pages.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Test delivery slot confirmation → temp log auto-population</div>
+          <div class="ci-desc">In the admin, confirm a delivery slot. Go to the Temp Log screen and verify entries have been created for every customer on that run — no manual steps needed from Jon.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Test invoice generation and send</div>
+          <div class="ci-desc">Mark a test order as delivered, generate the invoice, send via email and check it arrives correctly formatted with the right bank details and VAT number.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Test on mobile (iPhone Safari)</div>
+          <div class="ci-desc">Both the website and the admin must work cleanly on Jon's phone. Test placing an order and entering a temp reading on mobile specifically — these are Jon's most frequent mobile tasks.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Delete all test data before handover</div>
+          <div class="ci-desc">Clear any test orders, customers, and invoices created during testing. Jon starts with a clean system. Leave the products, delivery slots, and trade customers in place.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 6: HANDOVER -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num">6</div>
+      <div>
+        <div class="phase-title">Handover to Jon</div>
+        <div class="phase-subtitle">Walk through everything together. Don't hand over and disappear.</div>
+      </div>
+      <span class="phase-badge badge-hand">Handover</span>
+    </div>
+    <div class="checklist">
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-jon">Jon + Phil</div>
+          <div class="ci-label">Walk through the admin app with Jon — all 9 screens</div>
+          <div class="ci-desc">In person or video call. Cover: Orders → Delivery Run → Log Order → Customers → Products → Invoices → Finance → Temp Log → Help guide. Keep it practical — show him a Monday morning routine.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-jon">Jon</div>
+          <div class="ci-label">Jon logs in himself and places a test order</div>
+          <div class="ci-desc">Jon uses the system himself — logs a Facebook order in, marks it delivered, generates the invoice. Make sure he's confident before leaving him to it.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-jon">Jon</div>
+          <div class="ci-label">Jon adds admin.jgfoodnorthwest.com to his phone home screen</div>
+          <div class="ci-desc">Safari → Share → Add to Home Screen. This makes it feel like a proper app on his phone. Walk him through it.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-jon">Jon</div>
+          <div class="ci-label">Share the website with a few trusted customers first</div>
+          <div class="ci-desc">Before posting publicly, Jon sends the link to 3–4 existing customers and asks them to try placing an order. Real-world test before the full rollout.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-jon">Jon</div>
+          <div class="ci-label">Post the website on Facebook and Instagram</div>
+          <div class="ci-desc">Jon announces the website is live. Phil can draft the post. Keep it warm and personal — not a corporate launch, just Jon telling his regulars there's now an easy way to order.</div>
+        </div>
+      </div>
+      <div class="check-item" onclick="toggle(this)">
+        <div class="check-box"><span class="check-tick">✓</span></div>
+        <div class="ci-body">
+          <div class="ci-tag tag-phil">Phil</div>
+          <div class="ci-label">Monitor for errors in the first week</div>
+          <div class="ci-desc">Check Supabase logs and Netlify function logs daily for the first week. Be available if Jon hits anything unexpected. Fix quickly — this is the reputation-building phase for AXRIK.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">
+      <div class="wordmark">A<span class="x">X</span>RIK</div>
+      <p>Bespoke web apps for businesses that need proper digital tools.</p>
+    </div>
+    <div class="footer-right">
+      <p><strong style="color:rgba(255,255,255,.7)">Phil Munro</strong><br>
+      <a href="mailto:phil@axrik.com">phil@axrik.com</a> &nbsp;·&nbsp; 07581 278408</p>
+      <p style="margin-top:6px;font-size:11px;color:rgba(255,255,255,.25)">Built for JG Foods &nbsp;·&nbsp; Jon Green &nbsp;·&nbsp; 07702 852704</p>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const STORAGE_KEY = 'jgfoods_checklist';
+
+  function getState() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) { return {}; }
+  }
+
+  function saveState(state) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function getItems() {
+    return document.querySelectorAll('.check-item');
+  }
+
+  function updateProgress() {
+    const items = getItems();
+    const done = document.querySelectorAll('.check-item.done').length;
+    const pct = Math.round((done / items.length) * 100);
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressPct').textContent = pct + '%';
+  }
+
+  function toggle(el) {
+    const state = getState();
+    const idx = Array.from(getItems()).indexOf(el);
+    const key = 'item_' + idx;
+    if (el.classList.contains('done')) {
+      el.classList.remove('done');
+      delete state[key];
+    } else {
+      el.classList.add('done');
+      state[key] = true;
+    }
+    saveState(state);
+    updateProgress();
+  }
+
+  // Restore state on load
+  (function restore() {
+    const state = getState();
+    const items = getItems();
+    items.forEach((el, idx) => {
+      if (state['item_' + idx]) el.classList.add('done');
+    });
+    updateProgress();
+  })();
+</script>
+</body>
+</html>
