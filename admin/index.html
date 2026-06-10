@@ -1583,13 +1583,13 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 // ============ SUPABASE CLIENT ============
 // For now the admin runs on demo data — no network dependency.
 const SUPABASE_URL = 'https://hnkidhqjsitrqhsxghjd.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhua2lkaHFqc2l0cnFoc3hnaGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NDI2NjMsImV4cCI6MjA5NjUxODY2M30.LI1QzERO5WMB2h9v2lUFIxN_NoEzCf8F6Q4tN1Jaq5A';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+window.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ============ USER ROLE ============
 // 'admin' = Jon (full access)
