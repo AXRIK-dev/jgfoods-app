@@ -1707,7 +1707,7 @@ async function loadAppData() {
 
       supabase
         .from('invoices')
-        .select('id, ref, total_amount, status, created_at, customers (name)')
+        .select('id, invoice_number, total_amount, status, created_at, customers (name)')
         .order('created_at', { ascending: false })
         .limit(200),
     ]);
@@ -1770,7 +1770,7 @@ async function loadAppData() {
       sampleInvoices.length = 0;
       (invoicesRes.data || []).forEach(inv => sampleInvoices.push({
         id:       inv.id,
-        ref:      inv.ref || '',
+        ref:      inv.invoice_number || '',
         name:     inv.customers?.name || '',
         date:     new Date(inv.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
         amount:   parseFloat(inv.total_amount),
@@ -1802,7 +1802,7 @@ function renderDashboard() {
   const monOrders    = sampleOrders.filter(o => o.slot === 'mon').length;
   const weekRevenue  = sampleOrders.reduce((s, o) => s + (o.total || 0), 0);
   const activeCustomers = sampleCustomers.length;
-  const unpaid       = sampleInvoices.filter(i => i.status === 'unpaid' || i.status === 'overdue');
+  const unpaid       = sampleInvoices.filter(i => i.status === 'sent' || i.status === 'overdue');
   const unpaidTotal  = unpaid.reduce((s, i) => s + (i.amount || 0), 0);
 
   const cards = document.querySelectorAll('.stat-card');
@@ -1886,11 +1886,11 @@ const sampleInvoices = [
   {id:'i1', ref:'INV-2605', name:'The Crown Pub', date:'26 May 2026', amount:225, status:'paid', payments:[{method:'bacs',amount:225,note:'',date:'27 May 2026'}]},
   {id:'i2', ref:'INV-2606', name:'Café Verde', date:'26 May 2026', amount:150, status:'paid', payments:[{method:'cash',amount:100,note:'',date:'26 May 2026'},{method:'bacs',amount:50,note:'',date:'28 May 2026'}]},
   {id:'i3', ref:'INV-2607', name:'Sarah Taylor', date:'27 May 2026', amount:80, status:'paid', payments:[{method:'cash',amount:80,note:'',date:'27 May 2026'}]},
-  {id:'i4', ref:'INV-2608', name:'The Red Lion', date:'22 May 2026', amount:196, status:'unpaid', payments:[]},
-  {id:'i5', ref:'INV-2609', name:'Mike Donoghue', date:'29 May 2026', amount:70, status:'unpaid', payments:[]},
+  {id:'i4', ref:'INV-2608', name:'The Red Lion', date:'22 May 2026', amount:196, status:'sent', payments:[]},
+  {id:'i5', ref:'INV-2609', name:'Mike Donoghue', date:'29 May 2026', amount:70, status:'sent', payments:[]},
   {id:'i6', ref:'INV-2610', name:'The Anchor Inn', date:'30 Apr 2026', amount:120, status:'overdue', payments:[]},
   {id:'i7', ref:'INV-2611', name:'Karen Holt', date:'29 May 2026', amount:52, status:'paid', payments:[{method:'cash',amount:52,note:'',date:'29 May 2026'}]},
-  {id:'i8', ref:'INV-2612', name:'Dave Walsh', date:'1 Jun 2026', amount:38.50, status:'unpaid', payments:[]},
+  {id:'i8', ref:'INV-2612', name:'Dave Walsh', date:'1 Jun 2026', amount:38.50, status:'sent', payments:[]},
 ];
 
 // ============ NAV ============
