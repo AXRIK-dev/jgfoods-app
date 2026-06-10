@@ -554,12 +554,12 @@
     </div>
     <div class="stat-card blue">
       <div class="sc-label">Unpaid invoices</div>
-      <div class="sc-val">3</div>
-      <div class="sc-sub">£340 outstanding</div>
+      <div class="sc-val" id="dash-unpaid-count">0</div>
+      <div class="sc-sub" id="dash-unpaid-sub">£0 outstanding</div>
     </div>
     <div class="stat-card">
       <div class="sc-label">Active customers</div>
-      <div class="sc-val">47</div>
+      <div class="sc-val">0</div>
       <div class="sc-sub">This month</div>
     </div>
   </div>
@@ -580,26 +580,7 @@
 
     <div class="dash-card">
       <h3>Top customers this month</h3>
-      <div class="top-customer">
-        <div class="tc-rank gold">1</div>
-        <div class="tc-main"><b>The Crown Pub</b><span>Trade · 8 orders</span></div>
-        <div class="tc-val">£620</div>
-      </div>
-      <div class="top-customer">
-        <div class="tc-rank">2</div>
-        <div class="tc-main"><b>Sarah Taylor</b><span>Domestic · 4 orders</span></div>
-        <div class="tc-val">£310</div>
-      </div>
-      <div class="top-customer">
-        <div class="tc-rank">3</div>
-        <div class="tc-main"><b>Café Verde</b><span>Trade · 3 orders</span></div>
-        <div class="tc-val">£280</div>
-      </div>
-      <div class="top-customer">
-        <div class="tc-rank">4</div>
-        <div class="tc-main"><b>Mike Donoghue</b><span>Domestic · 3 orders</span></div>
-        <div class="tc-val">£195</div>
-      </div>
+      <div id="topCustomersList"></div>
     </div>
 
     <div class="dash-card" style="grid-column:span 1">
@@ -1700,8 +1681,8 @@ async function loadAppData() {
   if (!supabase) return;
 
   try {
-    // Fetch all three in parallel
-    const [productsRes, customersRes, ordersRes] = await Promise.all([
+    // Fetch all four in parallel
+    const [productsRes, customersRes, ordersRes, invoicesRes] = await Promise.all([
       supabase
         .from('products')
         .select('id, name, category, price, description, is_available, img_url, sort_order')
@@ -1723,6 +1704,12 @@ async function loadAppData() {
         `)
         .order('created_at', { ascending: false })
         .limit(100),
+
+      supabase
+        .from('invoices')
+        .select('id, ref, total_amount, status, created_at, customers (name)')
+        .order('created_at', { ascending: false })
+        .limit(200),
     ]);
 
     // ── Products ──────────────────────────────────────────
@@ -1778,6 +1765,20 @@ async function loadAppData() {
       });
     }
 
+    // ── Invoices ──────────────────────────────────────────
+    if (!invoicesRes.error) {
+      sampleInvoices.length = 0;
+      (invoicesRes.data || []).forEach(inv => sampleInvoices.push({
+        id:       inv.id,
+        ref:      inv.ref || '',
+        name:     inv.customers?.name || '',
+        date:     new Date(inv.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+        amount:   parseFloat(inv.total_amount),
+        status:   inv.status,
+        payments: [],
+      }));
+    }
+
     // ── Re-render active page and always refresh dashboard stats ──
     const activePage = document.querySelector('.page.active');
     if (activePage) {
@@ -1798,15 +1799,41 @@ async function loadAppData() {
 
 // ── Update dashboard stat cards with live data ────────────
 function renderDashboard() {
-  const monOrders  = sampleOrders.filter(o => o.slot === 'mon').length;
-  const weekRevenue = sampleOrders.reduce((s, o) => s + (o.total || 0), 0);
+  const monOrders    = sampleOrders.filter(o => o.slot === 'mon').length;
+  const weekRevenue  = sampleOrders.reduce((s, o) => s + (o.total || 0), 0);
   const activeCustomers = sampleCustomers.length;
+  const unpaid       = sampleInvoices.filter(i => i.status === 'unpaid' || i.status === 'overdue');
+  const unpaidTotal  = unpaid.reduce((s, i) => s + (i.amount || 0), 0);
 
   const cards = document.querySelectorAll('.stat-card');
   if (cards[0]) cards[0].querySelector('.sc-val').textContent = monOrders;
   if (cards[1]) cards[1].querySelector('.sc-val').textContent =
     '£' + weekRevenue.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   if (cards[3]) cards[3].querySelector('.sc-val').textContent = activeCustomers;
+
+  // Unpaid invoices card
+  const unpaidCount = document.getElementById('dash-unpaid-count');
+  const unpaidSub   = document.getElementById('dash-unpaid-sub');
+  if (unpaidCount) unpaidCount.textContent = unpaid.length;
+  if (unpaidSub)   unpaidSub.textContent   = '£' + unpaidTotal.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' outstanding';
+
+  // Top customers
+  const topEl = document.getElementById('topCustomersList');
+  if (topEl) {
+    const ranked = [...sampleCustomers].sort((a, b) => (b.total || 0) - (a.total || 0)).slice(0, 4);
+    if (ranked.length === 0) {
+      topEl.innerHTML = '<p style="font-size:13px;color:var(--ink-soft);padding:10px 0">No customers yet.</p>';
+    } else {
+      const rankClass = ['gold', '', '', ''];
+      topEl.innerHTML = ranked.map((c, i) => `
+        <div class="top-customer">
+          <div class="tc-rank ${rankClass[i]}">${i + 1}</div>
+          <div class="tc-main"><b>${c.name}</b><span>${c.type === 'trade' ? 'Trade' : 'Domestic'} · ${c.orders} order${c.orders !== 1 ? 's' : ''}</span></div>
+          <div class="tc-val">£${(c.total || 0).toFixed(0)}</div>
+        </div>
+      `).join('');
+    }
+  }
 }
 
 // Call on page load
