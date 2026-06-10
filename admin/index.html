@@ -1155,6 +1155,9 @@
         <button class="status-btn badge-delivered" onclick="updateOrderStatus('delivered')">Delivered</button>
       </div>
     </div>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+      <button onclick="deleteCurrentOrder()" style="font-size:12px;font-weight:700;padding:7px 14px;border-radius:8px;background:#fff0f0;border:1px solid #fcc;color:#c0392b;cursor:pointer;width:100%">🗑 Delete this order</button>
+    </div>
   </div>
 </div>
 
@@ -1723,9 +1726,9 @@ async function loadAppData() {
     ]);
 
     // ── Products ──────────────────────────────────────────
-    if (productsRes.data && productsRes.data.length > 0) {
+    if (!productsRes.error) {
       sampleProducts.length = 0;
-      productsRes.data.forEach(p => sampleProducts.push({
+      (productsRes.data || []).forEach(p => sampleProducts.push({
         id:    p.id,
         name:  p.name,
         cat:   p.category,
@@ -1737,9 +1740,9 @@ async function loadAppData() {
     }
 
     // ── Customers ─────────────────────────────────────────
-    if (customersRes.data && customersRes.data.length > 0) {
+    if (!customersRes.error) {
       sampleCustomers.length = 0;
-      customersRes.data.forEach(c => sampleCustomers.push({
+      (customersRes.data || []).forEach(c => sampleCustomers.push({
         id:           c.id,
         name:         c.name,
         type:         c.customer_type,
@@ -1756,9 +1759,9 @@ async function loadAppData() {
     }
 
     // ── Orders ────────────────────────────────────────────
-    if (ordersRes.data && ordersRes.data.length > 0) {
+    if (!ordersRes.error) {
       sampleOrders.length = 0;
-      ordersRes.data.forEach(o => {
+      (ordersRes.data || []).forEach(o => {
         const dayLabel = o.delivery_slots?.day_label || '';
         const slot = dayLabel === 'Monday' ? 'mon' : dayLabel === 'Thursday' ? 'thu' : 'wed';
         sampleOrders.push({
@@ -1971,6 +1974,23 @@ function orderCard(o) {
 }
 
 let currentOrderId = null;
+
+async function deleteCurrentOrder() {
+  if (!currentOrderId) return;
+  const o = sampleOrders.find(x => x.id === currentOrderId);
+  const name = o ? o.name : 'this order';
+  if (!confirm(`Delete ${name}'s order? This cannot be undone.`)) return;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentOrderId)) {
+    const { error } = await window.supabase.from('orders').delete().eq('id', currentOrderId);
+    if (error) { alert('Failed to delete: ' + error.message); return; }
+  }
+  const idx = sampleOrders.findIndex(x => x.id === currentOrderId);
+  if (idx !== -1) sampleOrders.splice(idx, 1);
+  closeModal('orderModal');
+  renderOrders();
+  renderDashboard();
+}
+
 function openOrderModal(id) {
   const o = sampleOrders.find(x => x.id === id);
   if (!o) return;
@@ -2009,6 +2029,14 @@ async function updateOrderStatus(status) {
 // ============ STOCK ============
 function renderStock() {
   const list = document.getElementById('stockList');
+  if (sampleProducts.length === 0) {
+    list.innerHTML = `<div style="text-align:center;padding:40px 20px;color:var(--ink-soft);">
+      <p style="font-size:15px;margin:0 0 6px">No products yet</p>
+      <p style="font-size:13px;margin:0">Click <strong>+ Add Product</strong> above to get started.</p>
+    </div>`;
+    updateLiveCount();
+    return;
+  }
   list.innerHTML = sampleProducts.map(p => `
     <div class="stock-row${p.live ? '' : ' off'}" id="sr-${p.id}">
       <div class="sr-img" title="Upload photo" onclick="triggerImgUpload('${p.id}')">
@@ -2026,9 +2054,23 @@ function renderStock() {
       <span class="sr-state ${p.live ? 'live' : 'hidden'}" id="ss-${p.id}">${p.live ? 'Live' : 'Hidden'}</span>
       <div class="toggle${p.live ? ' on' : ''}" id="tog-${p.id}" onclick="toggleProduct('${p.id}')" role="switch" aria-checked="${p.live}"></div>
       <button onclick="openEditProduct('${p.id}')" style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:7px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer;flex-shrink:0">Edit</button>
+      <button onclick="deleteProduct('${p.id}','${p.name.replace(/'/g,"\\'")}') " style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:7px;background:#fff0f0;border:1px solid #fcc;color:#c0392b;cursor:pointer;flex-shrink:0">Delete</button>
     </div>
   `).join('');
   updateLiveCount();
+}
+
+async function deleteProduct(id, name) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  // Remove from Supabase if it's a real UUID
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    const { error } = await window.supabase.from('products').delete().eq('id', id);
+    if (error) { alert('Failed to delete: ' + error.message); return; }
+  }
+  // Remove from local array and re-render
+  const idx = sampleProducts.findIndex(p => p.id === id);
+  if (idx !== -1) sampleProducts.splice(idx, 1);
+  renderStock();
 }
 
 function toggleProduct(id) {
@@ -2402,6 +2444,13 @@ function renderCustomers(filter) {
   const shown = filter && filter !== 'all'
     ? sampleCustomers.filter(c => c.type === filter)
     : sampleCustomers;
+  if (shown.length === 0) {
+    list.innerHTML = `<div style="text-align:center;padding:40px 20px;color:var(--ink-soft);">
+      <p style="font-size:15px;margin:0 0 6px">No customers yet</p>
+      <p style="font-size:13px;margin:0">Click <strong>+ Add Customer</strong> to add your first customer.</p>
+    </div>`;
+    return;
+  }
   list.innerHTML = shown.map(c => `
     <div class="order-card">
       <div class="oc-left" onclick="openCustomerDetail('${c.id}')" style="cursor:pointer">
@@ -2418,10 +2467,22 @@ function renderCustomers(filter) {
         <div class="oc-meta">
           <span class="channel-pill">${c.orders} order${c.orders !== 1 ? 's' : ''}</span>
           <button onclick="editCustomer('${c.id}')" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:7px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer">Edit</button>
+          <button onclick="deleteCustomer('${c.id}','${c.name.replace(/'/g,"\\'")}') " style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:7px;background:#fff0f0;border:1px solid #fcc;color:#c0392b;cursor:pointer">Delete</button>
         </div>
       </div>
     </div>
   `).join('');
+}
+
+async function deleteCustomer(id, name) {
+  if (!confirm(`Delete customer "${name}"? This will also delete their orders. This cannot be undone.`)) return;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    const { error } = await window.supabase.from('customers').delete().eq('id', id);
+    if (error) { alert('Failed to delete: ' + error.message); return; }
+  }
+  const idx = sampleCustomers.findIndex(c => c.id === id);
+  if (idx !== -1) sampleCustomers.splice(idx, 1);
+  renderCustomers();
 }
 
 function filterCustomers(type) {
