@@ -493,117 +493,9 @@
         </div>
       </div>
 
-      <!-- product grid -->
+      <!-- product grid — populated dynamically from Supabase -->
       <div class="prod-grid" id="prodGrid">
-
-        <div class="prod-card" data-id="p1" data-cat="chicken" data-name="5kg Chicken Fillets" data-price="34.00" data-cls="chicken">
-          <div class="prod-img chicken"><span>Chicken</span></div>
-          <div class="prod-body">
-            <h4>5kg Chicken Fillets</h4>
-            <div class="prod-desc">Fresh skinless breast fillets</div>
-            <div class="prod-foot">
-              <span class="price">£34.00</span>
-              <button class="add-btn" onclick="addToBasket('p1','5kg Chicken Fillets',34.00,'chicken')">Add</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="prod-card" data-id="p2" data-cat="bbq" data-name="BBQ Pack" data-price="47.50" data-cls="bbq">
-          <div class="prod-img bbq"><span>BBQ &amp; Grill</span></div>
-          <div class="prod-body">
-            <h4>BBQ Pack</h4>
-            <div class="prod-desc">Burgers, sausages, kebabs &amp; more</div>
-            <div class="prod-foot">
-              <span class="price">£47.50</span>
-              <button class="add-btn" onclick="addToBasket('p2','BBQ Pack',47.50,'bbq')">Add</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="prod-card" data-id="p3" data-cat="steak" data-name="Ribeye Steaks ×5" data-price="30.00" data-cls="steak">
-          <div class="prod-img steak"><span>Steak &amp; Beef</span></div>
-          <div class="prod-body">
-            <h4>Ribeye Steaks ×5</h4>
-            <div class="prod-desc">Hand-cut, well-marbled</div>
-            <div class="prod-foot">
-              <span class="price">£30.00</span>
-              <button class="add-btn" onclick="addToBasket('p3','Ribeye Steaks ×5',30.00,'steak')">Add</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="prod-card" data-id="p4" data-cat="steak" data-name="Lean Mince 1kg" data-price="12.00" data-cls="steak">
-          <div class="prod-img steak"><span>Steak &amp; Beef</span></div>
-          <div class="prod-body">
-            <h4>Lean Mince 1kg</h4>
-            <div class="prod-desc">Freshly minced steak mince</div>
-            <div class="prod-foot">
-              <span class="price">£12.00</span>
-              <button class="add-btn" onclick="addToBasket('p4','Lean Mince 1kg',12.00,'steak')">Add</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="prod-card" data-id="p5" data-cat="pack" data-name="Extra Lean Meat Pack" data-price="38.50" data-cls="pack">
-          <div class="prod-img pack"><span>Meat Packs</span></div>
-          <div class="prod-body">
-            <h4>Extra Lean Meat Pack</h4>
-            <div class="prod-desc">A week of low-fat favourites</div>
-            <div class="prod-foot">
-              <span class="price">£38.50</span>
-              <button class="add-btn" onclick="addToBasket('p5','Extra Lean Meat Pack',38.50,'pack')">Add</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="prod-card" data-id="p6" data-cat="kebab" data-name="Kebab Pack ×5" data-price="20.00" data-cls="kebab">
-          <div class="prod-img kebab"><span>Kebabs</span></div>
-          <div class="prod-body">
-            <h4>Kebab Pack ×5</h4>
-            <div class="prod-desc">Chicken, lamb &amp; beef, all seasonings</div>
-            <div class="prod-foot">
-              <span class="price">£20.00</span>
-              <button class="add-btn" onclick="addToBasket('p6','Kebab Pack ×5',20.00,'kebab')">Add</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="prod-card" data-id="p7" data-cat="chicken" data-name="Chicken Thighs 3kg" data-price="18.00" data-cls="chicken">
-          <div class="prod-img chicken"><span>Chicken</span></div>
-          <div class="prod-body">
-            <h4>Chicken Thighs 3kg</h4>
-            <div class="prod-desc">Bone-in, skin-on thighs</div>
-            <div class="prod-foot">
-              <span class="price">£18.00</span>
-              <button class="add-btn" onclick="addToBasket('p7','Chicken Thighs 3kg',18.00,'chicken')">Add</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="prod-card" data-id="p8" data-cat="pack" data-name="Family Value Pack" data-price="52.00" data-cls="pack">
-          <div class="prod-img pack"><span>Meat Packs</span></div>
-          <div class="prod-body">
-            <h4>Family Value Pack</h4>
-            <div class="prod-desc">Mixed cuts for the whole week</div>
-            <div class="prod-foot">
-              <span class="price">£52.00</span>
-              <button class="add-btn" onclick="addToBasket('p8','Family Value Pack',52.00,'pack')">Add</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="prod-card" data-id="p9" data-cat="steak" data-name="Diced Beef 1kg" data-price="10.00" data-cls="steak">
-          <div class="prod-img steak"><span>Steak &amp; Beef</span></div>
-          <div class="prod-body">
-            <h4>Diced Beef 1kg</h4>
-            <div class="prod-desc">Perfect for stews and casseroles</div>
-            <div class="prod-foot">
-              <span class="price">£10.00</span>
-              <button class="add-btn" onclick="addToBasket('p9','Diced Beef 1kg',10.00,'steak')">Add</button>
-            </div>
-          </div>
-        </div>
-
+        <p id="prodLoading" style="grid-column:1/-1;text-align:center;padding:40px;color:#888;font-size:14px">Loading products…</p>
       </div><!-- /prod-grid -->
     </div><!-- /shop-layout -->
   </div>
@@ -1121,11 +1013,76 @@
 <!-- EmailJS SDK (configure with your IDs) -->
 <!-- <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script> -->
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
-// ============ PRODUCT CATALOGUE ============
-// TODO: Replace with Supabase fetch once database is set up
-// const supabaseUrl = 'YOUR_SUPABASE_URL';
-// const supabaseKey = 'YOUR_SUPABASE_ANON_KEY';
+// ── Supabase ──────────────────────────────────────────────
+const SUPABASE_URL = 'https://hnkidhqjsitrqhsxghjd.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhua2lkaHFqc2l0cnFoc3hnaGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NDI2NjMsImV4cCI6MjA5NjUxODY2M30.LI1QzERO5WMB2h9v2lUFIxN_NoEzCf8F6Q4tN1Jaq5A';
+window.sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── Category → CSS class mapping ─────────────────────────
+const CAT_SLUG = {
+  'Chicken':     'chicken',
+  'Steak & Beef':'steak',
+  'BBQ & Grill': 'bbq',
+  'Kebabs':      'kebab',
+  'Meat Packs':  'pack',
+};
+
+// ── Load products from Supabase ───────────────────────────
+async function loadProducts() {
+  const grid    = document.getElementById('prodGrid');
+  const loading = document.getElementById('prodLoading');
+
+  const { data, error } = await window.sbClient
+    .from('products')
+    .select('id, name, category, price, description, img_url')
+    .eq('is_available', true)
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .order('name');
+
+  if (error || !data || data.length === 0) {
+    if (loading) loading.textContent = error
+      ? 'Products unavailable right now — please call or message to order.'
+      : 'No products available right now — check back soon.';
+    return;
+  }
+
+  if (loading) loading.remove();
+
+  data.forEach(p => {
+    const cat = CAT_SLUG[p.category] || 'other';
+    const label = p.category || 'Product';
+    const imgHtml = p.img_url
+      ? `<img src="${p.img_url}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover;border-radius:10px 10px 0 0">`
+      : `<div class="prod-img ${cat}"><span>${label}</span></div>`;
+    const card = document.createElement('div');
+    card.className = 'prod-card';
+    card.dataset.id    = p.id;
+    card.dataset.cat   = cat;
+    card.dataset.name  = p.name;
+    card.dataset.price = p.price.toFixed(2);
+    card.dataset.cls   = cat;
+    card.innerHTML = `
+      ${imgHtml}
+      <div class="prod-body">
+        <h4>${p.name}</h4>
+        <div class="prod-desc">${p.description || ''}</div>
+        <div class="prod-foot">
+          <span class="price">£${parseFloat(p.price).toFixed(2)}</span>
+          <button class="add-btn" onclick="addToBasket('${p.id}','${p.name.replace(/'/g,"\\'")}',${parseFloat(p.price)},'${cat}')">Add</button>
+        </div>
+      </div>`;
+    grid.appendChild(card);
+  });
+
+  // Re-apply any active category filter
+  const activeFilter = document.querySelector('.filter-item.on, .chip.on');
+  const activeCat = activeFilter?.dataset?.cat || 'all';
+  if (activeCat !== 'all') filterCategory(activeFilter, activeCat);
+}
+
+document.addEventListener('DOMContentLoaded', loadProducts);
 
 // ============ ORDER RULES ============
 // TODO: Load these from Supabase admin settings table so Jon can update them
