@@ -2163,6 +2163,7 @@ async function handleImgUpload(event, id) {
     if (p) p.img = publicUrl;
   } catch (err) {
     console.error('Image upload error:', err);
+    alert('Image upload failed: ' + (err.message || err));
   }
 }
 
