@@ -2502,14 +2502,22 @@ function renderCustomers(filter) {
 }
 
 async function deleteCustomer(id, name) {
-  if (!confirm(`Delete customer "${name}"? This will also delete their orders. This cannot be undone.`)) return;
+  if (!confirm(`Delete customer "${name}"?\n\nThis will also delete their orders and delivery history. If they have invoices, delete those first from the Finance page.\n\nThis cannot be undone.`)) return;
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
     const { error } = await window.supabase.from('customers').delete().eq('id', id);
-    if (error) { alert('Failed to delete: ' + error.message); return; }
+    if (error) {
+      if (error.code === '23503') {
+        alert(`Can't delete ${name} — they have invoices on record. Delete their invoices from the Finance page first, then try again.`);
+      } else {
+        alert('Failed to delete: ' + error.message);
+      }
+      return;
+    }
   }
   const idx = sampleCustomers.findIndex(c => c.id === id);
   if (idx !== -1) sampleCustomers.splice(idx, 1);
   renderCustomers();
+  renderDashboard();
 }
 
 function filterCustomers(type) {
@@ -2692,11 +2700,24 @@ function renderInvoices(filter) {
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');printInvoice()"><span class="ai-icon">🖨</span> Download / Print</div>
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openSendModal('email','${inv.name}','${inv.ref}','${inv.amount}')"><span class="ai-icon">✉️</span> Send via email</div>
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openSendModal('message','${inv.name}','${inv.ref}','${inv.amount}')"><span class="ai-icon">💬</span> Send via message</div>
+            <div class="action-item" style="color:#c0392b" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');deleteInvoice('${inv.id}','${inv.ref}','${inv.name.replace(/'/g,"\\'") }')"><span class="ai-icon">🗑</span> Delete invoice</div>
           </div>
         </div>
       </div>
     </div>`;
   }).join('');
+}
+
+async function deleteInvoice(id, ref, name) {
+  if (!confirm(`Delete ${ref} (${name})?\n\nThis will also remove all payments logged against it. This cannot be undone.`)) return;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    const { error } = await window.supabase.from('invoices').delete().eq('id', id);
+    if (error) { alert('Failed to delete invoice: ' + error.message); return; }
+  }
+  const idx = sampleInvoices.findIndex(i => i.id === id);
+  if (idx !== -1) sampleInvoices.splice(idx, 1);
+  renderInvoices();
+  renderDashboard(); // unpaid count updates immediately
 }
 
 function filterInvoices(filter, btn) {
