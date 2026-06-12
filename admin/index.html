@@ -2173,6 +2173,28 @@ function triggerImgUpload(id) {
   // clicks handled by the file input overlay — nothing needed here
 }
 
+const isProductUUID = id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+// Upload a product photo to Storage and persist its public URL on the product.
+// Reusable so it can run both on immediate upload (saved products) and after
+// a brand-new product has been saved and assigned a real id.
+async function uploadProductImage(id, file) {
+  const ext  = (file.name.split('.').pop() || 'jpg').toLowerCase();
+  const path = `products/${id}.${ext}`;
+  const { error: upErr } = await supabase.storage
+    .from('product-images')
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (upErr) throw upErr;
+
+  const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
+  const publicUrl = urlData?.publicUrl;
+  if (!publicUrl) throw new Error('No public URL returned for uploaded image');
+
+  const { error: dbErr } = await supabase.from('products').update({ img_url: publicUrl }).eq('id', id);
+  if (dbErr) throw dbErr;
+  return publicUrl;
+}
+
 async function handleImgUpload(event, id) {
   const file = event.target.files[0];
   if (!file) return;
@@ -2190,26 +2212,20 @@ async function handleImgUpload(event, id) {
   };
   reader.readAsDataURL(file);
 
-  // Upload to Supabase Storage and persist the public URL
-  if (!supabase || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return;
+  if (!supabase) return;
+  const p = sampleProducts.find(x => x.id === id);
+
+  // Brand-new product not saved yet (temp id) — stash the file and upload it
+  // once Save assigns a real id. Previously this path silently dropped the image.
+  if (!isProductUUID(id)) {
+    if (p) p._pendingImageFile = file;
+    return;
+  }
+
+  // Saved product — upload straight away
   try {
-    const ext  = file.name.split('.').pop() || 'jpg';
-    const path = `products/${id}.${ext}`;
-    const { error: upErr } = await supabase.storage
-      .from('product-images')
-      .upload(path, file, { upsert: true, contentType: file.type });
-    if (upErr) throw upErr;
-
-    const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
-    const publicUrl = urlData?.publicUrl;
-    if (!publicUrl) return;
-
-    // Persist img_url on the product record
-    const { error: dbErr } = await supabase.from('products').update({ img_url: publicUrl }).eq('id', id);
-    if (dbErr) throw dbErr;
-
-    const p = sampleProducts.find(x => x.id === id);
-    if (p) p.img = publicUrl;
+    const publicUrl = await uploadProductImage(id, file);
+    if (p) { p.img = publicUrl; p._pendingImageFile = null; }
   } catch (err) {
     console.error('Image upload error:', err);
     alert('Image upload failed: ' + (err.message || err));
@@ -2260,6 +2276,18 @@ async function savePrices() {
           });
         }
       }
+
+      // Upload any images attached before the product had a real id (new products)
+      const pendingImgs = sampleProducts.filter(p => p._pendingImageFile && isUUID(p.id));
+      for (const p of pendingImgs) {
+        try {
+          p.img = await uploadProductImage(p.id, p._pendingImageFile);
+          p._pendingImageFile = null;
+        } catch (e) {
+          console.error('Pending image upload failed for', p.name, e);
+        }
+      }
+      if (pendingImgs.length) renderStock();
     }
 
     generateSocialPost('facebook');
@@ -4894,6 +4922,7 @@ const HELP_PAGES = {
       { icon:'👁️', title:'Live / not live', body:'Each product has a <strong>Live</strong> toggle. Switch it off to hide a product from the website without deleting it — useful when you\'re out of stock temporarily.' },
       { icon:'💷', title:'Changing prices', body:'Click the price on any product to edit it. Changes take effect immediately on the website once the database is connected.' },
       { icon:'➕', title:'Adding a new product', body:'Press <strong>+ Add product</strong> at the top right. Fill in the name, category, and price, then switch it to Live when you\'re ready.' },
+      { icon:'📷', title:'Adding a photo', body:'Tap the photo box on any product and choose a picture. You\'ll see it straight away. For a brand-new product, the photo is saved up to the website when you press <strong>Save changes</strong> — so always Save after adding a photo. For a product that\'s already saved, the photo uploads right away.' },
     ]
   },
   customers: {
