@@ -1846,12 +1846,15 @@ async function loadAppData() {
 }
 
 // ── Update dashboard stat cards with live data ────────────
-// Soonest open delivery day from today onward
+// The run to headline on the dashboard: the soonest open day from today that
+// actually has orders booked; if no upcoming day has orders, the soonest open day.
 function nextOpenRun() {
   const today = toDateStr(new Date());
-  return (runDaySlots || [])
+  const open = (runDaySlots || [])
     .filter(s => s.is_open && s.delivery_date >= today)
-    .sort((a, b) => a.delivery_date < b.delivery_date ? -1 : 1)[0] || null;
+    .sort((a, b) => a.delivery_date < b.delivery_date ? -1 : 1);
+  if (open.length === 0) return null;
+  return open.find(s => (s.orders_count || 0) > 0) || open[0];
 }
 
 function renderDashboard() {
