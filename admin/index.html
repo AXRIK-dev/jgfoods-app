@@ -523,9 +523,9 @@
 <div class="page active" id="page-dashboard">
   <div class="pagehead">
     <div>
-      <div class="eyebrow">Sunday 1 June 2026</div>
-      <h1>Good morning, Jon</h1>
-      <p>Monday delivery run is tomorrow. Here's where things stand.</p>
+      <div class="eyebrow" id="dashDate">Loading…</div>
+      <h1 id="dashGreeting">Good morning, Jon</h1>
+      <p id="dashSubline">Here's where things stand.</p>
     </div>
     <div class="btn-row">
       <button class="btn-add" onclick="showPage('logorder')">+ Log an order</button>
@@ -534,24 +534,24 @@
 
   <div id="pie-alert-container"></div>
 
-  <div class="dash-notice">
+  <div class="dash-notice" id="dashNotice" style="display:none">
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3v6l4 2" stroke="#e0bd72" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="9" r="7" stroke="#e0bd72" stroke-width="1.5"/></svg>
     <div>
-      <b>Monday order cut-off is tonight at midnight</b>
-      <p>You have 12 orders confirmed for Monday's run. Any new orders after midnight won't make this slot.</p>
+      <b id="dashNoticeTitle"></b>
+      <p id="dashNoticeText"></p>
     </div>
   </div>
 
   <div class="stats-row">
     <div class="stat-card green">
-      <div class="sc-label">Monday orders</div>
-      <div class="sc-val">12</div>
-      <div class="sc-sub">Ready to run</div>
+      <div class="sc-label" id="dashRunLabel">Next run</div>
+      <div class="sc-val" id="dashRunVal">0</div>
+      <div class="sc-sub" id="dashRunSub">—</div>
     </div>
     <div class="stat-card gold">
       <div class="sc-label">This week revenue</div>
-      <div class="sc-val">£1,840</div>
-      <div class="sc-sub"><b>↑ 14%</b> vs last week</div>
+      <div class="sc-val" id="dashRevVal">£0</div>
+      <div class="sc-sub" id="dashRevSub">0 orders this week</div>
     </div>
     <div class="stat-card blue">
       <div class="sc-label">Unpaid invoices</div>
@@ -560,7 +560,7 @@
     </div>
     <div class="stat-card">
       <div class="sc-label">Active customers</div>
-      <div class="sc-val">0</div>
+      <div class="sc-val" id="dashActiveVal">0</div>
       <div class="sc-sub">This month</div>
     </div>
   </div>
@@ -587,7 +587,7 @@
     <div class="dash-card" style="grid-column:span 1">
       <h3>Quick actions</h3>
       <div class="quick-action-grid">
-        <button class="qa qa-navy" onclick="showPage('runs')">View Monday run</button>
+        <button class="qa qa-navy" onclick="showPage('runs')">View delivery runs</button>
         <button class="qa qa-navy" onclick="showPage('stock')">Edit availability</button>
         <button class="qa qa-cream" onclick="showPage('logorder')">Log social order</button>
         <button class="qa qa-cream" id="qa-finance" onclick="showPage('finance')">View finances</button>
@@ -1846,31 +1846,93 @@ async function loadAppData() {
 }
 
 // ── Update dashboard stat cards with live data ────────────
+// Soonest open delivery day from today onward
+function nextOpenRun() {
+  const today = toDateStr(new Date());
+  return (runDaySlots || [])
+    .filter(s => s.is_open && s.delivery_date >= today)
+    .sort((a, b) => a.delivery_date < b.delivery_date ? -1 : 1)[0] || null;
+}
+
 function renderDashboard() {
-  const monOrders    = sampleOrders.filter(o => o.slot === 'mon').length;
-  const weekRevenue  = sampleOrders.reduce((s, o) => s + (o.total || 0), 0);
-  const activeCustomers = sampleCustomers.length;
-  const unpaid       = sampleInvoices.filter(i => i.status === 'sent' || i.status === 'overdue');
-  const unpaidTotal  = unpaid.reduce((s, i) => s + (i.amount || 0), 0);
+  const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  const now = new Date();
+  const today0 = new Date(); today0.setHours(0, 0, 0, 0);
 
-  const cards = document.querySelectorAll('.stat-card');
-  if (cards[0]) cards[0].querySelector('.sc-val').textContent = monOrders;
-  if (cards[1]) cards[1].querySelector('.sc-val').textContent =
-    '£' + weekRevenue.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-  if (cards[3]) cards[3].querySelector('.sc-val').textContent = activeCustomers;
+  // ── Header: live date + greeting + next-run line ──
+  set('dashDate', now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
+  const h = now.getHours();
+  const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  set('dashGreeting', `${greet}, Jon`);
 
-  // Unpaid invoices card
-  const unpaidCount = document.getElementById('dash-unpaid-count');
-  const unpaidSub   = document.getElementById('dash-unpaid-sub');
-  if (unpaidCount) unpaidCount.textContent = unpaid.length;
-  if (unpaidSub)   unpaidSub.textContent   = '£' + unpaidTotal.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' outstanding';
+  const run = nextOpenRun();
+  if (run) {
+    const d = new Date(run.delivery_date + 'T00:00:00');
+    const diff = Math.round((d - today0) / 86400000);
+    const when = diff <= 0 ? 'today' : diff === 1 ? 'tomorrow' : `on ${runDayLabel(run.delivery_date)}`;
+    set('dashSubline', `Your next delivery run is ${when}. Here's where things stand.`);
+  } else {
+    set('dashSubline', `No delivery days are open yet — set them up on the Schedule page.`);
+  }
 
-  // Top customers
+  // ── Cut-off notice (only when there's an upcoming run) ──
+  const notice = document.getElementById('dashNotice');
+  if (run) {
+    const runCount = sampleOrders.filter(o => o.date === run.delivery_date && o.status !== 'cancelled').length;
+    let cutWhen = '';
+    if (run.cutoff_at) {
+      const c = new Date(run.cutoff_at);
+      const cDay = new Date(c); cDay.setHours(0, 0, 0, 0);
+      const cDiff = Math.round((cDay - today0) / 86400000);
+      const time = c.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      const dayWord = cDiff === 0 ? 'tonight' : cDiff === 1 ? 'tomorrow' : c.toLocaleDateString('en-GB', { weekday: 'long' });
+      cutWhen = `${dayWord} at ${time}`;
+    }
+    set('dashNoticeTitle', cutWhen
+      ? `${runDayLabel(run.delivery_date)} order cut-off is ${cutWhen}`
+      : `${runDayLabel(run.delivery_date)} is your next run`);
+    set('dashNoticeText', `You have ${runCount} order${runCount !== 1 ? 's' : ''} for the ${runDayLabel(run.delivery_date)} run so far.`);
+    if (notice) notice.style.display = '';
+  } else if (notice) {
+    notice.style.display = 'none';
+  }
+
+  // ── Stat cards ──
+  const runCount = run ? sampleOrders.filter(o => o.date === run.delivery_date && o.status !== 'cancelled').length : 0;
+  set('dashRunLabel', 'Next run');
+  set('dashRunVal', runCount);
+  set('dashRunSub', run ? runDayLabel(run.delivery_date) : '—');
+
+  const wkEnd = new Date(today0); wkEnd.setDate(today0.getDate() + 7);
+  const wkOrders = sampleOrders.filter(o => {
+    if (!o.date || o.status === 'cancelled') return false;
+    const d = new Date(o.date + 'T00:00:00');
+    return d >= today0 && d <= wkEnd;
+  });
+  const wkRev = wkOrders.reduce((s, o) => s + (o.total || 0), 0);
+  set('dashRevVal', '£' + wkRev.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
+  set('dashRevSub', `${wkOrders.length} order${wkOrders.length !== 1 ? 's' : ''} this week`);
+
+  set('dashActiveVal', sampleCustomers.length);
+
+  const unpaid      = sampleInvoices.filter(i => i.status === 'sent' || i.status === 'overdue');
+  const unpaidTotal = unpaid.reduce((s, i) => s + (i.amount || 0), 0);
+  set('dash-unpaid-count', unpaid.length);
+  set('dash-unpaid-sub', '£' + unpaidTotal.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' outstanding');
+
+  // ── Top customers — aggregated from real orders ──
   const topEl = document.getElementById('topCustomersList');
   if (topEl) {
-    const ranked = [...sampleCustomers].sort((a, b) => (b.total || 0) - (a.total || 0)).slice(0, 4);
+    const agg = {};
+    sampleOrders.forEach(o => {
+      if (o.status === 'cancelled') return;
+      if (!agg[o.name]) agg[o.name] = { name: o.name, type: o.type, orders: 0, total: 0 };
+      agg[o.name].orders++;
+      agg[o.name].total += (o.total || 0);
+    });
+    const ranked = Object.values(agg).sort((a, b) => b.total - a.total).slice(0, 4);
     if (ranked.length === 0) {
-      topEl.innerHTML = '<p style="font-size:13px;color:var(--ink-soft);padding:10px 0">No customers yet.</p>';
+      topEl.innerHTML = '<p style="font-size:13px;color:var(--ink-soft);padding:10px 0">No orders yet.</p>';
     } else {
       const rankClass = ['gold', '', '', ''];
       topEl.innerHTML = ranked.map((c, i) => `
@@ -4948,8 +5010,8 @@ const HELP_PAGES = {
     label: 'Dashboard',
     sections: [
       { icon:'📊', title:'What is this page?', body:'The Dashboard is your home screen. It gives you a quick snapshot of what\'s happening today — orders waiting, money owed, and anything that needs your attention.' },
-      { icon:'📦', title:'Order summary cards', body:'The coloured cards at the top show you how many orders are <strong>confirmed</strong>, <strong>packed</strong>, and <strong>out for delivery</strong>. Click any card to jump straight to that list.' },
-      { icon:'⚡', title:'Quick actions', body:'The buttons in the middle let you do the most common tasks in one click — log an order, view Monday\'s run, edit availability, or check finances.' },
+      { icon:'📦', title:'The cards at the top', body:'These update live: <strong>Next run</strong> shows how many orders are booked for your next delivery day, <strong>This week revenue</strong>, <strong>Unpaid invoices</strong>, and <strong>Active customers</strong>. The date and greeting at the top, and the cut-off reminder, all follow your actual next delivery day from the Schedule.' },
+      { icon:'⚡', title:'Quick actions', body:'The buttons in the middle let you do the most common tasks in one click — log an order, view your delivery runs, edit availability, or check finances.' },
       { icon:'💰', title:'Money owed', body:'The <strong>Outstanding</strong> figure shows what trade customers still owe you. Click it to go to Invoices and see exactly who hasn\'t paid.' },
     ]
   },
