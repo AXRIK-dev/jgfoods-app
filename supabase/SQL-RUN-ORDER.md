@@ -121,6 +121,17 @@ Replace with Jon's actual email. Every other user defaults to `driver` automatic
 
 ---
 
+### 9. `009_lockdown_customer_order_rls.sql`
+**What it does:** SECURITY FIX — locks down customer and order data.
+
+A check on 12 June 2026 found that the public anon key could read the `customers`, `orders` and `order_items` tables without logging in — exposing customer names, phones, addresses and order history. This migration force-enables RLS on those three tables, clears any stray policies, and rebuilds the correct ones (admin full access; account customers read only their own; public gets nothing).
+
+Safe for the website — it places orders via the `place_order` RPC, not direct table access.
+
+**When to run:** As soon as possible. Safe on the live database.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

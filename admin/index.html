@@ -605,11 +605,11 @@
       <p>All orders for each day's run — with pick list and route summary.</p>
     </div>
     <div class="btn-row">
-      <button class="btn-navy" onclick="openRoutePlanner(currentRunSlot)">
+      <button class="btn-navy" onclick="openRoutePlanner(currentRunDay)">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="3" cy="3" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="11" cy="11" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="11" cy="3" r="1.8" stroke="currentColor" stroke-width="1.3"/><path d="M3 4.8v4.4M4.8 3h4.4M4.8 11h4.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
         Plan route
       </button>
-      <button style="background:#e5ecde;color:var(--green);font-weight:800;font-size:12.5px;padding:10px 16px;border-radius:9px;display:flex;align-items:center;gap:7px;border:1.5px solid #cfdcc4" onclick="openQuickTemps(currentRunSlot)">
+      <button style="background:#e5ecde;color:var(--green);font-weight:800;font-size:12.5px;padding:10px 16px;border-radius:9px;display:flex;align-items:center;gap:7px;border:1.5px solid #cfdcc4" onclick="openQuickTemps(currentRunDay)">
         🌡️ Log temps
       </button>
       <button class="btn-add" onclick="showPage('logorder')">+ Log an order</button>
@@ -618,34 +618,32 @@
 
   <div class="stats-row">
     <div class="stat-card green">
-      <div class="sc-label">Monday confirmed</div>
-      <div class="sc-val">12</div>
-      <div class="sc-sub">£1,290 total</div>
+      <div class="sc-label" id="runStat1Label">This run</div>
+      <div class="sc-val" id="runStat1Val">0</div>
+      <div class="sc-sub" id="runStat1Sub">£0 total</div>
     </div>
     <div class="stat-card blue">
-      <div class="sc-label">Thursday confirmed</div>
-      <div class="sc-val">8</div>
-      <div class="sc-sub">£860 total</div>
+      <div class="sc-label">Orders this week</div>
+      <div class="sc-val" id="runStat2Val">0</div>
+      <div class="sc-sub" id="runStat2Sub">across all runs</div>
     </div>
     <div class="stat-card">
       <div class="sc-label">Packed</div>
-      <div class="sc-val">6</div>
-      <div class="sc-sub">Out of 12 Monday orders</div>
+      <div class="sc-val" id="runStat3Val">0</div>
+      <div class="sc-sub" id="runStat3Sub">ready to go</div>
     </div>
     <div class="stat-card red">
       <div class="sc-label">Awaiting confirm</div>
-      <div class="sc-val">3</div>
-      <div class="sc-sub">Need follow-up</div>
+      <div class="sc-val" id="runStat4Val">0</div>
+      <div class="sc-sub" id="runStat4Sub">need follow-up</div>
     </div>
   </div>
 
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px">
-    <div class="tabs" style="margin-bottom:0;border-bottom:none">
-      <div class="tab active" onclick="switchTab('runs','mon');currentRunSlot='mon';renderPickList('mon')">Monday <span class="tab-count" id="tab-count-mon">12</span></div>
-      <div class="tab" onclick="switchTab('runs','wed');currentRunSlot='wed';renderPickList('wed')">Wednesday <span class="tab-count" id="tab-count-wed">0</span></div>
-      <div class="tab" onclick="switchTab('runs','thu');currentRunSlot='thu';renderPickList('thu')">Thursday <span class="tab-count" id="tab-count-thu">8</span></div>
+    <div class="tabs" id="runTabs" style="margin-bottom:0;border-bottom:none">
+      <!-- delivery-day tabs built by renderOrders() -->
     </div>
-    <button class="btn-navy" id="planRouteTabBtn" onclick="openRoutePlanner(currentRunSlot)" style="font-size:12px;padding:8px 14px">
+    <button class="btn-navy" id="planRouteTabBtn" onclick="openRoutePlanner(currentRunDay)" style="font-size:12px;padding:8px 14px">
       <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="3" cy="3" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="11" cy="11" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="11" cy="3" r="1.8" stroke="currentColor" stroke-width="1.3"/><path d="M3 4.8v4.4M4.8 3h4.4M4.8 11h4.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
       Plan this route
     </button>
@@ -654,25 +652,16 @@
 
   <div class="two-col">
     <div>
-      <!-- Monday tab -->
-      <div class="tab-panel active" id="runs-mon">
-        <div class="order-list" id="monOrderList">
-          <!-- populated by JS -->
+      <div class="tab-panel active">
+        <div class="order-list" id="runsOrderList">
+          <!-- populated by renderOrders() for the selected day -->
         </div>
-      </div>
-      <!-- Wednesday tab -->
-      <div class="tab-panel" id="runs-wed">
-        <div class="order-list" id="wedOrderList"></div>
-      </div>
-      <!-- Thursday tab -->
-      <div class="tab-panel" id="runs-thu">
-        <div class="order-list" id="thuOrderList"></div>
       </div>
     </div>
 
     <!-- Pick list — populated by renderPickList() -->
     <div class="pick-panel">
-      <h3 id="pickListTitle">Monday pick list</h3>
+      <h3 id="pickListTitle">Pick list</h3>
       <div class="pick-sub">Total quantities to pack</div>
       <div id="pickListLines"></div>
       <div class="pick-actions">
@@ -1728,8 +1717,8 @@ async function loadAppData() {
   if (!supabase) return;
 
   try {
-    // Fetch all four in parallel
-    const [productsRes, customersRes, ordersRes, invoicesRes] = await Promise.all([
+    // Fetch all in parallel
+    const [productsRes, customersRes, ordersRes, invoicesRes, runSlotsRes] = await Promise.all([
       supabase
         .from('products')
         .select('id, name, category, price, description, is_available, img_url, sort_order')
@@ -1744,9 +1733,9 @@ async function loadAppData() {
       supabase
         .from('orders')
         .select(`
-          id, channel, status, total_amount, notes, created_at,
+          id, channel, status, total_amount, notes, created_at, delivery_slot_id,
           customers (name, customer_type, address_line_1),
-          delivery_slots (day_label),
+          delivery_slots (day_label, delivery_date),
           order_items (product_name, quantity)
         `)
         .order('created_at', { ascending: false })
@@ -1757,7 +1746,16 @@ async function loadAppData() {
         .select('id, invoice_number, total_amount, status, created_at, customers (name)')
         .order('created_at', { ascending: false })
         .limit(200),
+
+      supabase
+        .from('delivery_slots')
+        .select('id, delivery_date, day_label, capacity, orders_count, is_open, cutoff_at')
+        .gte('delivery_date', new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10))
+        .order('delivery_date', { ascending: true }),
     ]);
+
+    // ── Run days (delivery slots) ─────────────────────────
+    runDaySlots = (runSlotsRes && !runSlotsRes.error) ? (runSlotsRes.data || []) : [];
 
     // ── Products ──────────────────────────────────────────
     if (!productsRes.error) {
@@ -1799,15 +1797,18 @@ async function loadAppData() {
         const dayLabel = o.delivery_slots?.day_label || '';
         const slot = dayLabel === 'Monday' ? 'mon' : dayLabel === 'Thursday' ? 'thu' : 'wed';
         sampleOrders.push({
-          id:      o.id,
-          name:    o.customers?.name          || 'Unknown',
-          type:    o.customers?.customer_type || 'domestic',
-          slot,
-          items:   (o.order_items || []).map(i => `${i.product_name} × ${i.quantity}`).join(', '),
-          total:   parseFloat(o.total_amount),
-          channel: o.channel ? o.channel.charAt(0).toUpperCase() + o.channel.slice(1) : '',
-          status:  o.status,
-          address: o.customers?.address_line_1 || '',
+          id:       o.id,
+          name:     o.customers?.name          || 'Unknown',
+          type:     o.customers?.customer_type || 'domestic',
+          slot,                                   // legacy bucket (dashboard)
+          slotId:   o.delivery_slot_id || null,
+          date:     o.delivery_slots?.delivery_date || null,
+          dayLabel: dayLabel,
+          items:    (o.order_items || []).map(i => `${i.product_name} × ${i.quantity}`).join(', '),
+          total:    parseFloat(o.total_amount),
+          channel:  o.channel ? o.channel.charAt(0).toUpperCase() + o.channel.slice(1) : '',
+          status:   o.status,
+          address:  o.customers?.address_line_1 || '',
         });
       });
     }
@@ -1968,43 +1969,109 @@ function switchTab(page, tab) {
   document.getElementById(`${page}-${tab}`).classList.add('active');
 }
 
-// ============ ORDERS ============
-function renderOrders() {
-  const mon = sampleOrders.filter(o => o.slot === 'mon');
-  const wed = sampleOrders.filter(o => o.slot === 'wed');
-  const thu = sampleOrders.filter(o => o.slot === 'thu');
-  document.getElementById('monOrderList').innerHTML = mon.map(orderCard).join('') || '<p style="padding:20px;color:var(--ink-soft);font-size:13px;text-align:center">No Monday orders yet.</p>';
-  document.getElementById('wedOrderList').innerHTML = wed.map(orderCard).join('') || '<p style="padding:20px;color:var(--ink-soft);font-size:13px;text-align:center">No Wednesday orders yet.</p>';
-  document.getElementById('thuOrderList').innerHTML = thu.map(orderCard).join('') || '<p style="padding:20px;color:var(--ink-soft);font-size:13px;text-align:center">No Thursday orders yet.</p>';
-  // Update tab counts
-  const monCount = document.getElementById('tab-count-mon');
-  const wedCount = document.getElementById('tab-count-wed');
-  const thuCount = document.getElementById('tab-count-thu');
-  if (monCount) monCount.textContent = mon.length;
-  if (wedCount) wedCount.textContent = wed.length;
-  if (thuCount) thuCount.textContent = thu.length;
-  renderPickList(currentRunSlot);
+// ============ ORDERS (per delivery day) ============
+function runDayLabel(dateStr) {
+  if (!dateStr) return '';
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
-function renderPickList(slot) {
-  slot = slot || currentRunSlot || 'mon';
-  const label = slot === 'mon' ? 'Monday' : slot === 'wed' ? 'Wednesday' : 'Thursday';
+// The delivery days to show as tabs: upcoming open slots + any day that has
+// orders (so nothing is ever hidden), keyed and sorted by date.
+function buildRunDays() {
+  const map = {};
+  (runDaySlots || []).forEach(s => {
+    map[s.delivery_date] = { date: s.delivery_date, dayLabel: s.day_label, slotId: s.id, isOpen: s.is_open, count: 0 };
+  });
+  sampleOrders.forEach(o => {
+    if (!o.date) return;
+    if (!map[o.date]) map[o.date] = { date: o.date, dayLabel: o.dayLabel || '', slotId: o.slotId, isOpen: true, count: 0 };
+    if (o.status !== 'cancelled') map[o.date].count++;
+  });
+  return Object.values(map).sort((a, b) => a.date < b.date ? -1 : 1);
+}
+
+function renderOrders() {
+  const days = buildRunDays();
+  const tabsEl = document.getElementById('runTabs');
+  const listEl = document.getElementById('runsOrderList');
+  if (!tabsEl || !listEl) return;
+
+  if (days.length === 0) {
+    tabsEl.innerHTML = '';
+    listEl.innerHTML = '<p style="padding:20px;color:var(--ink-soft);font-size:13px;text-align:center">No delivery days yet. Open a day on the Schedule page.</p>';
+    currentRunDay = null;
+    renderPickList(null);
+    updateRunStats(null);
+    return;
+  }
+
+  // Keep current selection if still valid, else default to the soonest day
+  if (!currentRunDay || !days.find(d => d.date === currentRunDay)) {
+    currentRunDay = days[0].date;
+  }
+
+  tabsEl.innerHTML = days.map(d => `
+    <div class="tab${d.date === currentRunDay ? ' active' : ''}" onclick="selectRunDay('${d.date}')">
+      ${runDayLabel(d.date)}${d.isOpen ? '' : ' <span style="color:#a12020;font-weight:700">(off)</span>'}
+      <span class="tab-count">${d.count}</span>
+    </div>`).join('');
+
+  renderRunDayOrders();
+  updateRunStats(currentRunDay);
+}
+
+function renderRunDayOrders() {
+  const listEl = document.getElementById('runsOrderList');
+  if (!listEl) return;
+  const orders = sampleOrders.filter(o => o.date === currentRunDay && o.status !== 'cancelled');
+  listEl.innerHTML = orders.length
+    ? orders.map(orderCard).join('')
+    : `<p style="padding:20px;color:var(--ink-soft);font-size:13px;text-align:center">No orders for ${runDayLabel(currentRunDay)} yet.</p>`;
+  renderPickList(currentRunDay);
+}
+
+function selectRunDay(dateStr) {
+  currentRunDay = dateStr;
+  renderOrders();
+}
+
+function updateRunStats(dateStr) {
+  const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  const sel = sampleOrders.filter(o => o.date === dateStr && o.status !== 'cancelled');
+  const selTotal = sel.reduce((s, o) => s + (o.total || 0), 0);
+  set('runStat1Label', dateStr ? runDayLabel(dateStr) : 'This run');
+  set('runStat1Val', sel.length);
+  set('runStat1Sub', '£' + selTotal.toFixed(0) + ' total');
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const wkEnd = new Date(today); wkEnd.setDate(today.getDate() + 7);
+  const inWeek = sampleOrders.filter(o => {
+    if (!o.date || o.status === 'cancelled') return false;
+    const d = new Date(o.date + 'T00:00:00');
+    return d >= today && d <= wkEnd;
+  });
+  set('runStat2Val', inWeek.length);
+  set('runStat3Val', sampleOrders.filter(o => o.status === 'packed').length);
+  set('runStat4Val', sampleOrders.filter(o => o.status === 'pending').length);
+}
+
+function renderPickList(dateStr) {
+  dateStr = dateStr || currentRunDay;
   const titleEl = document.getElementById('pickListTitle');
   const linesEl = document.getElementById('pickListLines');
   if (!titleEl || !linesEl) return;
 
-  titleEl.textContent = `${label} pick list`;
+  const label = runDayLabel(dateStr);
+  titleEl.textContent = label ? `${label} pick list` : 'Pick list';
 
-  // Aggregate quantities from all non-delivered orders for this slot
-  const orders = sampleOrders.filter(o => o.slot === slot && o.status !== 'delivered');
+  const orders = sampleOrders.filter(o => o.date === dateStr && o.status !== 'delivered' && o.status !== 'cancelled');
   if (orders.length === 0) {
-    linesEl.innerHTML = `<p style="font-size:12.5px;color:var(--ink-soft);padding:8px 0">No active orders for ${label}.</p>`;
+    linesEl.innerHTML = `<p style="font-size:12.5px;color:var(--ink-soft);padding:8px 0">No active orders for this day.</p>`;
     return;
   }
 
   const totals = {};
   orders.forEach(o => {
-    // items is a comma-separated string like "5kg Chicken Fillets × 2, BBQ Pack × 1"
     if (!o.items) return;
     o.items.split(',').forEach(seg => {
       const m = seg.trim().match(/^(.+?)\s*[×x]\s*(\d+)$/);
@@ -2072,8 +2139,8 @@ function openOrderModal(id) {
   if (!o) return;
   currentOrderId = id;
   document.getElementById('modalOrderName').textContent = o.name;
-  const slotLabel = o.slot === 'mon' ? 'Monday' : o.slot === 'wed' ? 'Wednesday' : 'Thursday';
-  document.getElementById('modalOrderRef').textContent = `Ref: ORD-${id.toUpperCase()} · ${slotLabel} delivery`;
+  const slotLabel = o.date ? runDayLabel(o.date) : (o.dayLabel || '');
+  document.getElementById('modalOrderRef').textContent = `Ref: ORD-${id.toUpperCase()}${slotLabel ? ' · ' + slotLabel + ' delivery' : ''}`;
   document.getElementById('modalOrderBody').innerHTML = `
     <div class="modal-detail-row"><span>Items</span><b style="max-width:280px;text-align:right">${o.items}</b></div>
     <div class="modal-detail-row"><span>Address</span><b>${o.address}</b></div>
@@ -3782,13 +3849,15 @@ function generateVIPMessage() {
 //   return response.json();
 // }
 
-let currentRunSlot = 'mon';
+let currentRunSlot = 'mon';   // legacy bucket, retained for safety
+let currentRunDay  = null;    // selected delivery date (YYYY-MM-DD) on the Runs board
+let runDaySlots    = [];      // upcoming delivery slots, loaded by loadAppData
 let currentMapsUrl = '';
 
-function openRoutePlanner(slot) {
-  currentRunSlot = slot || 'mon';
-  const orders = sampleOrders.filter(o => o.slot === currentRunSlot && o.status !== 'delivered');
-  const label = currentRunSlot === 'mon' ? 'Monday' : currentRunSlot === 'wed' ? 'Wednesday' : 'Thursday';
+function openRoutePlanner(dateStr) {
+  currentRunDay = dateStr || currentRunDay;
+  const orders = sampleOrders.filter(o => o.date === currentRunDay && o.status !== 'delivered' && o.status !== 'cancelled');
+  const label = runDayLabel(currentRunDay) || 'Delivery';
 
   document.getElementById('rmTitle').textContent = `${label} Route`;
   document.getElementById('rmSubtitle').textContent = `${orders.length} stops · optimising…`;
@@ -3909,24 +3978,27 @@ document.getElementById('routeModalOverlay').addEventListener('click', function(
 });
 
 // ============ QUICK TEMP ENTRY ============
-let quickTempSlot = 'mon';
+let quickTempSlot   = 'mon';   // legacy
+let quickTempSlotId = null;    // real delivery_slot id for the selected run
 let quickTempDate = '';
 
-function openQuickTemps(slot) {
-  quickTempSlot = slot || currentRunSlot || 'mon';
-  const orders = sampleOrders.filter(o => o.slot === quickTempSlot && o.status !== 'delivered');
-  const label  = quickTempSlot === 'mon' ? 'Monday' : quickTempSlot === 'wed' ? 'Wednesday' : 'Thursday';
+function openQuickTemps(dateStr) {
+  const runDay = dateStr || currentRunDay;
+  const orders = sampleOrders.filter(o => o.date === runDay && o.status !== 'delivered' && o.status !== 'cancelled');
+  const label  = runDayLabel(runDay) || 'Delivery';
 
-  // Use today's date as the delivery date
-  const today = new Date();
-  quickTempDate = today.toISOString().slice(0, 10);
-  const dateLabel = today.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'});
+  // The delivery date is the selected run day; resolve its real slot id
+  quickTempDate   = runDay;
+  quickTempSlotId = (runDaySlots.find(s => s.delivery_date === runDay) || {}).id
+                    || (orders.find(o => o.slotId) || {}).slotId || null;
+  const refDate   = runDay ? new Date(runDay + 'T00:00:00') : new Date();
+  const dateLabel = refDate.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'});
 
   document.getElementById('qtempTitle').textContent    = '🌡️ Log delivery temperatures';
   document.getElementById('qtempSubtitle').textContent = `${label} run · ${dateLabel}`;
 
-  // Load any already-saved temps for today
-  const storageKey = `temps_${today.getFullYear()}_${today.getMonth()}`;
+  // Load any already-saved temps for this run's month
+  const storageKey = `temps_${refDate.getFullYear()}_${refDate.getMonth()}`;
   const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
 
   document.getElementById('qtempBody').innerHTML = orders.map((o, i) => {
@@ -3999,14 +4071,8 @@ async function saveQuickTemps() {
   // 2. Also upsert to Supabase delivery_temps so the full log screen is in sync
   if (!supabase) return;
   try {
-    const dayLabel = quickTempSlot === 'mon' ? 'Monday' : quickTempSlot === 'wed' ? 'Wednesday' : 'Thursday';
-
-    // Look up the delivery slot for this day + date
-    const { data: slotRow } = await supabase
-      .from('delivery_slots').select('id')
-      .eq('day_label', dayLabel).eq('delivery_date', quickTempDate)
-      .maybeSingle();
-    const slotId = slotRow?.id || null;
+    // The selected run's real delivery slot id (resolved when the overlay opened)
+    const slotId = quickTempSlotId;
 
     const rows = [];
     inputs.forEach(input => {
@@ -4886,7 +4952,7 @@ const HELP_PAGES = {
   runs: {
     label: 'Delivery Runs',
     sections: [
-      { icon:'🚚', title:'What is this page?', body:'Delivery Runs shows all orders grouped by delivery day. Each card is one customer order. You choose which days you\'re delivering on the <strong>Schedule</strong> page.' },
+      { icon:'🚚', title:'What is this page?', body:'Delivery Runs shows all orders grouped by delivery day. Each delivery day has its own tab — tap a tab to see that day\'s orders and pick list. Each card is one customer order. You choose which days you\'re delivering on the <strong>Schedule</strong> page.' },
       { icon:'📋', title:'Order cards', body:'Each card shows the customer\'s name, whether they\'re domestic or trade, the order status, and how the order came in (website, phone, social media). Tap a card to open the full order details.' },
       { icon:'📍', title:'Route planner', body:'Press <strong>Plan route</strong> to get an optimised delivery order for that day\'s run. It works out the most efficient order of stops to save you time and fuel.' },
       { icon:'✅', title:'Marking as delivered', body:'Open an order card and change the status to <strong>Delivered</strong> once you\'ve dropped it off. This keeps your records up to date.' },
