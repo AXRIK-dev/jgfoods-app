@@ -7,7 +7,7 @@ Each one depends on the previous, so don't skip or reorder.
 
 ## How to run them
 
-1. Go to [https://udwnvezlxdscpvsyuyhe.supabase.co](https://udwnvezlxdscpvsyuyhe.supabase.co)
+1. Go to [https://hnkidhqjsitrqhsxghjd.supabase.co](https://hnkidhqjsitrqhsxghjd.supabase.co)
 2. Left sidebar → **SQL Editor**
 3. Open each file below, copy the entire contents, paste into the editor, click **Run**
 4. Wait for "Success" before moving to the next one
@@ -110,6 +110,17 @@ Replace with Jon's actual email. Every other user defaults to `driver` automatic
 
 ---
 
+### 8. `008_flexible_delivery_days.sql`
+**What it does:** Lets Jon deliver on any day and take days off.
+
+- Relaxes the `delivery_slots.day_label` rule so any weekday is allowed (not just Mon/Wed/Thu) — Jon can add a one-off Friday run, etc.
+- Adds an `app_settings` table holding Jon's **usual days** (Mon/Wed/Thu by default), default run capacity, and default cut-off rule
+- The admin app reads these to auto-open Jon's usual days each week, while letting him close any day off or add one-off days
+
+**When to run:** Any time after 001 and 002. Safe to run on a live database.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app
@@ -131,7 +142,7 @@ The website (`website/index.html`) will need the same Supabase URL and anon key 
 
 ## Supabase project details
 
-- **Project URL:** `https://udwnvezlxdscpvsyuyhe.supabase.co`
+- **Project URL:** `https://hnkidhqjsitrqhsxghjd.supabase.co`
 - **Region:** (check dashboard)
 - **Migrations folder:** `supabase/migrations/`
 

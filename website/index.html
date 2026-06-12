@@ -807,25 +807,8 @@
       <div id="itemsList"></div>
 
       <div class="p-label">Choose delivery day</div>
-      <div class="slot-card selected" id="slot-mon" onclick="selectSlot('mon')">
-        <div class="slot-left">
-          <div class="slot-radio"></div>
-          <div>
-            <h4>Monday afternoon</h4>
-            <div class="sd">Order by Sunday midnight</div>
-          </div>
-        </div>
-        <span class="slot-tag">Available</span>
-      </div>
-      <div class="slot-card" id="slot-thu" onclick="selectSlot('thu')">
-        <div class="slot-left">
-          <div class="slot-radio"></div>
-          <div>
-            <h4>Thursday afternoon</h4>
-            <div class="sd">Order by Wednesday midnight</div>
-          </div>
-        </div>
-        <span class="slot-tag">Available</span>
+      <div id="slotPicker">
+        <div class="sd" style="padding:6px 2px">Loading delivery days…</div>
       </div>
 
       <div class="p-label">Your details</div>
@@ -834,6 +817,7 @@
         <div class="field"><label>Last name</label><input type="text" id="f-last" placeholder="Taylor"></div>
       </div>
       <div class="field"><label>Phone number</label><input type="tel" id="f-phone" placeholder="07700 000000"></div>
+      <div class="field"><label>Email (optional)</label><input type="email" id="f-email" placeholder="you@email.com"></div>
       <div class="field"><label>Delivery address</label><input type="text" id="f-address" placeholder="14 Any Street, Ormskirk, WN8 0AA"></div>
       <div class="field">
         <label>Notes for Jon (optional)</label>
@@ -1036,7 +1020,7 @@ async function loadProducts() {
 
   const { data, error } = await window.sbClient
     .from('products')
-    .select('id, name, category, price, description, img_url')
+    .select('id, name, category, price, description, img_url, unit')
     .eq('is_available', true)
     .order('sort_order', { ascending: true, nullsFirst: false })
     .order('name');
@@ -1063,6 +1047,7 @@ async function loadProducts() {
     card.dataset.name  = p.name;
     card.dataset.price = p.price.toFixed(2);
     card.dataset.cls   = cat;
+    card.dataset.unit  = p.unit || 'pack';
     card.innerHTML = `
       ${imgHtml}
       <div class="prod-body">
@@ -1070,7 +1055,7 @@ async function loadProducts() {
         <div class="prod-desc">${p.description || ''}</div>
         <div class="prod-foot">
           <span class="price">£${parseFloat(p.price).toFixed(2)}</span>
-          <button class="add-btn" onclick="addToBasket('${p.id}','${p.name.replace(/'/g,"\\'")}',${parseFloat(p.price)},'${cat}')">Add</button>
+          <button class="add-btn" onclick="addToBasket('${p.id}','${p.name.replace(/'/g,"\\'")}',${parseFloat(p.price)},'${cat}','${p.unit || 'pack'}')">Add</button>
         </div>
       </div>`;
     grid.appendChild(card);
@@ -1082,7 +1067,7 @@ async function loadProducts() {
   if (activeCat !== 'all') filterCategory(activeFilter, activeCat);
 }
 
-document.addEventListener('DOMContentLoaded', loadProducts);
+document.addEventListener('DOMContentLoaded', () => { loadProducts(); loadSlots(); });
 
 // ============ ORDER RULES ============
 // TODO: Load these from Supabase admin settings table so Jon can update them
@@ -1124,13 +1109,14 @@ function getOrderTotal() {
 
 // ============ BASKET STATE ============
 const basket = {};
-let selectedSlot = 'mon';
+let selectedSlotId = null;
+let availableSlots = [];
 
-function addToBasket(id, name, price, cls) {
+function addToBasket(id, name, price, cls, unit) {
   if (basket[id]) {
     basket[id].qty++;
   } else {
-    basket[id] = { id, name, price, cls, qty: 1 };
+    basket[id] = { id, name, price, cls, unit: unit || 'pack', qty: 1 };
   }
   updateBasketUI();
 
@@ -1204,11 +1190,63 @@ function updateBasketUI() {
   document.getElementById('osTotal').textContent = formatGBP(orderTotal);
 }
 
-// ============ DELIVERY SLOT ============
-function selectSlot(slot) {
-  selectedSlot = slot;
-  document.getElementById('slot-mon').classList.toggle('selected', slot === 'mon');
-  document.getElementById('slot-thu').classList.toggle('selected', slot === 'thu');
+// ============ DELIVERY SLOTS (live from Supabase) ============
+async function loadSlots() {
+  const picker = document.getElementById('slotPicker');
+  if (!picker) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await window.sbClient
+    .from('delivery_slots')
+    .select('id, delivery_date, day_label, capacity, orders_count, cutoff_at, is_open')
+    .eq('is_open', true)
+    .gte('delivery_date', today)
+    .order('delivery_date', { ascending: true });
+
+  // Keep only slots that aren't past cut-off and aren't full
+  const now = Date.now();
+  availableSlots = (data || []).filter(s =>
+    (!s.cutoff_at || new Date(s.cutoff_at).getTime() > now) &&
+    (s.orders_count < s.capacity)
+  );
+
+  if (error || availableSlots.length === 0) {
+    selectedSlotId = null;
+    picker.innerHTML = `<div class="sd" style="padding:6px 2px">
+      No delivery days open right now — please call or message Jon on 07702 852704 to order.
+    </div>`;
+    return;
+  }
+
+  picker.innerHTML = availableSlots.map((s, idx) => {
+    const d = new Date(s.delivery_date + 'T00:00:00');
+    const dateStr = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const cutoff = s.cutoff_at
+      ? `Order by ${new Date(s.cutoff_at).toLocaleDateString('en-GB', { weekday: 'long' })}`
+      : 'Order early to secure your slot';
+    return `
+      <div class="slot-card${idx === 0 ? ' selected' : ''}" id="slot-${s.id}" onclick="selectSlot('${s.id}')">
+        <div class="slot-left">
+          <div class="slot-radio"></div>
+          <div>
+            <h4>${s.day_label} afternoon · ${dateStr}</h4>
+            <div class="sd">${cutoff}</div>
+          </div>
+        </div>
+        <span class="slot-tag">Available</span>
+      </div>`;
+  }).join('');
+
+  // Default-select the soonest slot
+  selectedSlotId = availableSlots[0].id;
+}
+
+function selectSlot(slotId) {
+  selectedSlotId = slotId;
+  availableSlots.forEach(s => {
+    const el = document.getElementById('slot-' + s.id);
+    if (el) el.classList.toggle('selected', s.id === slotId);
+  });
 }
 
 // ============ PANEL ============
@@ -1218,6 +1256,7 @@ function openOrderPanel() {
   document.body.style.overflow = 'hidden';
   updateBasketUI();
   prefillOrderForm();
+  loadSlots();
 }
 
 function closeOrderPanel() {
@@ -1234,22 +1273,38 @@ function resetPanel() {
   document.getElementById('confirmScreen').classList.remove('show');
   document.getElementById('panelTitle').textContent = 'Your basket';
   document.getElementById('panelSub').textContent = 'Review your items and choose delivery';
+  // re-enable the place button for next time
+  const placeBtn = document.getElementById('placeBtn');
+  if (placeBtn) { placeBtn.disabled = false; placeBtn.textContent = 'Place order'; }
   // clear form
-  ['f-first','f-last','f-phone','f-address','f-notes'].forEach(id => {
+  ['f-first','f-last','f-phone','f-email','f-address','f-notes'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
 }
 
 // ============ PLACE ORDER ============
-function placeOrder() {
-  const first = document.getElementById('f-first').value.trim();
-  const last = document.getElementById('f-last').value.trim();
-  const phone = document.getElementById('f-phone').value.trim();
+async function placeOrder() {
+  const first   = document.getElementById('f-first').value.trim();
+  const last    = document.getElementById('f-last').value.trim();
+  const phone   = document.getElementById('f-phone').value.trim();
+  const email   = document.getElementById('f-email').value.trim();
   const address = document.getElementById('f-address').value.trim();
+  const notes   = document.getElementById('f-notes').value.trim();
 
   if (!first || !last || !phone || !address) {
     alert('Please fill in all required fields (name, phone, and address).');
+    return;
+  }
+
+  const items = Object.values(basket);
+  if (items.length === 0) {
+    alert('Your basket is empty.');
+    return;
+  }
+
+  if (!selectedSlotId) {
+    alert('Please choose a delivery day. If none are showing, call or message Jon on 07702 852704.');
     return;
   }
 
@@ -1257,31 +1312,49 @@ function placeOrder() {
   btn.disabled = true;
   btn.textContent = 'Sending…';
 
-  const items = Object.values(basket);
-  const itemList = items.map(i => `${i.qty}× ${i.name} (${formatGBP(i.price * i.qty)})`).join('\n');
-  const total = formatGBP(getBasketTotal());
-  const slotLabel = selectedSlot === 'mon' ? 'Monday' : 'Thursday';
-  const ref = 'JG-' + Date.now().toString().slice(-4);
-  const notes = document.getElementById('f-notes').value.trim();
+  // Best-effort UK postcode extraction from the address line
+  const pcMatch = address.toUpperCase().match(/[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}/);
+  const postcode = pcMatch ? pcMatch[0] : '';
 
-  // ---- EmailJS integration ----
-  // TODO: initialise EmailJS and replace with real service/template IDs
-  // emailjs.init('YOUR_PUBLIC_KEY');
-  // emailjs.send('YOUR_SERVICE_ID', 'YOUR_TEMPLATE_ID', {
-  //   customer_name: `${first} ${last}`,
-  //   customer_phone: phone,
-  //   customer_address: address,
-  //   delivery_slot: slotLabel,
-  //   order_items: itemList,
-  //   order_total: total,
-  //   order_notes: notes,
-  //   order_ref: ref,
-  // })
-  // .then(() => { showConfirmation(ref); })
-  // .catch(() => { btn.disabled=false; btn.textContent='Place order'; alert('Something went wrong. Please call Jon on 07702 852704.'); });
+  // Build items for the RPC: snapshot name + price at time of order
+  const rpcItems = items.map(i => ({
+    product_id:   i.id,
+    product_name: i.name,
+    unit_price:   i.price,
+    quantity:     i.qty,
+    unit:         i.unit || 'pack',
+  }));
 
-  // TEMP: simulate success until EmailJS is wired up
-  setTimeout(() => { showConfirmation(ref); }, 900);
+  try {
+    const { data, error } = await window.sbClient.rpc('place_order', {
+      p_name:    `${first} ${last}`,
+      p_email:   email || null,
+      p_phone:   phone,
+      p_address: address,
+      p_postcode: postcode,
+      p_slot_id: selectedSlotId,
+      p_items:   rpcItems,
+      p_channel: 'website',
+      p_notes:   notes || null,
+    });
+
+    // Transport-level error, or a handled error returned from the function
+    if (error) throw new Error(error.message || 'Order failed');
+    if (data && data.error) {
+      btn.disabled = false;
+      btn.textContent = 'Place order';
+      alert(data.error + '\n\nPlease pick another delivery day, or call Jon on 07702 852704.');
+      loadSlots(); // refresh availability — slot may have just filled or closed
+      return;
+    }
+
+    showConfirmation(data.reference);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Place order';
+    alert('Something went wrong placing your order. Please try again, or call Jon on 07702 852704.');
+    console.error('place_order failed:', e);
+  }
 }
 
 function showConfirmation(ref) {

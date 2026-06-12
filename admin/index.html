@@ -502,6 +502,7 @@
     <div class="tn-nav">
       <div class="tn-link active" onclick="showPage('dashboard')">Dashboard</div>
       <div class="tn-link" onclick="showPage('runs')">Delivery Runs</div>
+      <div class="tn-link" onclick="showPage('schedule')">🗓️ Schedule</div>
       <div class="tn-link" onclick="showPage('logorder')">Log Order</div>
       <div class="tn-link" onclick="showPage('stock')">Availability</div>
       <div class="tn-link" onclick="showPage('customers')">Customers</div>
@@ -818,6 +819,52 @@
       <button class="btn-add" style="flex:1;justify-content:center;padding:13px" onclick="saveLogOrder()">Save order</button>
       <button class="btn-navy" style="justify-content:center;padding:13px 18px" onclick="clearLogForm()">Clear</button>
     </div>
+  </div>
+</div>
+
+<!-- ============ PAGE: SCHEDULE / DELIVERY DAYS ============ -->
+<div class="page" id="page-schedule">
+  <div class="pagehead">
+    <div>
+      <div class="eyebrow">Schedule</div>
+      <h1>Delivery Days</h1>
+      <p>Open the days you're delivering, take a day off, or add a one-off run. The website only shows customers the days you've opened here.</p>
+    </div>
+  </div>
+
+  <!-- Affected orders banner (shown when a closed day still has orders) -->
+  <div id="affectedBanner" style="display:none;background:#fdecec;border:1px solid #f5b5b5;border-radius:12px;padding:14px 16px;margin-bottom:18px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="font-size:17px">⚠️</span>
+      <b style="color:#a12020;font-size:14px">Orders need rebooking</b>
+    </div>
+    <p style="font-size:12.5px;color:#8a2a2a;margin:0 0 10px;line-height:1.5">You've closed a day that still has orders on it. Call these customers to rebook them onto another day, then move or cancel their order below.</p>
+    <div id="affectedList"></div>
+  </div>
+
+  <!-- Usual days editor -->
+  <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:18px">
+    <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:4px">Your usual days</div>
+    <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px">These appear automatically each week. You can still close any single day below.</p>
+    <div id="usualDayChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+    <button class="btn-add" style="padding:9px 16px;font-size:12.5px" onclick="saveUsualDays()">Save usual days</button>
+    <span id="usualSaveMsg" style="margin-left:10px;font-size:12px;color:var(--green);font-weight:700;display:none">✓ Saved</span>
+  </div>
+
+  <!-- Add a one-off day -->
+  <div style="background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:22px">
+    <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:4px">Add a one-off delivery day</div>
+    <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px">Delivering on a day you don't usually? Add it here — any day of the week.</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="date" id="oneOffDate" style="background:#fff;border:1.5px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px;color:var(--ink)">
+      <button class="btn-navy" style="padding:10px 16px;font-size:12.5px" onclick="addOneOffDay()">+ Add this day</button>
+    </div>
+  </div>
+
+  <!-- Upcoming runs -->
+  <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:10px">Upcoming runs</div>
+  <div id="scheduleList">
+    <p style="padding:20px;color:var(--ink-soft);font-size:13px;text-align:center">Loading…</p>
   </div>
 </div>
 
@@ -1909,6 +1956,8 @@ function showPage(id) {
   if (id === 'customers') renderCustomers();
   if (id === 'finance')   renderInvoices();
   if (id === 'dashboard') renderDashboard();
+  if (id === 'schedule')  loadSchedule();
+  if (id === 'logorder')  populateLogSlots();
 }
 
 // ============ TABS ============
@@ -3150,7 +3199,12 @@ async function saveLogOrder() {
   if (items.length === 0) { alert('Please add at least one item.'); return; }
 
   const total     = items.reduce((s, i) => s + i.price * i.qty, 0);
-  const slotValue = document.getElementById('lo-slot').value;
+  const slotSel    = document.getElementById('lo-slot');
+  const slotOpt    = slotSel.options[slotSel.selectedIndex];
+  const slotValue  = slotSel.value;
+  const slotIsUuid = /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(slotValue);
+  const slotDay    = slotOpt?.dataset?.day || (slotValue === 'mon' ? 'Monday' : slotValue === 'wed' ? 'Wednesday' : slotValue === 'thu' ? 'Thursday' : 'Wednesday');
+  const slotBucket = slotDay === 'Monday' ? 'mon' : slotDay === 'Thursday' ? 'thu' : 'wed';
   const custType  = document.getElementById('lo-type').value;
   const rawChannel = document.getElementById('lo-channel').value;
   // Map 'text' to 'phone' — schema only allows: website, facebook, instagram, phone, whatsapp
@@ -3161,7 +3215,7 @@ async function saveLogOrder() {
     id: 'o' + Date.now(),
     name,
     type: custType,
-    slot: slotValue,
+    slot: slotBucket,
     items: items.map(i => `${i.product} × ${i.qty}`).join(', '),
     total,
     channel: channel.charAt(0).toUpperCase() + channel.slice(1),
@@ -3204,27 +3258,32 @@ async function saveLogOrder() {
       customerId = newCust.id;
     }
 
-    // 2. Find or create delivery slot for the selected day
-    const dayLabel = slotValue === 'mon' ? 'Monday' : slotValue === 'wed' ? 'Wednesday' : 'Thursday';
-    const today    = new Date().toISOString().split('T')[0];
-    const { data: slotData } = await supabase
-      .from('delivery_slots').select('id')
-      .eq('day_label', dayLabel).eq('is_open', true)
-      .gte('delivery_date', today)
-      .order('delivery_date', { ascending: true })
-      .limit(1).maybeSingle();
-
+    // 2. Resolve the delivery slot
     let slotId;
-    if (slotData) {
-      slotId = slotData.id;
+    if (slotIsUuid) {
+      // A real open day was chosen from the dropdown
+      slotId = slotValue;
     } else {
-      const nextDate = getNextDayDate(dayLabel);
-      const { data: newSlot, error: slotErr } = await supabase
-        .from('delivery_slots')
-        .insert({ delivery_date: nextDate, day_label: dayLabel })
-        .select('id').single();
-      if (slotErr) throw slotErr;
-      slotId = newSlot.id;
+      // Legacy fallback (no open days yet): find next open slot for that day, or create one
+      const dayLabel = slotDay;
+      const today    = new Date().toISOString().split('T')[0];
+      const { data: slotData } = await supabase
+        .from('delivery_slots').select('id')
+        .eq('day_label', dayLabel).eq('is_open', true)
+        .gte('delivery_date', today)
+        .order('delivery_date', { ascending: true })
+        .limit(1).maybeSingle();
+      if (slotData) {
+        slotId = slotData.id;
+      } else {
+        const nextDate = getNextDayDate(dayLabel);
+        const { data: newSlot, error: slotErr } = await supabase
+          .from('delivery_slots')
+          .insert({ delivery_date: nextDate, day_label: dayLabel, cutoff_at: cutoffISOFor(nextDate) })
+          .select('id').single();
+        if (slotErr) throw slotErr;
+        slotId = newSlot.id;
+      }
     }
 
     // 3. Insert order
@@ -3265,6 +3324,304 @@ function clearLogForm() {
   logItemCount = 0;
   addLogItem();
   updateLogTotal();
+}
+
+// ============ SCHEDULE / DELIVERY DAYS ============
+const WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const SCHEDULE_HORIZON_DAYS = 21;
+let SCHEDULE = {
+  usualDays: ['Monday','Wednesday','Thursday'],
+  capacity:  50,
+  cutoff:    { days_before: 1, hour: 23, minute: 59 },
+  slots:     [],
+};
+
+function toDateStr(d) {
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), da = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${da}`;
+}
+function prettyDate(dateStr) {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
+}
+// Cut-off timestamp for a delivery date: the evening before, per settings
+function cutoffISOFor(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() - (SCHEDULE.cutoff.days_before ?? 1));
+  d.setHours(SCHEDULE.cutoff.hour ?? 23, SCHEDULE.cutoff.minute ?? 59, 0, 0);
+  return d.toISOString();
+}
+
+async function loadSchedule() {
+  if (!supabase) return;
+  try {
+    const { data: settings } = await supabase
+      .from('app_settings').select('key, value')
+      .in('key', ['usual_days','default_capacity','default_cutoff']);
+    (settings || []).forEach(s => {
+      if (s.key === 'usual_days' && Array.isArray(s.value?.days)) SCHEDULE.usualDays = s.value.days;
+      if (s.key === 'default_capacity' && s.value?.value != null)  SCHEDULE.capacity  = s.value.value;
+      if (s.key === 'default_cutoff' && s.value)                   SCHEDULE.cutoff    = s.value;
+    });
+
+    const today = toDateStr(new Date());
+    const { data: slots } = await supabase
+      .from('delivery_slots')
+      .select('id, delivery_date, day_label, capacity, orders_count, cutoff_at, is_open')
+      .gte('delivery_date', today)
+      .order('delivery_date', { ascending: true });
+    SCHEDULE.slots = slots || [];
+
+    renderSchedule();
+  } catch (err) {
+    console.error('loadSchedule error:', err);
+    document.getElementById('scheduleList').innerHTML =
+      '<p style="padding:20px;color:var(--ink-soft);font-size:13px;text-align:center">Couldn\'t load the schedule. Check your connection and try again.</p>';
+  }
+}
+
+function renderSchedule() {
+  renderUsualChips();
+  renderScheduleList();
+  renderAffected();
+}
+
+function renderUsualChips() {
+  const wrap = document.getElementById('usualDayChips');
+  if (!wrap) return;
+  const order = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  wrap.innerHTML = order.map(d => {
+    const on = SCHEDULE.usualDays.includes(d);
+    return `<button type="button" data-day="${d}" onclick="toggleUsualChip(this)"
+      style="padding:8px 14px;border-radius:20px;font-size:12.5px;font-weight:700;cursor:pointer;
+      border:1.5px solid ${on ? 'var(--navy)' : 'var(--line)'};
+      background:${on ? 'var(--navy)' : '#fff'};color:${on ? '#fff' : 'var(--ink-soft)'}"
+      data-on="${on ? '1' : '0'}">${d.slice(0,3)}</button>`;
+  }).join('');
+}
+
+function toggleUsualChip(btn) {
+  const on = btn.dataset.on === '1';
+  btn.dataset.on = on ? '0' : '1';
+  btn.style.background = on ? '#fff' : 'var(--navy)';
+  btn.style.color = on ? 'var(--ink-soft)' : '#fff';
+  btn.style.borderColor = on ? 'var(--line)' : 'var(--navy)';
+}
+
+async function saveUsualDays() {
+  const chips = document.querySelectorAll('#usualDayChips button');
+  const days = Array.from(chips).filter(c => c.dataset.on === '1').map(c => c.dataset.day);
+  if (!supabase) return;
+  try {
+    const { error } = await supabase.from('app_settings')
+      .upsert({ key: 'usual_days', value: { days } }, { onConflict: 'key' });
+    if (error) throw error;
+    SCHEDULE.usualDays = days;
+    const msg = document.getElementById('usualSaveMsg');
+    if (msg) { msg.style.display = 'inline'; setTimeout(() => { msg.style.display = 'none'; }, 1800); }
+    renderScheduleList();
+  } catch (err) {
+    console.error('saveUsualDays error:', err);
+    alert('Could not save your usual days. Please try again.');
+  }
+}
+
+// Build the next few weeks: usual days + any existing slots, unified by date
+function buildUpcomingDates() {
+  const map = {};
+  const today = new Date(); today.setHours(0,0,0,0);
+  for (let i = 0; i < SCHEDULE_HORIZON_DAYS; i++) {
+    const d = new Date(today); d.setDate(today.getDate() + i);
+    const name = WEEKDAYS[d.getDay()];
+    if (SCHEDULE.usualDays.includes(name)) {
+      const ds = toDateStr(d);
+      map[ds] = { date: ds, day: name, slot: null };
+    }
+  }
+  SCHEDULE.slots.forEach(s => { map[s.delivery_date] = { date: s.delivery_date, day: s.day_label, slot: s }; });
+  return Object.values(map).sort((a, b) => a.date < b.date ? -1 : 1);
+}
+
+function renderScheduleList() {
+  const list = document.getElementById('scheduleList');
+  if (!list) return;
+  const rows = buildUpcomingDates();
+  if (rows.length === 0) {
+    list.innerHTML = '<p style="padding:20px;color:var(--ink-soft);font-size:13px;text-align:center">No upcoming days. Set your usual days above, or add a one-off day.</p>';
+    return;
+  }
+  list.innerHTML = rows.map(r => {
+    const s = r.slot;
+    const open = s ? s.is_open : false;
+    const count = s ? s.orders_count : 0;
+    let statusChip, actionBtn, warn = '';
+
+    if (!s) {
+      statusChip = `<span style="font-size:11.5px;font-weight:700;color:var(--ink-soft)">Not opened yet</span>`;
+      actionBtn  = `<button class="btn-add" style="padding:8px 14px;font-size:12px" onclick="openDay('${r.date}','${r.day}')">Open this day</button>`;
+    } else if (open) {
+      statusChip = `<span style="font-size:11.5px;font-weight:800;color:var(--green)">● Open${count ? ` · ${count} order${count===1?'':'s'}` : ''}</span>`;
+      actionBtn  = `<button class="btn-navy" style="padding:8px 14px;font-size:12px;background:#fbeaea;color:#a12020;border:1px solid #f0c0c0" onclick="closeDay('${s.id}')">Take day off</button>`;
+    } else {
+      statusChip = `<span style="font-size:11.5px;font-weight:800;color:#a12020">● Closed (day off)</span>`;
+      actionBtn  = `<button class="btn-add" style="padding:8px 14px;font-size:12px" onclick="openDay('${r.date}','${r.day}')">Re-open</button>`;
+      if (count > 0) warn = `<div style="font-size:11px;color:#a12020;font-weight:700;margin-top:3px">⚠️ ${count} order${count===1?'':'s'} still booked — see banner above</div>`;
+    }
+
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff;border:1px solid var(--line);border-radius:11px;padding:13px 15px;margin-bottom:9px">
+        <div>
+          <div style="font-size:14px;font-weight:800;color:var(--navy)">${prettyDate(r.date)}</div>
+          <div style="margin-top:3px">${statusChip}</div>
+          ${warn}
+        </div>
+        <div>${actionBtn}</div>
+      </div>`;
+  }).join('');
+}
+
+async function openDay(dateStr, dayName) {
+  if (!supabase) return;
+  try {
+    const existing = SCHEDULE.slots.find(s => s.delivery_date === dateStr);
+    if (existing) {
+      const { error } = await supabase.from('delivery_slots')
+        .update({ is_open: true, cutoff_at: existing.cutoff_at || cutoffISOFor(dateStr) })
+        .eq('id', existing.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('delivery_slots')
+        .insert({ delivery_date: dateStr, day_label: dayName, capacity: SCHEDULE.capacity, cutoff_at: cutoffISOFor(dateStr), is_open: true });
+      if (error) throw error;
+    }
+    await loadSchedule();
+  } catch (err) {
+    console.error('openDay error:', err);
+    alert('Could not open that day. Please try again.');
+  }
+}
+
+async function closeDay(slotId) {
+  if (!supabase) return;
+  if (!confirm('Take this day off? Customers won\'t be able to order for it on the website. Any orders already booked will be flagged so you can rebook them.')) return;
+  try {
+    const { error } = await supabase.from('delivery_slots').update({ is_open: false }).eq('id', slotId);
+    if (error) throw error;
+    await loadSchedule();
+  } catch (err) {
+    console.error('closeDay error:', err);
+    alert('Could not close that day. Please try again.');
+  }
+}
+
+async function addOneOffDay() {
+  const input = document.getElementById('oneOffDate');
+  const dateStr = input.value;
+  if (!dateStr) { alert('Please pick a date first.'); return; }
+  const dayName = WEEKDAYS[new Date(dateStr + 'T00:00:00').getDay()];
+  await openDay(dateStr, dayName);
+  input.value = '';
+}
+
+// Orders left on a closed day — flagged for Jon to call & rebook
+async function renderAffected() {
+  const banner = document.getElementById('affectedBanner');
+  const listEl = document.getElementById('affectedList');
+  if (!banner || !listEl || !supabase) return;
+
+  const closedWithOrders = SCHEDULE.slots.filter(s => !s.is_open && s.orders_count > 0);
+  if (closedWithOrders.length === 0) { banner.style.display = 'none'; return; }
+
+  const openSlots = SCHEDULE.slots.filter(s => s.is_open);
+  const slotIds = closedWithOrders.map(s => s.id);
+  const { data: orders, error } = await supabase
+    .from('orders')
+    .select('id, total_amount, delivery_slot_id, customers (name, phone)')
+    .in('delivery_slot_id', slotIds)
+    .neq('status', 'cancelled');
+
+  if (error || !orders || orders.length === 0) { banner.style.display = 'none'; return; }
+
+  banner.style.display = 'block';
+  listEl.innerHTML = orders.map(o => {
+    const slot = closedWithOrders.find(s => s.id === o.delivery_slot_id);
+    const dayTxt = slot ? prettyDate(slot.delivery_date) : '';
+    const name = o.customers?.name || 'Customer';
+    const phone = o.customers?.phone || '';
+    const moveOpts = openSlots.length
+      ? openSlots.map(s => `<option value="${s.id}">${prettyDate(s.delivery_date)}</option>`).join('')
+      : '<option value="">No open days</option>';
+    return `
+      <div style="background:#fff;border:1px solid #f0c0c0;border-radius:9px;padding:11px 13px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+          <div>
+            <div style="font-size:13px;font-weight:800;color:var(--navy)">${name} <span style="font-weight:600;color:var(--ink-soft)">· £${Number(o.total_amount).toFixed(2)}</span></div>
+            <div style="font-size:11.5px;color:var(--ink-soft)">Was booked for ${dayTxt}${phone ? ` · <a href="tel:${phone}" style="color:var(--navy);font-weight:700">${phone}</a>` : ''}</div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <select id="move-${o.id}" style="border:1.5px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px">${moveOpts}</select>
+            <button class="btn-add" style="padding:7px 12px;font-size:12px" onclick="moveOrder('${o.id}')">Move</button>
+            <button class="btn-navy" style="padding:7px 12px;font-size:12px;background:#fbeaea;color:#a12020;border:1px solid #f0c0c0" onclick="cancelAffectedOrder('${o.id}')">Cancel</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function moveOrder(orderId) {
+  const sel = document.getElementById('move-' + orderId);
+  const newSlotId = sel?.value;
+  if (!newSlotId) { alert('No open day to move this order to. Open a day first.'); return; }
+  if (!supabase) return;
+  try {
+    const { error } = await supabase.from('orders').update({ delivery_slot_id: newSlotId }).eq('id', orderId);
+    if (error) throw error;
+    await loadSchedule();
+  } catch (err) {
+    console.error('moveOrder error:', err);
+    alert('Could not move that order. Please try again.');
+  }
+}
+
+async function cancelAffectedOrder(orderId) {
+  if (!confirm('Cancel this order? This frees the customer from the closed day. You can\'t undo this here.')) return;
+  if (!supabase) return;
+  try {
+    const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', orderId);
+    if (error) throw error;
+    await loadSchedule();
+  } catch (err) {
+    console.error('cancelAffectedOrder error:', err);
+    alert('Could not cancel that order. Please try again.');
+  }
+}
+
+// ── Log Order: populate the delivery-slot dropdown from real open days ──
+function legacyLogSlotOptions() {
+  return '<option value="mon">Monday</option><option value="wed">Wednesday</option><option value="thu">Thursday</option>';
+}
+async function populateLogSlots() {
+  const sel = document.getElementById('lo-slot');
+  if (!sel || !supabase) return;
+  try {
+    const today = toDateStr(new Date());
+    const { data } = await supabase
+      .from('delivery_slots')
+      .select('id, delivery_date, day_label, is_open')
+      .eq('is_open', true)
+      .gte('delivery_date', today)
+      .order('delivery_date', { ascending: true });
+    if (!data || data.length === 0) {
+      // No open days yet — fall back to usual-day options (auto-creates a slot on save)
+      sel.innerHTML = legacyLogSlotOptions();
+      return;
+    }
+    sel.innerHTML = data.map(s =>
+      `<option value="${s.id}" data-day="${s.day_label}">${s.day_label} · ${prettyDate(s.delivery_date)}</option>`
+    ).join('');
+  } catch (err) {
+    console.error('populateLogSlots error:', err);
+    sel.innerHTML = legacyLogSlotOptions();
+  }
 }
 
 // ============ MODAL ============
@@ -4501,11 +4858,22 @@ const HELP_PAGES = {
   runs: {
     label: 'Delivery Runs',
     sections: [
-      { icon:'🚚', title:'What is this page?', body:'Delivery Runs shows all orders grouped by delivery day — Monday, Wednesday, and Thursday. Each card is one customer order.' },
+      { icon:'🚚', title:'What is this page?', body:'Delivery Runs shows all orders grouped by delivery day. Each card is one customer order. You choose which days you\'re delivering on the <strong>Schedule</strong> page.' },
       { icon:'📋', title:'Order cards', body:'Each card shows the customer\'s name, whether they\'re domestic or trade, the order status, and how the order came in (website, phone, social media). Tap a card to open the full order details.' },
       { icon:'📍', title:'Route planner', body:'Press <strong>Plan route</strong> to get an optimised delivery order for that day\'s run. It works out the most efficient order of stops to save you time and fuel.' },
       { icon:'✅', title:'Marking as delivered', body:'Open an order card and change the status to <strong>Delivered</strong> once you\'ve dropped it off. This keeps your records up to date.' },
       { icon:'💬', title:'Quick temps', body:'The 🌡️ button lets you log delivery temperatures on the go without leaving this page — useful when you\'re out on the road.' },
+    ]
+  },
+  schedule: {
+    label: 'Delivery Days',
+    sections: [
+      { icon:'🗓️', title:'What is this page?', body:'This is where you decide which days you\'re delivering. Your usual days appear automatically, but you\'re in charge — take a day off whenever you need, or add a one-off day. Nothing is fixed.' },
+      { icon:'📌', title:'Your usual days', body:'Set the days you normally deliver (Monday, Wednesday and Thursday to start). Tap the day buttons to turn them on or off, then press <strong>Save usual days</strong>. These days will keep appearing each week so you don\'t have to set them up every time.' },
+      { icon:'🌴', title:'Taking a day off', body:'In the <strong>Upcoming runs</strong> list, press <strong>Take day off</strong> on any day. That day instantly disappears from the website so no new orders can come in for it. Changed your mind? Press <strong>Re-open</strong>.' },
+      { icon:'➕', title:'Adding a one-off day', body:'Delivering on a day you don\'t normally — say a Friday? Pick the date under <strong>Add a one-off delivery day</strong> and press <strong>Add this day</strong>. Any day of the week works.' },
+      { icon:'⚠️', title:'Orders need rebooking', body:'If you take a day off that already has orders on it, a red banner appears listing those customers with their phone number. Give them a quick call to rebook, then use <strong>Move</strong> to shift their order to another day, or <strong>Cancel</strong> if needed. Their orders are never lost without you deciding.' },
+      { icon:'🌐', title:'The website follows you', body:'Customers only ever see the days you\'ve opened here. Open a day and it appears on the website; take it off and it\'s gone. You don\'t have to tell anyone — the website keeps itself in step.' },
     ]
   },
   logorder: {
@@ -4514,7 +4882,7 @@ const HELP_PAGES = {
       { icon:'✏️', title:'What is this page?', body:'Use Log Order to manually record any order that came in by phone, text, or social media — so everything ends up in one place.' },
       { icon:'👤', title:'Customer lookup', body:'Start typing a customer\'s name in the search box. If they\'ve ordered before, they\'ll appear in the list and their address will fill in automatically.' },
       { icon:'🛒', title:'Adding items', body:'Select a product from the dropdown, enter the quantity, and press <strong>Add item</strong>. Repeat for each product in the order. The total updates automatically.' },
-      { icon:'📅', title:'Delivery day', body:'Choose Monday, Wednesday, or Thursday for the delivery slot. The order will appear in that day\'s delivery run.' },
+      { icon:'📅', title:'Delivery day', body:'The delivery day list shows the days you\'ve opened on the <strong>Schedule</strong> page, each with its date. Pick the one the customer wants and the order lands in that day\'s run. If a day you need isn\'t listed, open it first on the Schedule page.' },
       { icon:'💬', title:'Notes', body:'Use the notes box for anything special — e.g. "leave by back gate" or "call on arrival". Jon will see this on the order card.' },
       { icon:'💰', title:'Minimum order', body:'Orders under £20 will automatically have the £5 small-order charge added. Customers marked as exempt (family/friends) won\'t see this charge.' },
     ]
