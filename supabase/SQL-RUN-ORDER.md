@@ -132,6 +132,15 @@ Safe for the website — it places orders via the `place_order` RPC, not direct 
 
 ---
 
+### 10. `010_fix_slot_count_on_move.sql`
+**What it does:** Fixes delivery-day order counts when an order is moved.
+
+The order-count trigger didn't adjust when an order was moved between days (e.g. rebooking a customer off a day off), so a cleared day could still show "1 order booked." This updates the trigger to handle moves and reconciles every slot's count from the actual orders, fixing any counts that already drifted.
+
+**When to run:** As soon as possible. Safe on the live database.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

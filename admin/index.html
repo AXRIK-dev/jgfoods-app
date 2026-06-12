@@ -3589,6 +3589,7 @@ async function openDay(dateStr, dayName) {
       if (error) throw error;
     }
     await loadSchedule();
+    if (typeof loadAppData === 'function') await loadAppData();
   } catch (err) {
     console.error('openDay error:', err);
     alert('Could not open that day. Please try again.');
@@ -3602,6 +3603,7 @@ async function closeDay(slotId) {
     const { error } = await supabase.from('delivery_slots').update({ is_open: false }).eq('id', slotId);
     if (error) throw error;
     await loadSchedule();
+    if (typeof loadAppData === 'function') await loadAppData();
   } catch (err) {
     console.error('closeDay error:', err);
     alert('Could not close that day. Please try again.');
@@ -3671,6 +3673,7 @@ async function moveOrder(orderId) {
     const { error } = await supabase.from('orders').update({ delivery_slot_id: newSlotId }).eq('id', orderId);
     if (error) throw error;
     await loadSchedule();
+    if (typeof loadAppData === 'function') await loadAppData();
   } catch (err) {
     console.error('moveOrder error:', err);
     alert('Could not move that order. Please try again.');
@@ -3684,6 +3687,7 @@ async function cancelAffectedOrder(orderId) {
     const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', orderId);
     if (error) throw error;
     await loadSchedule();
+    if (typeof loadAppData === 'function') await loadAppData();
   } catch (err) {
     console.error('cancelAffectedOrder error:', err);
     alert('Could not cancel that order. Please try again.');
