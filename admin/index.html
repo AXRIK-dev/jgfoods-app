@@ -508,6 +508,7 @@
       <div class="tn-link" onclick="showPage('customers')">Customers</div>
       <div class="tn-link" id="nav-finance" onclick="showPage('finance')">Finance</div>
       <div class="tn-link" onclick="showPage('vip')">⭐ VIP</div>
+      <div class="tn-link" id="nav-social" onclick="showPage('social')">📣 Social</div>
       <div class="tn-link" onclick="showPage('temps')">🌡️ Temps</div>
       <div class="tn-link" id="nav-invoices" onclick="showPage('invoices')">📄 Invoices</div>
     </div>
@@ -890,37 +891,80 @@
     </div>
   </div>
 
-  <!-- social posts — side by side after save -->
-  <div style="margin-top:22px;display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:900px">
+  <p style="margin-top:18px;font-size:12.5px;color:var(--ink-soft)">
+    Want to tell customers what's available? Head to the
+    <a href="#" onclick="showPage('social');return false;" style="color:var(--navy);font-weight:700">📣 Social</a>
+    tab to write a Facebook &amp; Instagram post.
+  </p>
+</div>
 
-    <div style="display:none" id="socialPostBox">
-      <div class="dash-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <h3 style="margin-bottom:0;font-size:14px">📘 Facebook post</h3>
-          <button style="font-size:11px;font-weight:700;color:var(--ink-soft);padding:4px 9px;border:1px solid var(--line);border-radius:7px" onclick="document.getElementById('socialPostBox').style.display='none'">✕</button>
-        </div>
-        <textarea id="socialPostText" style="width:100%;min-height:180px;border:1.5px solid var(--line);border-radius:9px;padding:12px;font-size:12.5px;line-height:1.6;resize:vertical;font-family:var(--body);color:var(--ink);background:var(--paper)"></textarea>
-        <div style="margin-top:9px;display:flex;gap:7px">
-          <button class="btn-add" style="font-size:12px;padding:9px 14px" onclick="copyPost('socialPostText',this)">Copy</button>
-          <a href="https://www.facebook.com" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;background:var(--navy);color:#fff;font-weight:800;font-size:12px;padding:9px 14px;border-radius:9px">Open Facebook →</a>
-        </div>
-      </div>
+<!-- ============ PAGE: SOCIAL ============ -->
+<div class="page" id="page-social">
+  <div class="pagehead">
+    <div>
+      <div class="eyebrow">Marketing</div>
+      <h1>📣 Social Posts</h1>
+      <p style="color:var(--ink-soft);font-size:13px;max-width:620px">Write one post for Facebook &amp; Instagram. Jot a few notes, let it write the post neatly, then copy it and schedule it in Meta Business Suite when you want it to go out.</p>
     </div>
+  </div>
 
-    <div style="display:none" id="instagramPostBox">
-      <div class="dash-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <h3 style="margin-bottom:0;font-size:14px">📸 Instagram post</h3>
-          <button style="font-size:11px;font-weight:700;color:var(--ink-soft);padding:4px 9px;border:1px solid var(--line);border-radius:7px" onclick="document.getElementById('instagramPostBox').style.display='none'">✕</button>
-        </div>
-        <textarea id="instagramPostText" style="width:100%;min-height:180px;border:1.5px solid var(--line);border-radius:9px;padding:12px;font-size:12.5px;line-height:1.6;resize:vertical;font-family:var(--body);color:var(--ink);background:var(--paper)"></textarea>
-        <div style="margin-top:9px;display:flex;gap:7px">
-          <button class="btn-add" style="font-size:12px;padding:9px 14px" onclick="copyPost('instagramPostText',this)">Copy</button>
-          <a href="https://www.instagram.com" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045);color:#fff;font-weight:800;font-size:12px;padding:9px 14px;border-radius:9px">Open Instagram →</a>
-        </div>
-      </div>
+  <!-- Writer -->
+  <div class="dash-card" style="max-width:720px">
+    <label style="display:block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-soft);margin-bottom:7px">What do you want to say?</label>
+    <textarea id="socialNotes" placeholder="e.g. Diary's open for delivery Monday and Thursday this week — add the availability list" style="width:100%;min-height:90px;border:1.5px solid var(--line);border-radius:9px;padding:12px;font-size:13px;line-height:1.6;resize:vertical;font-family:var(--body);color:var(--ink);background:var(--paper)"></textarea>
+
+    <label style="display:flex;align-items:center;gap:9px;margin-top:12px;font-size:13px;color:var(--ink);cursor:pointer">
+      <input type="checkbox" id="socialInclAvail" checked style="width:17px;height:17px;cursor:pointer">
+      Include this week's availability list (live products &amp; prices)
+    </label>
+
+    <div style="margin-top:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button class="btn-navy" id="socialGenBtn" style="font-size:13px;padding:11px 18px" onclick="generatePostNow(this)">✦ Generate post</button>
+      <span id="socialGenHint" style="font-size:11.5px;color:var(--ink-soft)"></span>
     </div>
+  </div>
 
+  <!-- Result -->
+  <div class="dash-card" id="socialResultCard" style="max-width:720px;display:none;margin-top:18px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
+      <h3 style="margin-bottom:0;font-size:14px">Your post — Facebook &amp; Instagram</h3>
+      <span id="socialSourceTag" style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;padding:3px 9px;border-radius:10px;background:var(--green-soft, #d9f0e0);color:#1a6640"></span>
+    </div>
+    <textarea id="socialResult" style="width:100%;min-height:260px;border:1.5px solid var(--line);border-radius:9px;padding:12px;font-size:12.5px;line-height:1.6;resize:vertical;font-family:var(--body);color:var(--ink);background:var(--paper)"></textarea>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-add" style="font-size:12px;padding:9px 14px" onclick="copyPost('socialResult',this)">📋 Copy</button>
+      <button class="btn-add" style="font-size:12px;padding:9px 14px;background:#fff;border:1.5px solid var(--line);color:var(--ink)" onclick="saveSocialToHistory(this)">💾 Save to history</button>
+      <a href="https://business.facebook.com/latest/composer" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;background:var(--navy);color:#fff;font-weight:800;font-size:12px;padding:9px 14px;border-radius:9px;text-decoration:none">Open Facebook →</a>
+      <a href="https://www.instagram.com" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045);color:#fff;font-weight:800;font-size:12px;padding:9px 14px;border-radius:9px;text-decoration:none">Open Instagram →</a>
+    </div>
+    <p style="margin-top:9px;font-size:11px;color:var(--ink-soft)">Tip: copy the post, then in Meta Business Suite paste it and pick the time you want it to go live.</p>
+  </div>
+
+  <!-- House style -->
+  <div class="dash-card" style="max-width:720px;margin-top:18px">
+    <h3 style="font-size:14px;margin-bottom:4px">Your usual style</h3>
+    <p style="font-size:12px;color:var(--ink-soft);margin-bottom:12px">These get added to every post so it always sounds like you. Edit any time.</p>
+
+    <label style="display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft);margin-bottom:5px">How people order (call-to-action line)</label>
+    <input id="soc-channels" type="text" style="width:100%;border:1.5px solid var(--line);border-radius:8px;padding:10px;font-size:12.5px;font-family:var(--body);color:var(--ink);background:var(--paper);margin-bottom:12px">
+
+    <label style="display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft);margin-bottom:5px">Sign-off</label>
+    <input id="soc-signoff" type="text" style="width:100%;border:1.5px solid var(--line);border-radius:8px;padding:10px;font-size:12.5px;font-family:var(--body);color:var(--ink);background:var(--paper);margin-bottom:12px">
+
+    <label style="display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft);margin-bottom:5px">Hashtags</label>
+    <textarea id="soc-hashtags" style="width:100%;min-height:56px;border:1.5px solid var(--line);border-radius:8px;padding:10px;font-size:12.5px;line-height:1.5;resize:vertical;font-family:var(--body);color:var(--ink);background:var(--paper)"></textarea>
+
+    <div style="margin-top:12px;display:flex;align-items:center;gap:12px">
+      <button class="btn-add" style="font-size:12px;padding:9px 14px" onclick="saveSocialStyle(this)">Save style</button>
+      <span id="socialStyleMsg" style="display:none;font-size:12px;color:#1a6640;font-weight:700">✓ Saved</span>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="dash-card" style="max-width:720px;margin-top:18px">
+    <h3 style="font-size:14px;margin-bottom:4px">Recent posts</h3>
+    <p style="font-size:12px;color:var(--ink-soft);margin-bottom:12px">Your last posts. Tap one to reuse it — and new posts learn from these so they keep your voice.</p>
+    <div id="socialHistory"><p style="font-size:12.5px;color:var(--ink-soft)">No saved posts yet.</p></div>
   </div>
 </div>
 
@@ -1694,14 +1738,14 @@ function applyRoleRestrictions() {
   if (currentUserRole === 'admin') return; // admin sees everything
 
   // Nav items to hide for drivers
-  const driverHidden = ['nav-invoices', 'nav-finance', 'qa-finance'];
+  const driverHidden = ['nav-invoices', 'nav-finance', 'qa-finance', 'nav-social'];
   driverHidden.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
   });
 
   // If driver somehow lands on a restricted page, redirect to orders
-  const restrictedPages = ['invoices', 'finance'];
+  const restrictedPages = ['invoices', 'finance', 'social'];
   const currentPage = document.querySelector('.page.active');
   if (currentPage && restrictedPages.includes(currentPage.id)) {
     showPage('runs');
@@ -2024,6 +2068,7 @@ function showPage(id) {
   if (id === 'dashboard') renderDashboard();
   if (id === 'schedule')  loadSchedule();
   if (id === 'logorder')  populateLogSlots();
+  if (id === 'social')    loadSocial();
 }
 
 // ============ TABS ============
@@ -2422,12 +2467,7 @@ async function savePrices() {
       if (pendingImgs.length) renderStock();
     }
 
-    generateSocialPost('facebook');
-    generateSocialPost('instagram');
-    document.getElementById('socialPostBox').style.display = 'block';
-    document.getElementById('instagramPostBox').style.display = 'block';
-    document.getElementById('socialPostBox').scrollIntoView({behavior:'smooth'});
-    if (btn) { btn.textContent = '✓ Saved & posts ready'; btn.disabled = false;
+    if (btn) { btn.textContent = '✓ Saved'; btn.disabled = false;
       setTimeout(() => btn.textContent = 'Save changes', 3000); }
   } catch (err) {
     console.error('Save products error:', err);
@@ -2445,44 +2485,183 @@ function addNewProduct() {
   renderStock();
 }
 
-function generateSocialPost(platform) {
-  const liveItems = sampleProducts.filter(p => p.live);
+// ============ SOCIAL POSTS ============
+// Generation-only: Jon writes notes, the post is written cleanly
+// (AI via Netlify function, with a template fallback), then he copies
+// it and schedules it himself in Meta Business Suite.
 
-  // Build hero products (first 3 live items with a punchy description)
-  const heroDesc = {
-    'chicken': 'our fresh skinless fillets are a staple for a reason',
-    'steak': 'hand-cut and well-marbled — proper steak at a proper price',
-    'bbq': 'burgers, sausages, kebabs and more — everything you need for the grill',
-    'pack': 'everything you need for the week in one box',
-    'kebab': 'chicken, lamb and beef kebabs with your choice of seasoning',
-  };
+const SOCIAL_STYLE_DEFAULTS = {
+  channels: '💬 DM to order  ·  🌐 jgfoodsnorthwest.com  ·  📞 07702 852704',
+  signoff:  'Thanks, Jon 😊',
+  hashtags: '#JGFoods #FreshMeat #Ormskirk #WestLancashire #LocalButcher #MeatDelivery #HomeDelivery #SupportLocal',
+};
+let socialStyle   = { ...SOCIAL_STYLE_DEFAULTS };
+let socialHistory = [];      // recent posts (for reuse + AI examples)
+let socialAiAvailable = true; // flips to false if the function isn't wired
 
-  if (platform === 'facebook') {
-    // Lead with 3 hero products with appetite-led descriptions
-    const heroes = liveItems.slice(0, 3).map(p => {
-      const desc = heroDesc[p.cat] || 'quality guaranteed';
-      return `🥩 ${p.name} — £${p.price.toFixed(2)}\n   ${desc.charAt(0).toUpperCase() + desc.slice(1)}.`;
-    }).join('\n\n');
-
-    // Full list for the rest
-    const rest = liveItems.slice(3);
-    const restLines = rest.length ? `\nAlso available this week:\n${rest.map(p => `• ${p.name} — £${p.price.toFixed(2)}`).join('\n')}` : '';
-
-    const post = `Hi Everyone 👋\n\nThe diary is open for this week — Monday and Thursday afternoon delivery slots available!\n\n${heroes}${restLines}\n\nOrder before Sunday midnight for Monday, or Wednesday midnight for Thursday. Slots fill up fast so get in early 👇\n\n💬 Message me to order\n🌐 jgfoods.co.uk\n📞 07702 852704\n\nThanks 😊\n\n#JGFoods #FreshMeat #Ormskirk #WestLancashire #Maghull #LocalButcher #MeatDelivery #HomeDelivery #SupportLocal`;
-
-    document.getElementById('socialPostText').value = post;
-    document.getElementById('socialPostBox').style.display = 'block';
-
-  } else {
-    // Instagram — shorter, punchier, more visual
-    const topThree = liveItems.slice(0, 3).map(p => `✅ ${p.name} — £${p.price.toFixed(2)}`).join('\n');
-    const more = liveItems.length > 3 ? `\n+ ${liveItems.length - 3} more cuts available` : '';
-
-    const post = `Fresh meat. Delivered to your door. 🥩\n\nThis week's highlights:\n${topThree}${more}\n\n📦 Mon & Thu deliveries across Ormskirk & West Lancashire\n🛒 Order at jgfoods.co.uk or DM us\n⏰ Cut-off: Sun midnight (Mon) · Wed midnight (Thu)\n\n#JGFoods #FreshMeat #MobileButcher #Ormskirk #WestLancashire #Maghull #LocalButcher #MeatDelivery #HomeDelivery #FreshFromTheFarm #SupportLocal #NorthWest #FoodDelivery #QualityMeat #ButcherDelivery`;
-
-    document.getElementById('instagramPostText').value = post;
-    document.getElementById('instagramPostBox').style.display = 'block';
+async function loadSocial() {
+  // House style from app_settings
+  if (supabase) {
+    try {
+      const { data } = await supabase.from('app_settings').select('value').eq('key', 'social_style').single();
+      if (data?.value) socialStyle = { ...SOCIAL_STYLE_DEFAULTS, ...data.value };
+    } catch (e) { /* keep defaults */ }
   }
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('soc-channels', socialStyle.channels);
+  set('soc-signoff',  socialStyle.signoff);
+  set('soc-hashtags', socialStyle.hashtags);
+
+  await loadSocialHistory();
+}
+
+function liveProductLines() {
+  return sampleProducts.filter(p => p.live).map(p => `${p.name} — £${Number(p.price).toFixed(2)}`);
+}
+
+// Built-in fallback writer — used when the AI function isn't available.
+function buildTemplatePost(notes, inclAvail) {
+  const lines = [];
+  const intro = (notes || '').trim() || "The diary's open this week — get your order in!";
+  lines.push(intro);
+  if (inclAvail) {
+    const items = liveProductLines();
+    if (items.length) {
+      lines.push('');
+      lines.push("This week's list:");
+      items.forEach(i => lines.push(`🥩 ${i}`));
+    }
+  }
+  lines.push('');
+  if (socialStyle.channels) lines.push(socialStyle.channels);
+  if (socialStyle.signoff)  { lines.push(''); lines.push(socialStyle.signoff); }
+  if (socialStyle.hashtags) { lines.push(''); lines.push(socialStyle.hashtags); }
+  return lines.join('\n');
+}
+
+async function generatePostNow(btn) {
+  const notes     = document.getElementById('socialNotes').value;
+  const inclAvail = document.getElementById('socialInclAvail').checked;
+  const hint      = document.getElementById('socialGenHint');
+  if (btn) { btn.disabled = true; btn.textContent = '✦ Writing…'; }
+  if (hint) hint.textContent = '';
+
+  let post = '';
+  let source = 'template';
+
+  try {
+    const resp = await fetch('/.netlify/functions/generate-post', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        notes,
+        availability: inclAvail ? liveProductLines().join('\n') : '',
+        examples: socialHistory.slice(0, 5).map(p => p.post_text),
+        style: socialStyle,
+      }),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.post) { post = data.post; source = 'ai'; }
+    } else {
+      socialAiAvailable = false;
+    }
+  } catch (e) {
+    socialAiAvailable = false;
+  }
+
+  if (!post) post = buildTemplatePost(notes, inclAvail);
+
+  document.getElementById('socialResult').value = post;
+  const tag = document.getElementById('socialSourceTag');
+  if (tag) {
+    tag.textContent = source === 'ai' ? '✦ AI written' : 'Draft';
+    tag.style.background = source === 'ai' ? '#e8f0fe' : '#f6e5cf';
+    tag.style.color      = source === 'ai' ? '#1a4fad' : 'var(--oxblood)';
+  }
+  document.getElementById('socialResultCard').style.display = 'block';
+  document.getElementById('socialResultCard').scrollIntoView({ behavior: 'smooth' });
+  if (hint) hint.textContent = source === 'ai'
+    ? ''
+    : 'Written from your notes + list. (Add your Anthropic key in Netlify to switch on full AI writing.)';
+  if (btn) { btn.disabled = false; btn.textContent = '✦ Generate post'; }
+}
+
+async function saveSocialStyle(btn) {
+  socialStyle = {
+    channels: document.getElementById('soc-channels').value.trim(),
+    signoff:  document.getElementById('soc-signoff').value.trim(),
+    hashtags: document.getElementById('soc-hashtags').value.trim(),
+  };
+  if (supabase) {
+    try {
+      await supabase.from('app_settings').upsert({ key: 'social_style', value: socialStyle }, { onConflict: 'key' });
+    } catch (e) { console.error('saveSocialStyle error:', e); }
+  }
+  const msg = document.getElementById('socialStyleMsg');
+  if (msg) { msg.style.display = 'inline'; setTimeout(() => { msg.style.display = 'none'; }, 1800); }
+}
+
+async function saveSocialToHistory(btn) {
+  const post = document.getElementById('socialResult').value.trim();
+  if (!post) return;
+  const notes = document.getElementById('socialNotes').value.trim();
+  const inclAvail = document.getElementById('socialInclAvail').checked;
+  const source = (document.getElementById('socialSourceTag')?.textContent || '').includes('AI') ? 'ai' : 'template';
+  if (supabase) {
+    try {
+      await supabase.from('social_posts').insert({
+        raw_notes: notes || null,
+        post_text: post,
+        included_availability: inclAvail,
+        source,
+        status: 'used',
+      });
+    } catch (e) { console.error('saveSocialToHistory error:', e); }
+  }
+  if (btn) { const o = btn.textContent; btn.textContent = '✓ Saved'; setTimeout(() => btn.textContent = o, 2000); }
+  await loadSocialHistory();
+}
+
+async function loadSocialHistory() {
+  if (supabase) {
+    try {
+      const { data } = await supabase
+        .from('social_posts')
+        .select('id, post_text, created_at')
+        .order('created_at', { ascending: false })
+        .limit(8);
+      socialHistory = data || [];
+    } catch (e) { socialHistory = []; }
+  }
+  renderSocialHistory();
+}
+
+function renderSocialHistory() {
+  const el = document.getElementById('socialHistory');
+  if (!el) return;
+  if (!socialHistory.length) {
+    el.innerHTML = '<p style="font-size:12.5px;color:var(--ink-soft)">No saved posts yet.</p>';
+    return;
+  }
+  el.innerHTML = socialHistory.map(p => {
+    const when = new Date(p.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const preview = (p.post_text || '').replace(/\s+/g, ' ').slice(0, 110);
+    const safe = encodeURIComponent(p.post_text || '');
+    return `<div onclick="reuseSocialPost('${safe}')" style="border:1px solid var(--line);border-radius:9px;padding:11px 13px;margin-bottom:8px;cursor:pointer;background:#fff">
+      <div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft);font-weight:700">${when}</div>
+      <div style="font-size:12.5px;color:var(--ink);margin-top:3px">${preview}${preview.length >= 110 ? '…' : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function reuseSocialPost(encoded) {
+  const text = decodeURIComponent(encoded);
+  document.getElementById('socialResult').value = text;
+  const tag = document.getElementById('socialSourceTag');
+  if (tag) { tag.textContent = 'Reused'; tag.style.background = '#f6e5cf'; tag.style.color = 'var(--oxblood)'; }
+  document.getElementById('socialResultCard').style.display = 'block';
+  document.getElementById('socialResultCard').scrollIntoView({ behavior: 'smooth' });
 }
 
 function copyPost(textareaId, btn) {
@@ -5016,6 +5195,16 @@ const HELP_PAGES = {
       { icon:'📦', title:'The cards at the top', body:'These update live: <strong>Next run</strong> shows how many orders are booked for your next delivery day, <strong>This week revenue</strong>, <strong>Unpaid invoices</strong>, and <strong>Active customers</strong>. The date and greeting at the top, and the cut-off reminder, all follow your actual next delivery day from the Schedule.' },
       { icon:'⚡', title:'Quick actions', body:'The buttons in the middle let you do the most common tasks in one click — log an order, view your delivery runs, edit availability, or check finances.' },
       { icon:'💰', title:'Money owed', body:'The <strong>Outstanding</strong> figure shows what trade customers still owe you. Click it to go to Invoices and see exactly who hasn\'t paid.' },
+    ]
+  },
+  social: {
+    label: 'Social Posts',
+    sections: [
+      { icon:'📣', title:'What is this page?', body:'Social Posts writes a Facebook &amp; Instagram post for you. Jot down what you want to say, press <strong>Generate post</strong>, and you get one tidy post for both. It doesn\'t post for you — you copy it and schedule it yourself in Meta Business Suite.' },
+      { icon:'✍️', title:'Writing a post', body:'Type a few rough notes — e.g. "diary\'s open for Monday and Thursday this week". Leave <strong>Include this week\'s availability list</strong> ticked to pull in your live products and prices automatically. Then press <strong>Generate post</strong>.' },
+      { icon:'📋', title:'Copy &amp; schedule', body:'When the post appears, tweak any wording you like, press <strong>Copy</strong>, then <strong>Open Facebook</strong> or <strong>Open Instagram</strong>. Paste it in and choose the date/time you want it to go live — for example 8am on Wednesday.' },
+      { icon:'⭐', title:'Your usual style', body:'The <strong>Your usual style</strong> box holds how people order, your sign-off, and your hashtags. These get added to every post so it always sounds like you. Edit them any time and press <strong>Save style</strong>.' },
+      { icon:'🕑', title:'Recent posts', body:'Posts you save show under <strong>Recent posts</strong>. Tap one to reuse it, and new posts learn from these so they keep your voice and wording.' },
     ]
   },
   runs: {
