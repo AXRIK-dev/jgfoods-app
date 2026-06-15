@@ -7,11 +7,15 @@
 // availability + a few recent posts (style examples) + his house
 // style, and returns one clean post for Facebook & Instagram.
 //
+// Lives at the repo root under netlify/functions/ because the admin
+// Netlify site uses base directory "/" with functions directory
+// "netlify/functions". Served at /.netlify/functions/generate-post.
+//
 // SETUP (one-off):
-//   1. Anthropic console → create an API key.
-//   2. Netlify → the ADMIN site → Site settings → Environment
+//   1. Anthropic console → create an API key (+ a little credit).
+//   2. Netlify → the ADMIN site → Site configuration → Environment
 //      variables → add  ANTHROPIC_API_KEY = <your key>.
-//   3. Deploy. The admin calls /.netlify/functions/generate-post.
+//   3. Trigger deploy.
 // If the key is missing the function returns 503 and the admin
 // quietly falls back to its built-in template generator.
 //
