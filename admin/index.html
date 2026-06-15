@@ -1287,7 +1287,7 @@
       <div style="flex-shrink:0">
         <p style="font-size:10px;color:var(--gold-soft);font-weight:700;margin-bottom:6px">Message preview</p>
         <div style="background:rgba(255,255,255,.08);border:1px solid rgba(224,189,114,.2);border-radius:10px;padding:13px;max-width:300px">
-          <textarea id="vipMessageText" style="background:none;border:none;color:rgba(255,255,255,.85);font-size:12px;line-height:1.6;width:100%;min-height:100px;resize:vertical;font-family:var(--body)">Hi [Name] 🎄 As one of our best customers, you get first pick of our Christmas delivery slots before we open up to everyone. Order here: jgfoods.co.uk — slots are limited so don't leave it too long! Thanks, Jon</textarea>
+          <textarea id="vipMessageText" style="background:none;border:none;color:rgba(255,255,255,.85);font-size:12px;line-height:1.6;width:100%;min-height:100px;resize:vertical;font-family:var(--body)">Hi [Name] 🎄 As one of our best customers, you get first pick of our Christmas delivery slots before we open up to everyone. Order here: jgfoodsnorthwest.com — slots are limited so don't leave it too long! Thanks, Jon</textarea>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px">
           <button class="btn-gold" style="font-size:12px;padding:9px 14px" onclick="sendVIPMessage()">Send to all VIPs</button>
@@ -3056,6 +3056,7 @@ function invPaymentSummary(inv) {
 
 function renderInvoices(filter) {
   const list = document.getElementById('invoiceList');
+  if (!list) return;
   const shown = filter && filter !== 'all'
     ? sampleInvoices.filter(i => i.status === filter)
     : sampleInvoices;
@@ -4064,8 +4065,8 @@ function sendVIPMessage() {
 function generateVIPMessage() {
   // TODO: Claude API call to redraft the message
   const suggestions = [
-    `Hi [Name] 🎄 It's that time of year! As one of our most valued customers, you're getting first access to our Christmas delivery slots — before we open bookings to everyone else. Head to jgfoods.co.uk to secure your slot. Cheers, Jon`,
-    `Hi [Name] — quick heads up! 🎁 Christmas slots are filling fast and you're getting first dibs as one of our VIPs. Order at jgfoods.co.uk before we open to everyone. Don't miss out! Jon`,
+    `Hi [Name] 🎄 It's that time of year! As one of our most valued customers, you're getting first access to our Christmas delivery slots — before we open bookings to everyone else. Head to jgfoodsnorthwest.com to secure your slot. Cheers, Jon`,
+    `Hi [Name] — quick heads up! 🎁 Christmas slots are filling fast and you're getting first dibs as one of our VIPs. Order at jgfoodsnorthwest.com before we open to everyone. Don't miss out! Jon`,
   ];
   document.getElementById('vipMessageText').value = suggestions[Math.floor(Math.random() * suggestions.length)];
 }
