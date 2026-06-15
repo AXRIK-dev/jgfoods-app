@@ -12,6 +12,8 @@ Thumbs.db
 
 # Temp files
 ~$*
+# docx unpack working dir (leftover from build-summary generation)
+docs/client-facing/_dxtmp/
 
 # Logs
 *.log
