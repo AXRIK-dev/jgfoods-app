@@ -1387,6 +1387,20 @@
     </div>
 
   </div>
+
+  <!-- Saved invoices & receipts list -->
+  <div style="margin-top:32px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <h2 style="font-family:var(--display);font-size:20px;font-weight:600;color:var(--navy);margin:0">Saved invoices &amp; receipts</h2>
+      <div style="display:flex;gap:6px">
+        <button class="btn-add" style="font-size:12px;padding:7px 13px" onclick="renderInvoices('all')">All</button>
+        <button class="btn-add" style="font-size:12px;padding:7px 13px" onclick="renderInvoices('sent')">Unpaid</button>
+        <button class="btn-add" style="font-size:12px;padding:7px 13px" onclick="renderInvoices('paid')">Paid</button>
+        <button class="btn-add" style="font-size:12px;padding:7px 13px" onclick="renderInvoices('overdue')">Overdue</button>
+      </div>
+    </div>
+    <div id="invoiceList" style="display:flex;flex-direction:column;gap:9px"></div>
+  </div>
 </div>
 
 <!-- ============ SEND MODAL ============ -->
@@ -2135,6 +2149,7 @@ function showPage(id) {
   if (id === 'stock')     renderStock();
   if (id === 'customers') renderCustomers();
   if (id === 'finance')   renderInvoices();
+  if (id === 'invoices')  { populateInvoiceCustomerSelect(); renderInvoices(); }
   if (id === 'dashboard') renderDashboard();
   if (id === 'schedule')  loadSchedule();
   if (id === 'logorder')  { populateLogSlots(); refreshLogProductOptions(); }
@@ -3130,6 +3145,10 @@ function renderInvoices(filter) {
   const shown = filter && filter !== 'all'
     ? sampleInvoices.filter(i => i.status === filter)
     : sampleInvoices;
+  if (!shown.length) {
+    list.innerHTML = `<div style="text-align:center;padding:34px 20px;color:var(--ink-soft);font-size:13px;background:#fff;border:1px solid var(--line-soft);border-radius:11px">No invoices or receipts yet. They appear here automatically when an order comes in — or build one above.</div>`;
+    return;
+  }
   list.innerHTML = shown.map(inv => {
     const paid = invPaidTotal(inv);
     const bal  = invBalance(inv);
