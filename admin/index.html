@@ -691,7 +691,7 @@
     <div id="pasteBox" style="margin-bottom:16px">
       <label style="font-size:11px;font-weight:700;color:var(--ink-soft);display:block;margin-bottom:5px">Paste the message from WhatsApp, text or social media</label>
       <textarea id="pasteInput" placeholder="e.g. Hi Jon, can I get 2x chicken fillets and a BBQ pack for Monday please? It's Dave Walsh, 9 Elm Close, Skelmersdale, 07766 666666" style="width:100%;min-height:90px;background:#fff;border:1.5px solid var(--line);border-radius:9px;padding:11px 13px;font-size:13px;color:var(--ink);resize:vertical;transition:.15s" onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--line)'"></textarea>
-      <button onclick="extractFromMessage()" style="margin-top:8px;background:var(--gold);color:var(--navy-deep);font-weight:800;font-size:13px;padding:10px 18px;border-radius:9px;display:flex;align-items:center;gap:7px;transition:.15s" onmouseover="this.style.background='var(--gold-bright)'" onmouseout="this.style.background='var(--gold)'">
+      <button id="extractBtn" onclick="extractFromMessage(this)" style="margin-top:8px;background:var(--gold);color:var(--navy-deep);font-weight:800;font-size:13px;padding:10px 18px;border-radius:9px;display:flex;align-items:center;gap:7px;transition:.15s" onmouseover="this.style.background='var(--gold-bright)'" onmouseout="this.style.background='var(--gold)'">
         ✦ Extract details
       </button>
       <div id="extractStatus" style="display:none;margin-top:10px;background:var(--green-soft);border:1px solid #cfdcc4;border-radius:9px;padding:10px 13px;font-size:12.5px;color:var(--green);font-weight:700"></div>
@@ -1284,7 +1284,7 @@
         </div>
         <div style="display:flex;gap:8px;margin-top:10px">
           <button class="btn-gold" style="font-size:12px;padding:9px 14px" onclick="sendVIPMessage()">💬 Send via WhatsApp</button>
-          <button class="btn-navy" style="font-size:12px;padding:9px 14px" onclick="generateVIPMessage()">✦ Redraft with AI</button>
+          <button class="btn-navy" style="font-size:12px;padding:9px 14px" onclick="generateVIPMessage(this)">✦ Redraft with AI</button>
         </div>
       </div>
     </div>
@@ -2850,66 +2850,90 @@ function togglePasteMode(isPaste) {
   document.getElementById('formTitle').style.display = isPaste ? 'none' : 'block';
 }
 
-function extractFromMessage() {
+async function extractFromMessage(btn) {
   const msg = document.getElementById('pasteInput').value.trim();
   if (!msg) { alert('Please paste a message first.'); return; }
+  if (!btn) btn = document.getElementById('extractBtn');
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.textContent = '✦ Extracting…'; btn.disabled = true; }
 
-  const btn = event.target;
-  btn.textContent = 'Extracting…';
-  btn.disabled = true;
-
-  // TODO: Replace with real Claude API call via Netlify Function
-  // POST /.netlify/functions/extract-order
-  // Body: { message: msg }
-  // Claude prompt: "Extract customer name, phone, address, delivery day (Monday/Thursday),
-  // and ordered products with quantities from this message. Return JSON."
-  //
-  // Example Netlify function using Anthropic SDK:
-  // const response = await anthropic.messages.create({
-  //   model: 'claude-haiku-4-5-20251001',
-  //   max_tokens: 400,
-  //   messages: [{ role: 'user', content: `Extract order details as JSON from: "${message}"
-  //     Fields: name, phone, address, slot (mon/thu), items [{product, qty}], notes` }]
-  // });
-
-  // Simulated extraction — replace with real API response
-  setTimeout(() => {
-    const extracted = simulateExtract(msg);
-
-    if (extracted.name) document.getElementById('lo-name').value = extracted.name;
-    if (extracted.phone) document.getElementById('lo-phone').value = extracted.phone;
-    if (extracted.address) document.getElementById('lo-address').value = extracted.address;
-    if (extracted.slot) document.getElementById('lo-slot').value = extracted.slot;
-
-    // Fill items
-    if (extracted.items && extracted.items.length) {
-      document.getElementById('logItemsList').innerHTML = '';
-      logItemCount = 0;
-      extracted.items.forEach((item, i) => {
-        addLogItem();
-        const rows = document.querySelectorAll('.log-item-row');
-        const lastRow = rows[rows.length - 1];
-        const sel = lastRow.querySelector('.item-product');
-        const qtyInput = lastRow.querySelector('.item-qty');
-        // Try to match product name
-        for (let opt of sel.options) {
-          if (opt.text.toLowerCase().includes(item.product.toLowerCase())) {
-            sel.value = opt.value;
-            break;
-          }
-        }
-        if (item.qty) qtyInput.value = item.qty;
-      });
-      updateLogTotal();
+  let extracted = null;
+  try {
+    const resp = await fetch('/.netlify/functions/ai', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        max_tokens: 500,
+        system: `You extract a butcher delivery order from a casual customer message (text, WhatsApp or social DM). Return ONLY valid minified JSON — no markdown, no commentary.`,
+        prompt: `Extract these fields and return JSON with exactly these keys: name (string), phone (string), address (string), day (one of Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday or ""), items (array of {product, qty}), notes (string). Use "" or [] when something isn't mentioned.\n\nMessage:\n"""${msg}"""`,
+      }),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.text) {
+        const jsonText = data.text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+        extracted = JSON.parse(jsonText);
+      }
     }
+  } catch (e) {
+    console.error('AI extract failed, using local fallback:', e);
+  }
 
-    const status = document.getElementById('extractStatus');
-    status.style.display = 'block';
-    status.textContent = `✓ Details extracted — please check and confirm before saving.`;
-    btn.textContent = '✦ Extract details';
-    btn.disabled = false;
-    togglePasteMode(false);
-  }, 900);
+  // Fall back to the basic local parser if the AI didn't return usable data
+  if (!extracted || (!extracted.name && !(extracted.items || []).length)) {
+    extracted = simulateExtract(msg);
+  }
+
+  fillLogFromExtract(extracted);
+
+  const status = document.getElementById('extractStatus');
+  if (status) { status.style.display = 'block'; status.textContent = '✓ Details extracted — please check everything before saving.'; }
+  if (btn) { btn.textContent = label || '✦ Extract details'; btn.disabled = false; }
+  togglePasteMode(false);
+}
+
+// Fill the Log Order form from an extracted order (handles AI and fallback shapes)
+function fillLogFromExtract(ex) {
+  if (!ex) return;
+  if (ex.name)    document.getElementById('lo-name').value = ex.name;
+  if (ex.phone)   document.getElementById('lo-phone').value = ex.phone;
+  if (ex.address) document.getElementById('lo-address').value = ex.address;
+  if (ex.notes)   { const n = document.getElementById('lo-notes'); if (n) n.value = ex.notes; }
+
+  // Delivery day: accept a day name (AI) or a legacy slot code (fallback parser)
+  const dayWord = ex.day
+    ? ex.day
+    : ({ mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday', sat:'Saturday', sun:'Sunday' }[ex.slot] || '');
+  if (dayWord) {
+    const slotSel = document.getElementById('lo-slot');
+    if (slotSel) {
+      for (const opt of slotSel.options) {
+        if (opt.text.toLowerCase().includes(dayWord.toLowerCase())) { slotSel.value = opt.value; break; }
+      }
+    }
+  }
+
+  // Items — match each against the live product dropdown
+  const items = ex.items || [];
+  if (items.length) {
+    document.getElementById('logItemsList').innerHTML = '';
+    logItemCount = 0;
+    items.forEach(item => {
+      addLogItem();
+      const rows = document.querySelectorAll('.log-item-row');
+      const lastRow = rows[rows.length - 1];
+      const sel = lastRow.querySelector('.item-product');
+      const qtyInput = lastRow.querySelector('.item-qty');
+      const wanted = (item.product || '').toLowerCase();
+      if (wanted) {
+        for (const opt of sel.options) {
+          if (opt.value && opt.text.toLowerCase().includes(wanted)) { sel.value = opt.value; break; }
+        }
+      }
+      if (item.qty) qtyInput.value = item.qty;
+    });
+    updateLogTotal();
+  }
 }
 
 function simulateExtract(msg) {
@@ -4268,13 +4292,35 @@ function sendVIPMessage() {
   whatsappVIP(sampleVIPs[0].id);
 }
 
-function generateVIPMessage() {
-  // TODO: Claude API call to redraft the message
-  const suggestions = [
+async function generateVIPMessage(btn) {
+  const ta = document.getElementById('vipMessageText');
+  const current = (ta.value || '').trim();
+  const fallback = [
     `Hi [Name] 🎄 It's that time of year! As one of our most valued customers, you're getting first access to our Christmas delivery slots — before we open bookings to everyone else. Head to jgfoodsnorthwest.com to secure your slot. Cheers, Jon`,
     `Hi [Name] — quick heads up! 🎁 Christmas slots are filling fast and you're getting first dibs as one of our VIPs. Order at jgfoodsnorthwest.com before we open to everyone. Don't miss out! Jon`,
   ];
-  document.getElementById('vipMessageText').value = suggestions[Math.floor(Math.random() * suggestions.length)];
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '✦ Redrafting…'; }
+
+  try {
+    const resp = await fetch('/.netlify/functions/ai', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        max_tokens: 400,
+        system: `You write short, warm WhatsApp/text messages for JG Foods, a mobile butcher near Ormskirk run by Jon Green. UK English, friendly and personal, never corporate or pushy. Keep [Name] exactly as a literal placeholder so it can be filled in per customer. Light, tasteful emoji is fine. Output ONLY the message text — no preamble, no quotation marks.`,
+        prompt: current
+          ? `Rewrite and improve this VIP customer message. Keep the same intent and any link or web address, and keep [Name] as a placeholder:\n\n${current}`
+          : `Write a short VIP message offering the customer early access to JG Foods' Christmas delivery slots before general release. Keep [Name] as a placeholder and point them to jgfoodsnorthwest.com.`,
+      }),
+    });
+    const data = resp.ok ? await resp.json() : null;
+    ta.value = (data && data.text) ? data.text : fallback[Math.floor(Math.random() * fallback.length)];
+  } catch (e) {
+    ta.value = fallback[Math.floor(Math.random() * fallback.length)];
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label || '✦ Redraft with AI'; }
+  }
 }
 
 // ============ ROUTE PLANNER ============
@@ -4315,7 +4361,7 @@ function openRoutePlanner(dateStr) {
   const label = runDayLabel(currentRunDay) || 'Delivery';
 
   document.getElementById('rmTitle').textContent = `${label} Route`;
-  document.getElementById('rmSubtitle').textContent = `${orders.length} stops · optimising…`;
+  document.getElementById('rmSubtitle').textContent = `${orders.length} stops · building route…`;
   document.getElementById('rmOptimising').style.display = 'block';
   document.getElementById('rmContent').style.display = 'none';
   document.getElementById('rmActions').style.display = 'none';
@@ -4336,27 +4382,20 @@ function renderRoute(orders, label) {
     return 0;
   });
 
-  // Simulated totals — in production from routes[0].distanceMeters / duration
-  const totalMiles = (optimised.length * 1.8 + 4).toFixed(1);
-  const totalMins = Math.round(optimised.length * 7 + 12);
   const totalValue = optimised.reduce((s, o) => s + o.total, 0);
+  const tradeCount = optimised.filter(o => o.type === 'trade').length;
 
   document.getElementById('rmSubtitle').textContent =
-    `${optimised.length} stops · ~${totalMiles} miles · ~${totalMins} mins`;
+    `${optimised.length} stops · tap Open in Google Maps for live directions`;
 
-  // Summary stats
+  // Summary stats — all real. Distance and drive time come from Google Maps
+  // itself when you open the route (free, no API key needed).
   document.getElementById('rmSummary').innerHTML = `
     <div class="rm-stat"><b>${optimised.length}</b><span>Stops</span></div>
-    <div class="rm-stat"><b>${totalMiles} mi</b><span>Est. distance</span></div>
-    <div class="rm-stat"><b>${totalMins} min</b><span>Est. drive time</span></div>
+    <div class="rm-stat"><b>${tradeCount}</b><span>Trade</span></div>
+    <div class="rm-stat"><b>${optimised.length - tradeCount}</b><span>Domestic</span></div>
     <div class="rm-stat"><b>£${totalValue.toFixed(2)}</b><span>Run value</span></div>
   `;
-
-  // Simulated leg durations (in production from routes[0].legs)
-  const legs = optimised.map((_, i) => ({
-    mins: Math.round(4 + Math.random() * 8),
-    miles: (0.8 + Math.random() * 2.5).toFixed(1)
-  }));
 
   // Build stop list
   const stopList = document.getElementById('stopList');
@@ -4380,10 +4419,6 @@ function renderRoute(orders, label) {
           <h4>${o.name}</h4>
           <div class="sc-addr">📍 ${o.address}</div>
           <div class="sc-items">${o.items}</div>
-          <div class="sc-leg">
-            <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1 5.5h9M6.5 2 10 5.5 6.5 9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Next stop: ${legs[i].mins} min · ${legs[i].miles} mi
-          </div>
         </div>
       </div>
     `;
@@ -5684,7 +5719,7 @@ const HELP_PAGES = {
     sections: [
       { icon:'🚚', title:'What is this page?', body:'Delivery Runs shows all orders grouped by delivery day. Each delivery day has its own tab — tap a tab to see that day\'s orders and pick list. Each card is one customer order. You choose which days you\'re delivering on the <strong>Schedule</strong> page.' },
       { icon:'📋', title:'Order cards', body:'Each card shows the customer\'s name, whether they\'re domestic or trade, the order status, and how the order came in (website, phone, social media). Tap a card to open the full order details.' },
-      { icon:'📍', title:'Route planner', body:'Press <strong>Plan route</strong> to get an optimised delivery order for that day\'s run. It works out the most efficient order of stops to save you time and fuel.' },
+      { icon:'📍', title:'Route planner', body:'Press <strong>Plan route</strong> to see that day\'s stops as a tidy run, then <strong>Open in Google Maps</strong> for live, turn-by-turn directions and drive times — straight to your phone, free. You can also copy the route link to share it.' },
       { icon:'✅', title:'Marking as delivered', body:'Open an order card and change the status to <strong>Delivered</strong> once you\'ve dropped it off. This keeps your records up to date.' },
       { icon:'💬', title:'Quick temps', body:'The 🌡️ button lets you log delivery temperatures on the go without leaving this page — useful when you\'re out on the road.' },
     ]
@@ -5703,8 +5738,9 @@ const HELP_PAGES = {
   logorder: {
     label: 'Log Order',
     sections: [
-      { icon:'✏️', title:'What is this page?', body:'Use Log Order to manually record any order that came in by phone, text, or social media — so everything ends up in one place.' },
-      { icon:'👤', title:'Customer lookup', body:'Start typing a customer\'s name in the search box. If they\'ve ordered before, they\'ll appear in the list and their address will fill in automatically.' },
+      { icon:'✏️', title:'What is this page?', body:'Use Log Order to record any order that came in by phone, text, or social media — so everything ends up in one place.' },
+      { icon:'📋', title:'Paste a message (AI fills it in)', body:'Got an order in a WhatsApp or Facebook message? Tap <strong>📋 Paste a message</strong>, paste the whole thing in, and press <strong>✦ Extract details</strong>. The AI reads it and fills in the customer, address, day and items for you. Always give it a quick check before saving — then it\'s saved like any other order (and a receipt/invoice is created automatically).' },
+      { icon:'👤', title:'Customer lookup', body:'Or enter it manually: start typing a customer\'s name in the search box. If they\'ve ordered before, they\'ll appear in the list and their address fills in automatically.' },
       { icon:'🛒', title:'Adding items', body:'Select a product from the dropdown, enter the quantity, and press <strong>Add item</strong>. Repeat for each product in the order. The total updates automatically.' },
       { icon:'📅', title:'Delivery day', body:'The delivery day list shows the days you\'ve opened on the <strong>Schedule</strong> page, each with its date. Pick the one the customer wants and the order lands in that day\'s run. If a day you need isn\'t listed, open it first on the Schedule page.' },
       { icon:'💬', title:'Notes', body:'Use the notes box for anything special — e.g. "leave by back gate" or "call on arrival". Jon will see this on the order card.' },
