@@ -1372,7 +1372,7 @@
             <div class="action-item" onclick="closeActionsMenu('invActionsMenu','invActionsBtn');downloadInvoicePDF()"><span class="ai-icon">📄</span> Download PDF</div>
             <div class="action-item" onclick="closeActionsMenu('invActionsMenu','invActionsBtn');printInvoice()"><span class="ai-icon">🖨</span> Print</div>
             <div class="action-item" onclick="closeActionsMenu('invActionsMenu','invActionsBtn');openSendModal('email')"><span class="ai-icon">✉️</span> Send via email</div>
-            <div class="action-item" onclick="closeActionsMenu('invActionsMenu','invActionsBtn');openSendModal('message')"><span class="ai-icon">💬</span> Send via message</div>
+            <div class="action-item" onclick="closeActionsMenu('invActionsMenu','invActionsBtn');openSendModal('message')"><span class="ai-icon">💬</span> Send via WhatsApp</div>
           </div>
         </div>
       </div>
@@ -1412,7 +1412,7 @@
         <textarea id="send-body"></textarea>
       </div>
       <div style="background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:10px 13px;font-size:11.5px;color:var(--ink-soft);margin-bottom:2px">
-        📎 The invoice will be attached as a PDF automatically when EmailJS is connected.
+        📎 Tip: use <strong>Download PDF</strong> first if you want to attach the PDF copy to this email.
       </div>
     </div>
 
@@ -1644,12 +1644,26 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script>
 // ============ SUPABASE CLIENT ============
 // For now the admin runs on demo data — no network dependency.
 const SUPABASE_URL = 'https://hnkidhqjsitrqhsxghjd.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhua2lkaHFqc2l0cnFoc3hnaGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NDI2NjMsImV4cCI6MjA5NjUxODY2M30.LI1QzERO5WMB2h9v2lUFIxN_NoEzCf8F6Q4tN1Jaq5A';
 window.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ============ EMAILJS (invoice / receipt email) ============
+// Fill these in from your EmailJS dashboard to send invoices/receipts by
+// email directly. Until they're set, "Send by email" falls back to opening
+// your email app with the message ready to go. The template must use the
+// variables: to_email, subject, message, from_name.
+const EMAILJS = {
+  publicKey:  '',   // EmailJS → Account → General → Public Key
+  serviceId:  '',   // EmailJS → Email Services → Service ID
+  templateId: '',   // EmailJS → Email Templates → Template ID
+};
+const EMAILJS_READY = !!(EMAILJS.publicKey && EMAILJS.serviceId && EMAILJS.templateId);
+if (EMAILJS_READY && window.emailjs) { try { emailjs.init({ publicKey: EMAILJS.publicKey }); } catch (e) {} }
 
 // ============ USER ROLE ============
 // 'admin' = Jon (full access)
@@ -1766,7 +1780,7 @@ async function loadAppData() {
 
       supabase
         .from('customers')
-        .select('id, name, customer_type, phone, address_line_1, notes, cash_tab, tab_settle_day')
+        .select('id, name, customer_type, phone, email, address_line_1, notes, cash_tab, tab_settle_day')
         .eq('is_active', true)
         .order('name'),
 
@@ -1817,8 +1831,9 @@ async function loadAppData() {
       (customersRes.data || []).forEach(c => sampleCustomers.push({
         id:           c.id,
         name:         c.name,
-        type:         c.customer_type,
+        type:         c.customer_type === 'commercial' ? 'trade' : (c.customer_type || 'domestic'),
         phone:        c.phone          || '',
+        email:        c.email          || '',
         address:      c.address_line_1 || '',
         notes:        c.notes          || '',
         cashTab:      c.cash_tab,
@@ -1839,7 +1854,7 @@ async function loadAppData() {
         sampleOrders.push({
           id:       o.id,
           name:     o.customers?.name          || 'Unknown',
-          type:     o.customers?.customer_type || 'domestic',
+          type:     o.customers?.customer_type === 'commercial' ? 'trade' : (o.customers?.customer_type || 'domestic'),
           slot,                                   // legacy bucket (dashboard)
           slotId:   o.delivery_slot_id || null,
           date:     o.delivery_slots?.delivery_date || null,
@@ -3142,8 +3157,8 @@ function renderInvoices(filter) {
           <div class="actions-menu" id="iam-${inv.id}">
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openPaymentModal('${inv.id}')"><span class="ai-icon">💷</span> Log payment</div>
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');printInvoice()"><span class="ai-icon">🖨</span> Download / Print</div>
-            <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openSendModal('email','${inv.name}','${inv.ref}','${inv.amount}')"><span class="ai-icon">✉️</span> Send via email</div>
-            <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openSendModal('message','${inv.name}','${inv.ref}','${inv.amount}')"><span class="ai-icon">💬</span> Send via message</div>
+            <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openSendModal('email','${inv.name}','${inv.ref}','${inv.amount}','${inv.id}')"><span class="ai-icon">✉️</span> Send via email</div>
+            <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openSendModal('message','${inv.name}','${inv.ref}','${inv.amount}','${inv.id}')"><span class="ai-icon">💬</span> Send via WhatsApp</div>
             <div class="action-item" style="color:#c0392b" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');deleteInvoice('${inv.id}','${inv.ref}','${inv.name.replace(/'/g,"\\'") }')"><span class="ai-icon">🗑</span> Delete invoice</div>
           </div>
         </div>
@@ -3318,57 +3333,112 @@ document.addEventListener('click', e => {
 // ============ SEND MODAL ============
 let sendMode = 'email';
 
-function openSendModal(mode, custName, invRef, amount) {
+// Gather everything we need to send. invId set -> load the saved invoice from
+// the DB (full line items); otherwise fall back to the on-screen builder state.
+async function getSendData(invId, custName, invRef, amount) {
+  let ref, type, name, total, items = [], phone = '', email = '', address = '';
+
+  if (invId && window.supabase) {
+    const { data: inv, error } = await window.supabase
+      .from('invoices')
+      .select('invoice_number, invoice_type, total_amount, customers(name, phone, email, address_line_1, customer_type), invoice_items(description, unit_price, quantity)')
+      .eq('id', invId).single();
+    if (!error && inv) {
+      ref     = inv.invoice_number;
+      type    = inv.invoice_type;
+      total   = parseFloat(inv.total_amount) || 0;
+      name    = inv.customers?.name || custName || 'Customer';
+      phone   = inv.customers?.phone || '';
+      email   = inv.customers?.email || '';
+      address = inv.customers?.address_line_1 || '';
+      items   = (inv.invoice_items || []).map(i => ({ desc: i.description, qty: i.quantity, price: parseFloat(i.unit_price) || 0 }));
+    }
+  }
+
+  if (!ref) {
+    // Builder context (or the DB load failed) — use what's on screen
+    const cust = custName
+      ? (sampleCustomers.find(c => c.name === custName) || { name: custName, phone:'', email:'', address:'', type:'domestic' })
+      : (INVOICE_CUSTOMERS.find(c => c.id === document.getElementById('inv-customer')?.value) || { name:'Customer', phone:'', email:'', address:'', type:'domestic' });
+    name    = cust.name;
+    phone   = cust.phone || '';
+    email   = cust.email || '';
+    address = cust.address || '';
+    type    = (cust.type === 'domestic') ? 'receipt' : (currentInvoiceType || 'invoice');
+    ref     = invRef || currentInvoiceRef || 'INV-XXXX';
+    items   = invItems.filter(i => i.desc && (parseFloat(i.qty)||0) > 0)
+      .map(i => ({ desc:i.desc, qty:parseFloat(i.qty)||0, price:parseFloat(i.price)||0 }));
+    total   = items.length ? items.reduce((s,i) => s + i.qty*i.price, 0)
+      : (parseFloat(String(amount||'').replace(/[^0-9.]/g,'')) || 0);
+  }
+
+  return { ref, type, name, total, items, phone, email, address };
+}
+
+function fmtMoney(n) { return '£' + (Number(n)||0).toFixed(2); }
+function itemLinesText(items) {
+  return (items||[]).map(i => `• ${i.desc} ×${i.qty} — ${fmtMoney((i.qty||0)*(i.price||0))}`).join('\n');
+}
+
+async function openSendModal(mode, custName, invRef, amount, invId) {
   sendMode = mode;
-  const overlay = document.getElementById('sendModalOverlay');
+  const overlay     = document.getElementById('sendModalOverlay');
   const emailFields = document.getElementById('sendEmailFields');
   const msgFields   = document.getElementById('sendMessageFields');
   const title       = document.getElementById('sendModalTitle');
   const sendBtn     = document.getElementById('sendBtnText');
+  const confirmBtn  = document.getElementById('sendConfirmBtn');
 
-  // Determine customer details
-  const custId = document.getElementById('inv-customer')?.value;
-  const cust = custName
-    ? sampleCustomers.find(c => c.name === custName) || {name: custName, phone:'', type:'trade', email:''}
-    : INVOICE_CUSTOMERS.find(c => c.id === custId) || {name:'Customer', phone:'', type:'domestic', email:''};
-
-  const isTrade = cust.type === 'trade';
-  const ref  = invRef  || document.querySelector('#invoicePreview .inv-meta b:last-of-type')?.textContent || 'INV-XXXX';
-  const amt  = amount  || document.getElementById('invGrandTotal')?.textContent || '£0.00';
-  const name = cust.name.split(' ')[0];
-
-  if (mode === 'email') {
-    title.textContent = '✉️ Send invoice by email';
-    sendBtn.textContent = 'Send email';
-    emailFields.style.display = 'block';
-    msgFields.style.display = 'none';
-
-    document.getElementById('send-to-email').value = cust.email || '';
-    document.getElementById('send-subject').value  = `Your invoice from JG Foods — ${ref}`;
-
-    const emailBody = isTrade
-      ? `Hi ${name},\n\nPlease find your invoice ${ref} attached — total ${amt}.\n\nPayment by bank transfer is great if that's easiest: HSBC, Mr J B Green, Acc 51476998, Sort Code 40-31-33. Please use ${ref} as your reference.\n\nAs always, thanks so much for your continued support — really appreciate it!\n\nAny questions at all just give me a shout.\n\nCheers,\nJon 😊\nJG Foods · 07702 852 704`
-      : `Hi ${name},\n\nJust sending over your receipt for your recent delivery — hope everything was to your liking! 😊\n\nYour receipt reference is ${ref} — total ${amt}. No action needed, just keeping things tidy for you.\n\nThanks so much for ordering — it really means a lot. See you on the next delivery!\n\nCheers,\nJon\nJG Foods · 07702 852 704`;
-
-    document.getElementById('send-body').value = emailBody;
-
-  } else {
-    title.textContent = '💬 Send invoice by message';
-    sendBtn.textContent = 'Send message';
-    emailFields.style.display = 'none';
-    msgFields.style.display = 'block';
-
-    document.getElementById('send-to-phone').value = cust.phone || '';
-
-    const msgBody = isTrade
-      ? `Hi ${name}, your JG Foods invoice ${ref} is ready — total ${amt}. Pay to HSBC, J B Green, Acc 51476998, Sort 40-31-33, ref ${ref}. Thanks! Jon 07702 852704`
-      : `Hi ${name}! 😊 Just your JG Foods receipt for your recent delivery — ${ref}, ${amt}. Thanks so much for your order, really appreciate it! Jon x 07702 852704`;
-
-    document.getElementById('send-msg-body').value = msgBody;
-  }
-
+  // Open immediately in a loading state while we fetch items + build the PDF link
+  emailFields.style.display = mode === 'email' ? 'block' : 'none';
+  msgFields.style.display   = mode === 'email' ? 'none' : 'block';
+  title.textContent   = mode === 'email' ? '✉️ Send by email' : '💬 Send via WhatsApp';
+  sendBtn.textContent = 'Preparing…';
+  if (confirmBtn) confirmBtn.disabled = true;
   overlay.classList.add('show');
   document.body.style.overflow = 'hidden';
+
+  const d        = await getSendData(invId, custName, invRef, amount);
+  const isTrade  = d.type !== 'receipt';
+  const first    = (d.name || 'there').split(' ')[0];
+  const totalStr = fmtMoney(d.total);
+  const lines    = itemLinesText(d.items);
+  const docWord  = isTrade ? 'invoice' : 'receipt';
+
+  // Generate + upload the PDF so the message can carry a tap-to-open link (best effort)
+  let pdfUrl = null;
+  if (d.items && d.items.length) {
+    pdfUrl = await uploadInvoicePdf({
+      ref: d.ref, type: d.type, custName: d.name, custAddress: d.address,
+      dateFmt: new Date().toLocaleDateString('en-GB'), items: d.items, total: d.total,
+    });
+  }
+
+  if (mode === 'email') {
+    title.textContent   = isTrade ? '✉️ Send invoice by email' : '✉️ Send receipt by email';
+    sendBtn.textContent = 'Send email';
+    document.getElementById('send-to-email').value = d.email || '';
+    document.getElementById('send-subject').value  = `Your ${docWord} from JG Foods — ${d.ref}`;
+
+    const pdfLine = pdfUrl ? `\nPDF copy: ${pdfUrl}\n` : '';
+    const body = isTrade
+      ? `Hi ${first},\n\nPlease find your invoice ${d.ref} below — total ${totalStr}.\n\n${lines}\nTotal: ${totalStr}\n${pdfLine}\nPayment by bank transfer is easiest: HSBC, Mr J B Green, Acc 51476998, Sort Code 40-31-33. Please use ${d.ref} as your reference.\n\nThanks so much for your continued support — really appreciate it! Any questions just shout.\n\nCheers,\nJon 😊\nJG Foods · 07702 852 704`
+      : `Hi ${first},\n\nThanks so much for your order — here's your receipt 😊\n\nReceipt ${d.ref}\n${lines}\nTotal: ${totalStr}\n${pdfLine}\nNo action needed, just keeping things tidy for you. See you on the next delivery!\n\nCheers,\nJon\nJG Foods · 07702 852 704`;
+    document.getElementById('send-body').value = body;
+
+  } else {
+    title.textContent   = '💬 Send via WhatsApp';
+    sendBtn.textContent = 'Send via WhatsApp';
+    document.getElementById('send-to-phone').value = d.phone || '';
+
+    const pdfLine = pdfUrl ? `\nPDF: ${pdfUrl}` : '';
+    const body = isTrade
+      ? `Hi ${first}, your JG Foods invoice ${d.ref}:\n${lines}\nTotal: ${totalStr}${pdfLine}\nPay: HSBC, J B Green, Acc 51476998, Sort 40-31-33, ref ${d.ref}. Thanks! Jon 07702 852704`
+      : `Hi ${first}! 😊 Here's your JG Foods receipt ${d.ref}:\n${lines}\nTotal: ${totalStr}${pdfLine}\nThanks so much for your order! Jon x 07702 852704`;
+    document.getElementById('send-msg-body').value = body;
+  }
+
+  if (confirmBtn) confirmBtn.disabled = false;
 }
 
 function closeSendModal() {
@@ -3382,34 +3452,70 @@ function confirmSend() {
   btn.style.opacity = '.7';
   document.getElementById('sendBtnText').textContent = 'Sending…';
 
+  const finishSend = (label) => {
+    document.getElementById('sendBtnText').textContent = label;
+    btn.style.background = 'var(--green)';
+    setTimeout(() => { closeSendModal(); resetSendBtn(btn, 'Send'); btn.style.background = ''; }, 1800);
+  };
+
   if (sendMode === 'email') {
     const to      = document.getElementById('send-to-email').value.trim();
     const subject = document.getElementById('send-subject').value.trim();
     const body    = document.getElementById('send-body').value.trim();
-    if (!to) { alert('Please enter an email address.'); btn.disabled=false; btn.style.opacity='1'; document.getElementById('sendBtnText').textContent='Send email'; return; }
+    if (!to) { alert('Please enter an email address.'); resetSendBtn(btn, 'Send email'); return; }
 
-    // TODO: EmailJS send
-    // emailjs.send('SERVICE_ID', 'TEMPLATE_INVOICE', { to_email: to, subject, message: body });
-    // For now simulate
-    setTimeout(() => {
-      document.getElementById('sendBtnText').textContent = '✓ Email sent!';
-      btn.style.background = 'var(--green)';
-      setTimeout(() => { closeSendModal(); btn.disabled=false; btn.style.opacity='1'; btn.style.background=''; document.getElementById('sendBtnText').textContent='Send'; }, 1800);
-    }, 800);
+    if (EMAILJS_READY && window.emailjs) {
+      emailjs.send(EMAILJS.serviceId, EMAILJS.templateId, {
+        to_email: to, subject, message: body, from_name: 'JG Foods'
+      }).then(() => finishSend('✓ Email sent!'))
+        .catch(err => {
+          console.error('EmailJS error:', err);
+          alert('Auto-send failed — opening Gmail instead so nothing is lost.');
+          openGmailCompose(to, subject, body);
+          finishSend('✓ Opened Gmail');
+        });
+    } else {
+      // No EmailJS keys — open Gmail compose pre-filled; Jon attaches the PDF if
+      // he wants and presses send. Sends from his own Gmail.
+      openGmailCompose(to, subject, body);
+      finishSend('✓ Opened Gmail');
+    }
 
   } else {
+    // WhatsApp — opens WhatsApp with the message ready to send (free, no API)
     const to   = document.getElementById('send-to-phone').value.trim();
     const body = document.getElementById('send-msg-body').value.trim();
-    if (!to) { alert('Please enter a phone number.'); btn.disabled=false; btn.style.opacity='1'; document.getElementById('sendBtnText').textContent='Send message'; return; }
+    if (!to) { alert('Please enter a phone number.'); resetSendBtn(btn, 'Send via WhatsApp'); return; }
 
-    // TODO: Twilio SMS
-    // twilioClient.messages.create({ to, from: TWILIO_NUMBER, body });
-    setTimeout(() => {
-      document.getElementById('sendBtnText').textContent = '✓ Message sent!';
-      btn.style.background = 'var(--green)';
-      setTimeout(() => { closeSendModal(); btn.disabled=false; btn.style.opacity='1'; btn.style.background=''; document.getElementById('sendBtnText').textContent='Send'; }, 1800);
-    }, 800);
+    const wa = toWhatsAppNumber(to);
+    if (!wa) { alert("That number doesn't look valid for WhatsApp. Check it and try again."); resetSendBtn(btn, 'Send via WhatsApp'); return; }
+    window.open(`https://wa.me/${wa}?text=${encodeURIComponent(body)}`, '_blank');
+    finishSend('✓ WhatsApp opened');
   }
+}
+
+function resetSendBtn(btn, label) {
+  btn.disabled = false;
+  btn.style.opacity = '1';
+  document.getElementById('sendBtnText').textContent = label;
+}
+
+// Open Gmail's compose window pre-filled (Jon uses Gmail). Opens in a new tab,
+// from his own Gmail account; he can attach the PDF and press send.
+function openGmailCompose(to, subject, body) {
+  const u = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.open(u, '_blank');
+}
+
+// Convert a UK phone number to international WhatsApp format (no + or spaces)
+function toWhatsAppNumber(raw) {
+  let d = (raw || '').replace(/[^\d+]/g, '').replace(/^\+/, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  if (d.startsWith('44')) return d;
+  if (d.startsWith('0'))  return '44' + d.slice(1);   // UK national → international
+  if (d.startsWith('7') && d.length === 10) return '44' + d; // bare mobile
+  if (d.length >= 10) return d;                        // assume already international
+  return '';
 }
 
 document.getElementById('sendModalOverlay')?.addEventListener('click', e => {
@@ -3702,6 +3808,13 @@ async function saveLogOrder() {
       }))
     );
     if (itemsErr) throw itemsErr;
+
+    // 5. Auto-create the receipt/invoice for this order (never blocks the order)
+    try {
+      await supabase.rpc('create_invoice_for_order', { p_order_id: orderData.id });
+    } catch (invErr) {
+      console.error('Auto-invoice error:', invErr);
+    }
 
   } catch (err) {
     console.error('Save order error:', err);
@@ -4542,6 +4655,7 @@ function rebuildInvoiceCustomers() {
     name:    c.name,
     type:    c.type,
     phone:   c.phone   || '',
+    email:   c.email   || '',
     address: c.address || '',
     prefix:  c.name.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase(),
     nextInv: Math.floor(10000 + Math.random() * 90000),
@@ -4570,33 +4684,70 @@ function populateInvoiceCustomerSelect() {
 let invItems = [];
 
 function addInvItem(desc='', qty=1, price=0) {
-  const id = Date.now();
-  invItems.push({id, desc, qty, price});
+  const id = Date.now() + Math.floor(Math.random() * 1000);
+  invItems.push({ id, productId: null, desc, qty, price });
   renderInvItems();
+}
+
+// Build the product dropdown options from the live availability list
+function invProductOptions(selectedId) {
+  const prods = [...sampleProducts].sort((a, b) =>
+    (a.cat || '').localeCompare(b.cat || '') || a.name.localeCompare(b.name));
+  return prods.map(p =>
+    `<option value="${p.id}" ${String(selectedId) === String(p.id) ? 'selected' : ''}>${p.name} — £${(p.price || 0).toFixed(2)}${p.live ? '' : ' (not live)'}</option>`
+  ).join('');
 }
 
 function renderInvItems() {
   const list = document.getElementById('invItemsList');
   if (!list) return;
   list.innerHTML = invItems.map(item => `
-    <div style="display:grid;grid-template-columns:1fr 60px 80px 28px;gap:6px;align-items:center">
-      <input class="fin-input" style="font-size:12px;padding:7px 9px" placeholder="Description" value="${item.desc}"
-        oninput="updateInvItem(${item.id},'desc',this.value)">
+    <div style="display:grid;grid-template-columns:1fr 52px 76px 26px;gap:6px;align-items:start">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <select class="fin-input" style="font-size:12px;padding:7px 9px" onchange="pickInvProduct(${item.id}, this.value)">
+          <option value="">— choose item —</option>
+          ${invProductOptions(item.productId)}
+          <option value="custom" ${item.productId === 'custom' ? 'selected' : ''}>✏️ Custom item…</option>
+        </select>
+        ${item.productId === 'custom' ? `<input class="fin-input" style="font-size:12px;padding:7px 9px" placeholder="Describe the one-off item" value="${(item.desc || '').replace(/"/g, '&quot;')}" oninput="updateInvItem(${item.id},'desc',this.value)">` : ''}
+      </div>
       <input class="fin-input" style="font-size:12px;padding:7px 9px;text-align:center" type="number" min="0" value="${item.qty}" placeholder="Qty"
         oninput="updateInvItem(${item.id},'qty',this.value)">
       <input class="fin-input" style="font-size:12px;padding:7px 9px;text-align:right" type="number" min="0" step="0.01" value="${item.price}" placeholder="£"
         oninput="updateInvItem(${item.id},'price',this.value)">
-      <button onclick="removeInvItem(${item.id})" style="width:28px;height:28px;border-radius:7px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);font-size:14px">×</button>
+      <button onclick="removeInvItem(${item.id})" style="width:26px;height:34px;border-radius:7px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);font-size:14px">×</button>
     </div>
   `).join('');
-  const total = invItems.reduce((s,i) => s + (parseFloat(i.qty)||0)*(parseFloat(i.price)||0), 0);
+  updateInvTotal();
+}
+
+function updateInvTotal() {
+  const total = invItems.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.price) || 0), 0);
   const el = document.getElementById('invGrandTotal');
-  if (el) el.textContent = '£'+total.toFixed(2);
+  if (el) el.textContent = '£' + total.toFixed(2);
+}
+
+// Pick a product from the availability list (auto-fills name + price) or go custom
+function pickInvProduct(id, value) {
+  const item = invItems.find(i => i.id === id);
+  if (!item) return;
+  if (value === 'custom') {
+    item.productId = 'custom';
+    if (item.desc === undefined) item.desc = '';
+  } else if (value === '') {
+    item.productId = null; item.desc = ''; item.price = 0;
+  } else {
+    const p = sampleProducts.find(pr => String(pr.id) === String(value));
+    if (p) { item.productId = p.id; item.desc = p.name; item.price = p.price; }
+  }
+  renderInvItems();
 }
 
 function updateInvItem(id, field, val) {
   const item = invItems.find(i => i.id === id);
-  if (item) { item[field] = val; renderInvItems(); }
+  if (!item) return;
+  item[field] = val;
+  updateInvTotal();   // update total only — don't re-render inputs (keeps typing focus)
 }
 
 function removeInvItem(id) {
@@ -4749,29 +4900,20 @@ async function saveInvoice() {
   }
 }
 
-// ── Download the current invoice/receipt as a PDF (no external service needed) ──
-async function downloadInvoicePDF() {
-  const custId = document.getElementById('inv-customer')?.value;
-  if (!custId) { alert('Please select a customer first.'); return; }
-  const items = invItems.filter(i => i.desc && (parseFloat(i.qty)||0) > 0);
-  if (!items.length) { alert('Add at least one line item before downloading.'); return; }
-  if (!currentInvoiceRef) generateInvoicePreview();
-
+// ── Build the branded PDF (jsPDF doc) from invoice data — shared by download + upload ──
+function buildInvoiceDoc(data) {
   const JS = window.jspdf && window.jspdf.jsPDF;
-  if (!JS) { alert('PDF builder is still loading — please try again in a second, or use Download / Print.'); return; }
-
-  const cust    = INVOICE_CUSTOMERS.find(c => c.id === custId) || { name:'Customer', address:'' };
-  const dateVal = document.getElementById('inv-date')?.value;
-  const dateFmt = dateVal ? new Date(dateVal).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB');
-  const total   = items.reduce((s,i) => s + (parseFloat(i.qty)||0)*(parseFloat(i.price)||0), 0);
-  const title   = currentInvoiceType === 'receipt' ? 'RECEIPT' : 'INVOICE';
+  if (!JS) return null;
+  const ref   = data.ref;
+  const title = data.type === 'receipt' ? 'RECEIPT' : 'INVOICE';
+  const items = data.items || [];
+  const total = (data.total != null) ? data.total : items.reduce((s,i) => s + (i.qty||0)*(i.price||0), 0);
 
   const doc = new JS({ unit:'pt', format:'a4' });
   const W = doc.internal.pageSize.getWidth();
   const L = 48, R = W - 48;
   let y = 60;
 
-  // Header
   doc.setFont('helvetica','bold').setFontSize(22).setTextColor(13,23,38);
   doc.text('JG Foods', L, y);
   doc.setFont('helvetica','normal').setFontSize(9).setTextColor(110,120,130);
@@ -4781,9 +4923,9 @@ async function downloadInvoicePDF() {
   doc.setFont('helvetica','bold').setFontSize(14).setTextColor(13,23,38);
   doc.text(title, R, y, { align:'right' });
   doc.setFont('helvetica','bold').setFontSize(11).setTextColor(125,30,40);
-  doc.text(currentInvoiceRef, R, y + 16, { align:'right' });
+  doc.text(ref, R, y + 16, { align:'right' });
   doc.setFont('helvetica','normal').setFontSize(9).setTextColor(70,80,90);
-  doc.text('Date: ' + dateFmt, R, y + 30, { align:'right' });
+  doc.text('Date: ' + (data.dateFmt || new Date().toLocaleDateString('en-GB')), R, y + 30, { align:'right' });
   doc.setFont('helvetica','bold').setTextColor(13,23,38);
   doc.text('VAT No: 307458303', R, y + 43, { align:'right' });
 
@@ -4791,18 +4933,16 @@ async function downloadInvoicePDF() {
   doc.setDrawColor(225,228,232).line(L, y, R, y);
   y += 24;
 
-  // Bill to
   doc.setFont('helvetica','bold').setFontSize(8).setTextColor(150,158,166);
-  doc.text(currentInvoiceType === 'receipt' ? 'RECEIPT FOR' : 'BILL TO', L, y);
+  doc.text(data.type === 'receipt' ? 'RECEIPT FOR' : 'BILL TO', L, y);
   doc.setFont('helvetica','bold').setFontSize(11).setTextColor(13,23,38);
-  doc.text(cust.name || '—', L, y + 16);
-  if (cust.address) {
+  doc.text(data.custName || '—', L, y + 16);
+  if (data.custAddress) {
     doc.setFont('helvetica','normal').setFontSize(9).setTextColor(90,98,106);
-    doc.text(String(cust.address), L, y + 30);
+    doc.text(String(data.custAddress), L, y + 30);
   }
   y += 52;
 
-  // Items table header
   const cDesc = L, cQty = R - 200, cPrice = R - 110, cTot = R;
   doc.setFillColor(245,242,235).rect(L, y - 12, R - L, 22, 'F');
   doc.setFont('helvetica','bold').setFontSize(8.5).setTextColor(90,98,106);
@@ -4824,13 +4964,11 @@ async function downloadInvoicePDF() {
     doc.setDrawColor(238,240,242).line(L, y - 8, R, y - 8);
   });
 
-  // Grand total
   y += 6;
   doc.setFont('helvetica','bold').setFontSize(12).setTextColor(13,23,38);
   doc.text('Grand Total', cPrice, y, { align:'right' });
   doc.text('£' + total.toFixed(2), cTot - 6, y, { align:'right' });
 
-  // Bank details
   y += 40;
   doc.setFillColor(245,242,235).roundedRect(L, y - 14, R - L, 64, 6, 6, 'F');
   doc.setFont('helvetica','bold').setFontSize(9).setTextColor(13,23,38);
@@ -4839,10 +4977,48 @@ async function downloadInvoicePDF() {
   doc.text('HSBC · Mr J B Green', L + 14, y + 17);
   doc.text('Account: 51476998 · Sort code: 40-31-33', L + 14, y + 30);
   doc.setFont('helvetica','bold').setTextColor(13,23,38);
-  doc.text('Ref: ' + currentInvoiceRef, L + 14, y + 43);
+  doc.text('Ref: ' + ref, L + 14, y + 43);
 
+  return doc;
+}
+
+// ── Download the current builder invoice/receipt as a PDF ──
+async function downloadInvoicePDF() {
+  const custId = document.getElementById('inv-customer')?.value;
+  if (!custId) { alert('Please select a customer first.'); return; }
+  const items = invItems.filter(i => i.desc && (parseFloat(i.qty)||0) > 0)
+    .map(i => ({ desc:i.desc, qty:parseFloat(i.qty)||0, price:parseFloat(i.price)||0 }));
+  if (!items.length) { alert('Add at least one line item before downloading.'); return; }
+  if (!currentInvoiceRef) generateInvoicePreview();
+
+  const cust    = INVOICE_CUSTOMERS.find(c => c.id === custId) || { name:'Customer', address:'' };
+  const dateVal = document.getElementById('inv-date')?.value;
+  const doc = buildInvoiceDoc({
+    ref: currentInvoiceRef, type: currentInvoiceType,
+    custName: cust.name, custAddress: cust.address || '',
+    dateFmt: dateVal ? new Date(dateVal).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB'),
+    items, total: items.reduce((s,i) => s + i.qty*i.price, 0),
+  });
+  if (!doc) { alert('PDF builder is still loading — please try again in a second.'); return; }
   const safeName = (cust.name || 'customer').replace(/[^a-z0-9]+/gi, '-');
   doc.save(`${currentInvoiceRef}-${safeName}.pdf`);
+}
+
+// ── Generate the PDF and upload it to Storage; returns a public URL (or null) ──
+async function uploadInvoicePdf(data) {
+  try {
+    if (!window.supabase) return null;
+    const doc = buildInvoiceDoc(data);
+    if (!doc) return null;
+    const blob = doc.output('blob');
+    const safe = (data.ref || 'invoice').replace(/[^a-z0-9]+/gi, '-');
+    const path = `${safe}-${Math.random().toString(36).slice(2, 10)}.pdf`;
+    const { error } = await window.supabase.storage.from('invoice-pdfs')
+      .upload(path, blob, { contentType: 'application/pdf', upsert: false });
+    if (error) { console.error('PDF upload failed:', error); return null; }
+    const { data: pub } = window.supabase.storage.from('invoice-pdfs').getPublicUrl(path);
+    return pub?.publicUrl || null;
+  } catch (e) { console.error('PDF upload error:', e); return null; }
 }
 
 // ============ DAILY SALES ============
@@ -5519,10 +5695,12 @@ const HELP_PAGES = {
   invoices: {
     label: 'Invoices',
     sections: [
-      { icon:'📄', title:'What is this page?', body:'Invoices is where you create, manage, and send invoices to trade customers. All your invoices live here with their payment status.' },
-      { icon:'➕', title:'Creating a new invoice', body:'Select the customer from the dropdown — their details fill in automatically. Add line items (product, quantity, price) and the total calculates itself. Press <strong>Generate invoice</strong> to see a preview, then <strong>Save invoice</strong> to store it in your list. It picks the right document automatically — a <strong>receipt</strong> for domestic customers and an <strong>invoice</strong> for trade.' },
+      { icon:'📄', title:'What is this page?', body:'Invoices is where all your invoices and receipts live, with their payment status. Most appear here on their own — see below — but you can also build one by hand any time.' },
+      { icon:'⚡', title:'Created automatically from orders', body:'Every order now creates its own record for you — a <strong>receipt</strong> for domestic customers (marked paid) and an <strong>invoice</strong> for trade customers (30-day terms). Whether the order came from the website or you logged it yourself, the matching receipt/invoice lands here automatically. No need to type it out again.' },
+      { icon:'➕', title:'Building one by hand', body:'Need a one-off? Select the customer — their details fill in automatically. For each line, pick an item from the <strong>availability list</strong> (the price fills in) or choose <strong>✏️ Custom item</strong> for something you\'ve sourced specially. Press <strong>Generate invoice</strong> to preview, then <strong>Save invoice</strong>. It picks receipt or invoice automatically based on the customer.' },
       { icon:'📄', title:'Download as PDF', body:'Open the <strong>Actions</strong> menu and choose <strong>Download PDF</strong> to save the invoice or receipt as a tidy PDF on your device — ready to email, print, or keep for your records.' },
-      { icon:'📬', title:'Sending an invoice', body:'Once an invoice is ready, open the <strong>Actions</strong> menu and choose <strong>Send via email</strong> or <strong>Send via message</strong>. The message is already written — you just press send.' },
+      { icon:'📬', title:'Sending it to the customer', body:'Open the <strong>Actions</strong> menu and choose <strong>Send via WhatsApp</strong> or <strong>Send via email</strong>. It uses the customer\'s saved number or email and writes the whole message for you — the items, the total, and a link to the PDF copy. You don\'t attach anything (handy on your phone) — just check it and press send. WhatsApp opens ready to go; email opens your Gmail with everything filled in, you press send.' },
+      { icon:'📱', title:'Works from your phone', body:'This is built for sending on the road. The receipt is written right into the message with a tap-to-open PDF link, so there\'s nothing to attach or fiddle with — open the order\'s receipt, tap WhatsApp or email, check it, send. Done in seconds at the van.' },
       { icon:'🖨️', title:'Printing', body:'Choose <strong>Print</strong> from the <strong>Actions</strong> menu to get a printer-friendly version. Useful if a customer wants a paper copy.' },
       { icon:'💷', title:'Logging a payment', body:'When a customer pays, press <strong>Log payment</strong> on their invoice. Choose the method (cash or bank transfer), enter the amount, and press <strong>Add this payment</strong>. You can add as many entries as needed — for example £50 cash and £50 bank transfer against the same invoice. The invoice marks itself as paid automatically once the full balance is cleared.' },
       { icon:'🔀', title:'Split payments', body:'If a customer pays part in cash and part by bank transfer, just log both separately using <strong>Log payment</strong>. Each entry shows up on the invoice with its method and amount. The remaining balance updates as you go.' },

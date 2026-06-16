@@ -169,6 +169,28 @@ JOIN auth.users u ON u.id = p.id ORDER BY p.role;
 
 ---
 
+### 13. `013_auto_invoice_on_order.sql`
+**What it does:** Makes every order create its own record automatically — a **receipt** for domestic customers, an **invoice** for trade — with the line items copied across. It's idempotent (one invoice per order) and covers both the website (`place_order` RPC, updated here) and manual Log Order.
+
+It also fixes a quiet bug: the admin app saves trade customers as `customer_type = 'trade'`, but the original rule only allowed `domestic`/`commercial`, so those saves were failing silently. This relaxes the rule to allow all three.
+
+Invoice numbers use the customer's `invoice_prefix` (or their initials) + a sequence, e.g. `TCP-1000`.
+
+After running, you can optionally back-fill records for orders that already exist (SQL is in the migration's footer notes).
+
+**When to run:** After 012. Safe on the live database. Test with one order afterwards (see go-live steps).
+
+---
+
+### 14. `014_invoice_pdf_storage.sql`
+**What it does:** Creates a public Storage bucket (`invoice-pdfs`) so that when Jon sends a receipt/invoice, the app uploads the branded PDF and puts a tap-to-open link in the WhatsApp/email message — no attaching files by hand (important on a phone). Upload is admin-only; filenames carry a random suffix so links can't be guessed.
+
+Depends on `current_user_role()` (migrations 006/012), so run those first.
+
+**When to run:** After 012 and 013. Safe on the live database.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app
