@@ -1893,6 +1893,7 @@ async function loadAppData() {
     }
     renderDashboard();
     rebuildInvoiceCustomers();
+    refreshLogProductOptions();
 
   } catch (err) {
     console.error('loadAppData error:', err);
@@ -2136,7 +2137,7 @@ function showPage(id) {
   if (id === 'finance')   renderInvoices();
   if (id === 'dashboard') renderDashboard();
   if (id === 'schedule')  loadSchedule();
-  if (id === 'logorder')  populateLogSlots();
+  if (id === 'logorder')  { populateLogSlots(); refreshLogProductOptions(); }
   if (id === 'social')    loadSocial();
 }
 
@@ -3156,7 +3157,7 @@ function renderInvoices(filter) {
           </button>
           <div class="actions-menu" id="iam-${inv.id}">
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openPaymentModal('${inv.id}')"><span class="ai-icon">💷</span> Log payment</div>
-            <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');printInvoice()"><span class="ai-icon">🖨</span> Download / Print</div>
+            <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');downloadInvoiceById('${inv.id}')"><span class="ai-icon">📄</span> Download PDF</div>
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openSendModal('email','${inv.name}','${inv.ref}','${inv.amount}','${inv.id}')"><span class="ai-icon">✉️</span> Send via email</div>
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openSendModal('message','${inv.name}','${inv.ref}','${inv.amount}','${inv.id}')"><span class="ai-icon">💬</span> Send via WhatsApp</div>
             <div class="action-item" style="color:#c0392b" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');deleteInvoice('${inv.id}','${inv.ref}','${inv.name.replace(/'/g,"\\'") }')"><span class="ai-icon">🗑</span> Delete invoice</div>
@@ -3649,25 +3650,38 @@ function updateLogTotal() {
   document.getElementById('logTotal').textContent = '£' + (total + surcharge).toFixed(2);
 }
 
+// Build the product <option> list from the live availability list.
+// Returns '' if no live products are loaded (callers keep their fallback).
+function logProductOptionsHtml() {
+  const live = [...sampleProducts]
+    .filter(p => p.live !== false)
+    .sort((a, b) => (a.cat || '').localeCompare(b.cat || '') || a.name.localeCompare(b.name));
+  if (!live.length) return '';
+  return live.map(p => `<option value="${p.name}|${p.price}">${p.name} — £${(p.price || 0).toFixed(2)}</option>`).join('');
+}
+
+// Repopulate every product dropdown on the Log Order page from live products,
+// preserving any current selection. Called when the page opens.
+function refreshLogProductOptions() {
+  const optsHtml = logProductOptionsHtml();
+  if (!optsHtml) return;   // nothing loaded yet — leave existing options as-is
+  document.querySelectorAll('.item-product').forEach(sel => {
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— select product —</option>' + optsHtml;
+    if (current && [...sel.options].some(o => o.value === current)) sel.value = current;
+  });
+}
+
 function addLogItem() {
   const list = document.getElementById('logItemsList');
   const div = document.createElement('div');
   div.className = 'log-item-row';
   div.id = 'item-row-' + (++logItemCount);
 
-  // Build from live products — falls back to sample data if nothing loaded yet
-  const liveProducts = sampleProducts.filter(p => p.live !== false);
-  const opts = liveProducts.length
-    ? liveProducts.map(p => `<option value="${p.name}|${p.price}">${p.name} — £${p.price.toFixed(2)}</option>`).join('')
-    : `<option value="5kg Chicken Fillets|34">5kg Chicken Fillets — £34.00</option>
-       <option value="BBQ Pack|47.50">BBQ Pack — £47.50</option>
-       <option value="Ribeye Steaks ×5|30">Ribeye Steaks ×5 — £30.00</option>
-       <option value="Lean Mince 1kg|12">Lean Mince 1kg — £12.00</option>
-       <option value="Extra Lean Meat Pack|38.50">Extra Lean Meat Pack — £38.50</option>
-       <option value="Kebab Pack ×5|20">Kebab Pack ×5 — £20.00</option>
-       <option value="Chicken Thighs 3kg|18">Chicken Thighs 3kg — £18.00</option>
-       <option value="Family Value Pack|52">Family Value Pack — £52.00</option>
-       <option value="Diced Beef 1kg|10">Diced Beef 1kg — £10.00</option>`;
+  // Build from live products — fall back to a basic sample list only if nothing loaded
+  const opts = logProductOptionsHtml()
+    || `<option value="5kg Chicken Fillets|34">5kg Chicken Fillets — £34.00</option>
+       <option value="Lean Mince 1kg|12">Lean Mince 1kg — £12.00</option>`;
 
   div.innerHTML = `
     <select class="item-product" onchange="updateLogTotal()">
@@ -5019,6 +5033,19 @@ async function uploadInvoicePdf(data) {
     const { data: pub } = window.supabase.storage.from('invoice-pdfs').getPublicUrl(path);
     return pub?.publicUrl || null;
   } catch (e) { console.error('PDF upload error:', e); return null; }
+}
+
+// ── Download a saved invoice/receipt (from the list) as a PDF ──
+async function downloadInvoiceById(invId) {
+  const d = await getSendData(invId);
+  if (!d || !d.items || !d.items.length) { alert('Could not load this invoice to download.'); return; }
+  const doc = buildInvoiceDoc({
+    ref: d.ref, type: d.type, custName: d.name, custAddress: d.address,
+    dateFmt: new Date().toLocaleDateString('en-GB'), items: d.items, total: d.total,
+  });
+  if (!doc) { alert('PDF builder is still loading — please try again in a second.'); return; }
+  const safe = (d.name || 'customer').replace(/[^a-z0-9]+/gi, '-');
+  doc.save(`${d.ref}-${safe}.pdf`);
 }
 
 // ============ DAILY SALES ============
