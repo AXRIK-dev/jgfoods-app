@@ -141,6 +141,34 @@ The order-count trigger didn't adjust when an order was moved between days (e.g.
 
 ---
 
+### 11. `011_social_posts.sql`
+**What it does:** Backs the Social Posts tab (AI post generator).
+
+- `social_posts` table — stores each generated Facebook/Instagram post and its history
+- Post history doubles as house-style examples fed back to the AI on future generations
+- Admin-only access
+
+**When to run:** Any time after 001 and 006. Safe on the live database.
+
+---
+
+### 12. `012_harden_admin_rls.sql`
+**What it does:** SECURITY HARDENING — switches admin access on `customers`, `orders` and `order_items` from "any logged-in user" (`auth.role() = 'authenticated'`) to genuine admin-only (`current_user_role() = 'admin'`). This is the deferred follow-up noted in migration 009.
+
+It first backfills any missing `user_profiles` rows and, if no admin exists yet, promotes all current (staff-only) accounts to admin — so running it **cannot lock Jon out**. It then rebuilds the three tables' policies from a clean slate (admin full access; account customers read only their own; public gets nothing).
+
+After running it, confirm Jon is admin:
+```sql
+SELECT u.email, p.role FROM user_profiles p
+JOIN auth.users u ON u.id = p.id ORDER BY p.role;
+```
+
+**Important:** the migration's footer lists two things to resolve **before customer website accounts go live** — the `driver` default role on signup, and the remaining tables still on `authenticated` write access. Read it before building customer accounts.
+
+**When to run:** Before giving anyone other than Jon a login, and before customer accounts. Safe on the live database.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

@@ -569,15 +569,8 @@
   <div class="dash-layout">
     <div class="dash-card">
       <h3>Revenue — last 6 weeks</h3>
-      <div class="week-bar">
-        <div class="wb-col"><div class="wb-bar" style="height:38%"></div><div class="wb-label">W1</div></div>
-        <div class="wb-col"><div class="wb-bar" style="height:52%"></div><div class="wb-label">W2</div></div>
-        <div class="wb-col"><div class="wb-bar prev" style="height:64%"></div><div class="wb-label">W3</div></div>
-        <div class="wb-col"><div class="wb-bar prev" style="height:70%"></div><div class="wb-label">W4</div></div>
-        <div class="wb-col"><div class="wb-bar prev" style="height:72%"></div><div class="wb-label">W5</div></div>
-        <div class="wb-col"><div class="wb-bar this" style="height:100%"></div><div class="wb-label">This</div></div>
-      </div>
-      <p style="font-size:11px;color:var(--ink-soft);margin-top:10px">Trending up — on track for £10k/week target</p>
+      <div class="week-bar" id="revenueChart"></div>
+      <p style="font-size:11px;color:var(--ink-soft);margin-top:10px" id="revenueCaption">Loading revenue…</p>
     </div>
 
     <div class="dash-card">
@@ -1368,6 +1361,7 @@
       </div>
       <div style="display:flex;gap:9px;margin-top:12px">
         <button class="btn-add" style="flex:1;justify-content:center;padding:12px" onclick="generateInvoicePreview()">Generate invoice</button>
+        <button class="btn-navy" style="flex:1;justify-content:center;padding:12px" onclick="saveInvoice()">💾 Save invoice</button>
         <div class="actions-wrap" id="invActionsWrap">
           <button class="actions-btn" id="invActionsBtn" onclick="toggleActionsMenu('invActionsMenu','invActionsBtn')">
             Actions
@@ -1375,7 +1369,8 @@
           </button>
           <div class="actions-menu" id="invActionsMenu">
             <div class="action-item" onclick="closeActionsMenu('invActionsMenu','invActionsBtn');generateInvoicePreview()"><span class="ai-icon">👁</span> View</div>
-            <div class="action-item" onclick="closeActionsMenu('invActionsMenu','invActionsBtn');printInvoice()"><span class="ai-icon">🖨</span> Download / Print</div>
+            <div class="action-item" onclick="closeActionsMenu('invActionsMenu','invActionsBtn');downloadInvoicePDF()"><span class="ai-icon">📄</span> Download PDF</div>
+            <div class="action-item" onclick="closeActionsMenu('invActionsMenu','invActionsBtn');printInvoice()"><span class="ai-icon">🖨</span> Print</div>
             <div class="action-item" onclick="closeActionsMenu('invActionsMenu','invActionsBtn');openSendModal('email')"><span class="ai-icon">✉️</span> Send via email</div>
             <div class="action-item" onclick="closeActionsMenu('invActionsMenu','invActionsBtn');openSendModal('message')"><span class="ai-icon">💬</span> Send via message</div>
           </div>
@@ -1648,6 +1643,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 // ============ SUPABASE CLIENT ============
 // For now the admin runs on demo data — no network dependency.
@@ -1901,6 +1897,61 @@ function nextOpenRun() {
   return open.find(s => (s.orders_count || 0) > 0) || open[0];
 }
 
+// ── Revenue chart — real weekly figures from orders (last 6 weeks) ──
+// Weeks run Monday→Sunday; revenue is bucketed by each order's delivery date.
+function renderRevenueChart() {
+  const chart = document.getElementById('revenueChart');
+  if (!chart) return;
+  const caption = document.getElementById('revenueCaption');
+
+  // Monday of the current week (local time)
+  const monday = new Date(); monday.setHours(0, 0, 0, 0);
+  const dow = (monday.getDay() + 6) % 7;            // 0 = Monday
+  monday.setDate(monday.getDate() - dow);
+
+  // Build 6 week buckets, oldest first, ending with this week
+  const weeks = [];
+  for (let i = 5; i >= 0; i--) {
+    const start = new Date(monday); start.setDate(monday.getDate() - i * 7);
+    const end = new Date(start); end.setDate(start.getDate() + 7);
+    weeks.push({ start, end, total: 0 });
+  }
+
+  sampleOrders.forEach(o => {
+    if (!o.date || o.status === 'cancelled') return;
+    const d = new Date(o.date + 'T00:00:00');
+    const w = weeks.find(wk => d >= wk.start && d < wk.end);
+    if (w) w.total += (o.total || 0);
+  });
+
+  const max = Math.max(1, ...weeks.map(w => w.total));
+  chart.innerHTML = weeks.map((w, i) => {
+    const isThis = i === weeks.length - 1;
+    const cls = isThis ? 'this' : 'prev';
+    const pct = w.total > 0 ? Math.max(4, Math.round(w.total / max * 100)) : 0;
+    const label = isThis ? 'This' : w.start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const money = '£' + Math.round(w.total).toLocaleString('en-GB');
+    return `<div class="wb-col"><div class="wb-bar ${cls}" style="height:${pct}%" title="${money}"></div><div class="wb-label">${label}</div></div>`;
+  }).join('');
+
+  if (caption) {
+    const thisWk = weeks[weeks.length - 1].total;
+    const lastWk = weeks[weeks.length - 2].total;
+    const fmt = v => '£' + Math.round(v).toLocaleString('en-GB');
+    let trend = '';
+    if (lastWk > 0) {
+      const pct = Math.round((thisWk - lastWk) / lastWk * 100);
+      trend = pct > 0 ? `up ${pct}% on last week` : pct < 0 ? `down ${Math.abs(pct)}% on last week` : 'level with last week';
+    } else if (thisWk > 0) {
+      trend = 'first orders of the week in';
+    }
+    const target = thisWk >= 10000 ? '£10k/week target hit 🎯' : `${Math.round(thisWk / 10000 * 100)}% of the £10k/week target`;
+    caption.textContent = thisWk === 0 && lastWk === 0
+      ? 'No revenue recorded in the last 6 weeks yet.'
+      : `This week: ${fmt(thisWk)}${trend ? ' — ' + trend : ''}. ${target}.`;
+  }
+}
+
 function renderDashboard() {
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   const now = new Date();
@@ -1966,6 +2017,9 @@ function renderDashboard() {
   const unpaidTotal = unpaid.reduce((s, i) => s + (i.amount || 0), 0);
   set('dash-unpaid-count', unpaid.length);
   set('dash-unpaid-sub', '£' + unpaidTotal.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' outstanding');
+
+  // ── Revenue chart (real weekly figures) ──
+  renderRevenueChart();
 
   // ── Top customers — aggregated from real orders ──
   const topEl = document.getElementById('topCustomersList');
@@ -4550,17 +4604,25 @@ function removeInvItem(id) {
   renderInvItems();
 }
 
+// Held so the on-screen preview, the saved record and the PDF all share one ref/type
+let currentInvoiceRef  = null;
+let currentInvoiceType = 'invoice';   // 'invoice' for trade, 'receipt' for domestic
+
 function loadInvoiceCustomer() {
   invItems = [];
+  currentInvoiceRef = null;   // new customer → fresh invoice number
   addInvItem(); // start with one blank row
 }
 
 function generateInvoicePreview() {
   const custId = document.getElementById('inv-customer').value;
   const date   = document.getElementById('inv-date').value;
-  if (!custId) { alert('Please select a customer.'); return; }
-  const cust = INVOICE_CUSTOMERS.find(c => c.id === custId) || {name:'Customer', address:'', prefix:'INV', nextInv:10001};
-  const invRef = `${cust.prefix}-${cust.nextInv}`;
+  if (!custId) { alert('Please select a customer.'); return null; }
+  const cust = INVOICE_CUSTOMERS.find(c => c.id === custId) || {name:'Customer', type:'trade', address:'', prefix:'INV'};
+  currentInvoiceType = cust.type === 'trade' ? 'invoice' : 'receipt';
+  if (!currentInvoiceRef) currentInvoiceRef = `${cust.prefix}-${Date.now().toString().slice(-6)}`;
+  const invRef = currentInvoiceRef;
+  const docTitle = currentInvoiceType === 'receipt' ? 'RECEIPT' : 'INVOICE';
   const dateFormatted = date ? new Date(date).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB');
   const total = invItems.reduce((s,i) => s + (parseFloat(i.qty)||0)*(parseFloat(i.price)||0), 0);
 
@@ -4573,7 +4635,7 @@ function generateInvoicePreview() {
         </div>
       </div>
       <div class="inv-meta">
-        <b>INVOICE</b>
+        <b>${docTitle}</b>
         <div><b style="font-size:13px;color:var(--oxblood)">${invRef}</b></div>
         <div style="margin-top:4px">Date: ${dateFormatted}</div>
         <div style="margin-top:2px;font-weight:700;color:var(--ink)">VAT No: 307458303</div>
@@ -4618,6 +4680,169 @@ function generateInvoicePreview() {
 
 function printInvoice() {
   window.print();
+}
+
+// ── Save the current invoice/receipt to Supabase ──
+// NOTE: vat_amount is stored as 0 for now. Jon is VAT registered, but most fresh
+// meat is zero-rated while some lines aren't — the correct VAT split needs a
+// decision from Jon before we calculate it, so we record the gross total only.
+async function saveInvoice() {
+  const custId = document.getElementById('inv-customer')?.value;
+  if (!custId) { alert('Please select a customer first.'); return; }
+  const items = invItems.filter(i => i.desc && (parseFloat(i.qty)||0) > 0);
+  if (!items.length) { alert('Add at least one line item (description + quantity) before saving.'); return; }
+
+  // Make sure ref/type are set (generates the preview if not already shown)
+  if (!currentInvoiceRef) generateInvoicePreview();
+
+  const cust    = INVOICE_CUSTOMERS.find(c => c.id === custId) || { name:'Customer', type:'trade' };
+  const dateVal = document.getElementById('inv-date')?.value;
+  const issued  = dateVal ? new Date(dateVal) : new Date();
+  const total   = items.reduce((s,i) => s + (parseFloat(i.qty)||0)*(parseFloat(i.price)||0), 0);
+  const invType = currentInvoiceType;
+  const invRef  = currentInvoiceRef;
+  const due     = new Date(issued); due.setDate(due.getDate() + 30);
+
+  if (!window.supabase) { alert('Not connected to the database — please refresh and try again.'); return; }
+
+  try {
+    const { data: inv, error } = await window.supabase.from('invoices').insert({
+      invoice_number: invRef,
+      customer_id:    custId,
+      invoice_type:   invType,
+      status:         invType === 'receipt' ? 'paid' : 'sent',
+      issued_at:      issued.toISOString(),
+      due_at:         invType === 'invoice' ? due.toISOString() : null,
+      paid_at:        invType === 'receipt' ? issued.toISOString() : null,
+      subtotal:       total,
+      vat_amount:     0,
+      total_amount:   total,
+    }).select('id, invoice_number, total_amount, status, created_at, customers (name)').single();
+    if (error) throw error;
+
+    const lineRows = items.map(i => ({
+      invoice_id:  inv.id,
+      description: i.desc,
+      unit_price:  parseFloat(i.price) || 0,
+      quantity:    parseInt(i.qty, 10) || 1,
+    }));
+    const { error: liErr } = await window.supabase.from('invoice_items').insert(lineRows);
+    if (liErr) throw liErr;
+
+    // Show it in the list straight away
+    sampleInvoices.unshift({
+      id:       inv.id,
+      ref:      inv.invoice_number,
+      name:     cust.name || inv.customers?.name || '',
+      date:     new Date(inv.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }),
+      amount:   parseFloat(inv.total_amount),
+      status:   inv.status,
+      payments: invType === 'receipt' ? [{ method:'cash', amount:total, note:'paid on the day', date:issued.toLocaleDateString('en-GB') }] : [],
+    });
+    renderInvoices();
+    renderDashboard();
+    currentInvoiceRef = null;  // next save = new number
+    alert(`Saved ${invType === 'receipt' ? 'receipt' : 'invoice'} ${invRef} for ${cust.name}. It's now in your invoice list.`);
+  } catch (err) {
+    console.error('saveInvoice error:', err);
+    alert('Could not save to the database — ' + (err.message || err) + '\n\nThe preview, print and PDF still work; you can try saving again.');
+  }
+}
+
+// ── Download the current invoice/receipt as a PDF (no external service needed) ──
+async function downloadInvoicePDF() {
+  const custId = document.getElementById('inv-customer')?.value;
+  if (!custId) { alert('Please select a customer first.'); return; }
+  const items = invItems.filter(i => i.desc && (parseFloat(i.qty)||0) > 0);
+  if (!items.length) { alert('Add at least one line item before downloading.'); return; }
+  if (!currentInvoiceRef) generateInvoicePreview();
+
+  const JS = window.jspdf && window.jspdf.jsPDF;
+  if (!JS) { alert('PDF builder is still loading — please try again in a second, or use Download / Print.'); return; }
+
+  const cust    = INVOICE_CUSTOMERS.find(c => c.id === custId) || { name:'Customer', address:'' };
+  const dateVal = document.getElementById('inv-date')?.value;
+  const dateFmt = dateVal ? new Date(dateVal).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB');
+  const total   = items.reduce((s,i) => s + (parseFloat(i.qty)||0)*(parseFloat(i.price)||0), 0);
+  const title   = currentInvoiceType === 'receipt' ? 'RECEIPT' : 'INVOICE';
+
+  const doc = new JS({ unit:'pt', format:'a4' });
+  const W = doc.internal.pageSize.getWidth();
+  const L = 48, R = W - 48;
+  let y = 60;
+
+  // Header
+  doc.setFont('helvetica','bold').setFontSize(22).setTextColor(13,23,38);
+  doc.text('JG Foods', L, y);
+  doc.setFont('helvetica','normal').setFontSize(9).setTextColor(110,120,130);
+  doc.text('Mobile Butcher · Ormskirk & West Lancashire', L, y + 15);
+  doc.text('07702 852 704   ·   jongreen347@gmail.com', L, y + 28);
+
+  doc.setFont('helvetica','bold').setFontSize(14).setTextColor(13,23,38);
+  doc.text(title, R, y, { align:'right' });
+  doc.setFont('helvetica','bold').setFontSize(11).setTextColor(125,30,40);
+  doc.text(currentInvoiceRef, R, y + 16, { align:'right' });
+  doc.setFont('helvetica','normal').setFontSize(9).setTextColor(70,80,90);
+  doc.text('Date: ' + dateFmt, R, y + 30, { align:'right' });
+  doc.setFont('helvetica','bold').setTextColor(13,23,38);
+  doc.text('VAT No: 307458303', R, y + 43, { align:'right' });
+
+  y += 70;
+  doc.setDrawColor(225,228,232).line(L, y, R, y);
+  y += 24;
+
+  // Bill to
+  doc.setFont('helvetica','bold').setFontSize(8).setTextColor(150,158,166);
+  doc.text(currentInvoiceType === 'receipt' ? 'RECEIPT FOR' : 'BILL TO', L, y);
+  doc.setFont('helvetica','bold').setFontSize(11).setTextColor(13,23,38);
+  doc.text(cust.name || '—', L, y + 16);
+  if (cust.address) {
+    doc.setFont('helvetica','normal').setFontSize(9).setTextColor(90,98,106);
+    doc.text(String(cust.address), L, y + 30);
+  }
+  y += 52;
+
+  // Items table header
+  const cDesc = L, cQty = R - 200, cPrice = R - 110, cTot = R;
+  doc.setFillColor(245,242,235).rect(L, y - 12, R - L, 22, 'F');
+  doc.setFont('helvetica','bold').setFontSize(8.5).setTextColor(90,98,106);
+  doc.text('DESCRIPTION', cDesc + 6, y + 3);
+  doc.text('QTY', cQty, y + 3, { align:'center' });
+  doc.text('PRICE', cPrice, y + 3, { align:'right' });
+  doc.text('TOTAL', cTot - 6, y + 3, { align:'right' });
+  y += 22;
+
+  doc.setFont('helvetica','normal').setFontSize(10).setTextColor(13,23,38);
+  items.forEach(i => {
+    const qty = parseFloat(i.qty)||0, price = parseFloat(i.price)||0, lt = qty*price;
+    const lines = doc.splitTextToSize(String(i.desc), cQty - cDesc - 20);
+    doc.text(lines, cDesc + 6, y);
+    doc.text(String(qty), cQty, y, { align:'center' });
+    doc.text('£' + price.toFixed(2), cPrice, y, { align:'right' });
+    doc.text('£' + lt.toFixed(2), cTot - 6, y, { align:'right' });
+    y += 14 * lines.length + 6;
+    doc.setDrawColor(238,240,242).line(L, y - 8, R, y - 8);
+  });
+
+  // Grand total
+  y += 6;
+  doc.setFont('helvetica','bold').setFontSize(12).setTextColor(13,23,38);
+  doc.text('Grand Total', cPrice, y, { align:'right' });
+  doc.text('£' + total.toFixed(2), cTot - 6, y, { align:'right' });
+
+  // Bank details
+  y += 40;
+  doc.setFillColor(245,242,235).roundedRect(L, y - 14, R - L, 64, 6, 6, 'F');
+  doc.setFont('helvetica','bold').setFontSize(9).setTextColor(13,23,38);
+  doc.text('Bank details for payment', L + 14, y + 2);
+  doc.setFont('helvetica','normal').setFontSize(9).setTextColor(70,80,90);
+  doc.text('HSBC · Mr J B Green', L + 14, y + 17);
+  doc.text('Account: 51476998 · Sort code: 40-31-33', L + 14, y + 30);
+  doc.setFont('helvetica','bold').setTextColor(13,23,38);
+  doc.text('Ref: ' + currentInvoiceRef, L + 14, y + 43);
+
+  const safeName = (cust.name || 'customer').replace(/[^a-z0-9]+/gi, '-');
+  doc.save(`${currentInvoiceRef}-${safeName}.pdf`);
 }
 
 // ============ DAILY SALES ============
@@ -5196,6 +5421,7 @@ const HELP_PAGES = {
       { icon:'📦', title:'The cards at the top', body:'These update live: <strong>Next run</strong> shows how many orders are booked for your next delivery day, <strong>This week revenue</strong>, <strong>Unpaid invoices</strong>, and <strong>Active customers</strong>. The date and greeting at the top, and the cut-off reminder, all follow your actual next delivery day from the Schedule.' },
       { icon:'⚡', title:'Quick actions', body:'The buttons in the middle let you do the most common tasks in one click — log an order, view your delivery runs, edit availability, or check finances.' },
       { icon:'💰', title:'Money owed', body:'The <strong>Outstanding</strong> figure shows what trade customers still owe you. Click it to go to Invoices and see exactly who hasn\'t paid.' },
+      { icon:'📈', title:'Revenue chart', body:'The <strong>Revenue — last 6 weeks</strong> chart shows your actual takings each week, worked out from your orders. Gold bars are past weeks and the navy bar is this week — hover any bar to see the exact figure. The line underneath tells you how this week compares to last, and how close you are to the £10k/week target.' },
     ]
   },
   social: {
@@ -5294,9 +5520,10 @@ const HELP_PAGES = {
     label: 'Invoices',
     sections: [
       { icon:'📄', title:'What is this page?', body:'Invoices is where you create, manage, and send invoices to trade customers. All your invoices live here with their payment status.' },
-      { icon:'➕', title:'Creating a new invoice', body:'Press <strong>+ New invoice</strong>. Select the customer from the dropdown — their details fill in automatically. Add line items (product, quantity, price) and the total calculates itself.' },
-      { icon:'📬', title:'Sending an invoice', body:'Once an invoice is ready, press the dropdown arrow and choose <strong>Send by email</strong> or <strong>Send by text</strong>. The message is already written — you just press send.' },
-      { icon:'🖨️', title:'Printing', body:'Choose <strong>Print</strong> from the invoice dropdown to get a printer-friendly version. Useful if a customer wants a paper copy.' },
+      { icon:'➕', title:'Creating a new invoice', body:'Select the customer from the dropdown — their details fill in automatically. Add line items (product, quantity, price) and the total calculates itself. Press <strong>Generate invoice</strong> to see a preview, then <strong>Save invoice</strong> to store it in your list. It picks the right document automatically — a <strong>receipt</strong> for domestic customers and an <strong>invoice</strong> for trade.' },
+      { icon:'📄', title:'Download as PDF', body:'Open the <strong>Actions</strong> menu and choose <strong>Download PDF</strong> to save the invoice or receipt as a tidy PDF on your device — ready to email, print, or keep for your records.' },
+      { icon:'📬', title:'Sending an invoice', body:'Once an invoice is ready, open the <strong>Actions</strong> menu and choose <strong>Send via email</strong> or <strong>Send via message</strong>. The message is already written — you just press send.' },
+      { icon:'🖨️', title:'Printing', body:'Choose <strong>Print</strong> from the <strong>Actions</strong> menu to get a printer-friendly version. Useful if a customer wants a paper copy.' },
       { icon:'💷', title:'Logging a payment', body:'When a customer pays, press <strong>Log payment</strong> on their invoice. Choose the method (cash or bank transfer), enter the amount, and press <strong>Add this payment</strong>. You can add as many entries as needed — for example £50 cash and £50 bank transfer against the same invoice. The invoice marks itself as paid automatically once the full balance is cleared.' },
       { icon:'🔀', title:'Split payments', body:'If a customer pays part in cash and part by bank transfer, just log both separately using <strong>Log payment</strong>. Each entry shows up on the invoice with its method and amount. The remaining balance updates as you go.' },
       { icon:'🔴', title:'Overdue invoices', body:'Any invoice not paid after 30 days turns <strong>Overdue</strong> and shows in red. You\'ll see a count on the Dashboard too.' },
