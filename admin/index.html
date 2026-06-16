@@ -1263,7 +1263,7 @@
     </div>
     <div class="btn-row">
       <button class="btn-navy" onclick="sendVIPMessage()" id="vipSendBtn">
-        ✦ Send VIP message
+        💬 Message VIPs on WhatsApp
       </button>
       <button class="btn-add" onclick="showAddVIPModal()">+ Add to VIP list</button>
     </div>
@@ -1283,7 +1283,7 @@
           <textarea id="vipMessageText" style="background:none;border:none;color:rgba(255,255,255,.85);font-size:12px;line-height:1.6;width:100%;min-height:100px;resize:vertical;font-family:var(--body)">Hi [Name] 🎄 As one of our best customers, you get first pick of our Christmas delivery slots before we open up to everyone. Order here: jgfoodsnorthwest.com — slots are limited so don't leave it too long! Thanks, Jon</textarea>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px">
-          <button class="btn-gold" style="font-size:12px;padding:9px 14px" onclick="sendVIPMessage()">Send to all VIPs</button>
+          <button class="btn-gold" style="font-size:12px;padding:9px 14px" onclick="sendVIPMessage()">💬 Send via WhatsApp</button>
           <button class="btn-navy" style="font-size:12px;padding:9px 14px" onclick="generateVIPMessage()">✦ Redraft with AI</button>
         </div>
       </div>
@@ -4228,7 +4228,8 @@ function renderVIPList() {
         <div class="oc-items">${v.phone}${v.note ? ' · ' + v.note : ''}</div>
       </div>
       <div class="oc-right">
-        <div class="oc-meta">
+        <div class="oc-meta" style="display:flex;gap:6px;align-items:center">
+          <button onclick="whatsappVIP('${v.id}')" style="font-size:11px;font-weight:700;padding:4px 11px;border-radius:7px;background:var(--navy);border:none;color:#fff;cursor:pointer">💬 WhatsApp</button>
           <button onclick="removeVIP('${v.id}')" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:7px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer">Remove</button>
         </div>
       </div>
@@ -4246,20 +4247,25 @@ function removeVIP(id) {
   if (i > -1) { sampleVIPs.splice(i, 1); renderVIPList(); }
 }
 
+// Open WhatsApp for one VIP with the composed message (name personalised)
+function whatsappVIP(id) {
+  const v = sampleVIPs.find(x => x.id === id);
+  if (!v) return;
+  const template = document.getElementById('vipMessageText').value.trim();
+  if (!template) { alert('Write your VIP message in the box at the top first.'); return; }
+  const wa = toWhatsAppNumber(v.phone);
+  if (!wa) { alert(`${v.name} doesn't have a valid WhatsApp number — check it on their customer record.`); return; }
+  const body = template.replace(/\[Name\]/g, v.name.split(' ')[0]);
+  window.open(`https://wa.me/${wa}?text=${encodeURIComponent(body)}`, '_blank');
+}
+
+// WhatsApp sends one chat at a time, so guide Jon to the per-customer buttons
 function sendVIPMessage() {
-  const msg = document.getElementById('vipMessageText').value;
-  const btn = document.getElementById('vipSendBtn');
-  if (!msg.trim()) { alert('Please write a message first.'); return; }
-  btn.textContent = 'Sending…';
-  btn.disabled = true;
-  // TODO: Send via Twilio SMS to each VIP customer's phone number
-  // sampleVIPs.forEach(v => {
-  //   twilio.messages.create({ to: v.phone, from: TWILIO_NUMBER, body: msg.replace('[Name]', v.name.split(' ')[0]) });
-  // });
-  setTimeout(() => {
-    btn.textContent = `✓ Sent to ${sampleVIPs.length} VIP customers`;
-    setTimeout(() => { btn.textContent = '✦ Send VIP message'; btn.disabled = false; }, 3000);
-  }, 1000);
+  const msg = document.getElementById('vipMessageText').value.trim();
+  if (!msg) { alert('Please write a message first.'); return; }
+  if (!sampleVIPs.length) { alert('No VIP customers on the list yet.'); return; }
+  alert('WhatsApp sends one chat at a time — tap the 💬 WhatsApp button next to each customer below to send them this message. Opening the first one for you now.');
+  whatsappVIP(sampleVIPs[0].id);
 }
 
 function generateVIPMessage() {
@@ -4945,72 +4951,89 @@ function buildInvoiceDoc(data) {
   const doc = new JS({ unit:'pt', format:'a4' });
   const W = doc.internal.pageSize.getWidth();
   const L = 48, R = W - 48;
-  let y = 60;
+  // Brand palette (matches the app: navy + gold + cream)
+  const NAVY=[22,39,63], NAVYD=[13,23,38], GOLD=[194,149,74], GOLDB=[224,189,114],
+        CREAM=[241,232,214], INK=[38,32,25], INKSOFT=[106,95,81], OX=[140,50,44];
 
-  doc.setFont('helvetica','bold').setFontSize(22).setTextColor(13,23,38);
-  doc.text('JG Foods', L, y);
-  doc.setFont('helvetica','normal').setFontSize(9).setTextColor(110,120,130);
-  doc.text('Mobile Butcher · Ormskirk & West Lancashire', L, y + 15);
-  doc.text('07702 852 704   ·   jongreen347@gmail.com', L, y + 28);
+  // ── Navy header band + gold rule ──
+  doc.setFillColor(NAVYD[0],NAVYD[1],NAVYD[2]).rect(0, 0, W, 104, 'F');
+  doc.setFillColor(GOLD[0],GOLD[1],GOLD[2]).rect(0, 104, W, 3, 'F');
 
-  doc.setFont('helvetica','bold').setFontSize(14).setTextColor(13,23,38);
-  doc.text(title, R, y, { align:'right' });
-  doc.setFont('helvetica','bold').setFontSize(11).setTextColor(125,30,40);
-  doc.text(ref, R, y + 16, { align:'right' });
-  doc.setFont('helvetica','normal').setFontSize(9).setTextColor(70,80,90);
-  doc.text('Date: ' + (data.dateFmt || new Date().toLocaleDateString('en-GB')), R, y + 30, { align:'right' });
-  doc.setFont('helvetica','bold').setTextColor(13,23,38);
-  doc.text('VAT No: 307458303', R, y + 43, { align:'right' });
+  doc.setFont('helvetica','bold').setFontSize(26).setTextColor(255,255,255);
+  doc.text('JG Foods', L, 50);
+  doc.setFont('helvetica','bold').setFontSize(8).setTextColor(GOLDB[0],GOLDB[1],GOLDB[2]);
+  doc.text('MOBILE BUTCHER · ORMSKIRK & WEST LANCASHIRE', L, 66);
+  doc.setFont('helvetica','normal').setFontSize(8.5).setTextColor(206,213,222);
+  doc.text('07702 852 704   ·   jongreen347@gmail.com', L, 82);
 
-  y += 70;
-  doc.setDrawColor(225,228,232).line(L, y, R, y);
-  y += 24;
+  doc.setFont('helvetica','bold').setFontSize(17).setTextColor(255,255,255);
+  doc.text(title, R, 48, { align:'right' });
+  doc.setFont('helvetica','bold').setFontSize(11).setTextColor(GOLDB[0],GOLDB[1],GOLDB[2]);
+  doc.text(ref, R, 65, { align:'right' });
+  doc.setFont('helvetica','normal').setFontSize(8.5).setTextColor(206,213,222);
+  doc.text('Date: ' + (data.dateFmt || new Date().toLocaleDateString('en-GB')), R, 80, { align:'right' });
+  doc.text('VAT No: 307458303', R, 92, { align:'right' });
 
-  doc.setFont('helvetica','bold').setFontSize(8).setTextColor(150,158,166);
+  let y = 150;
+
+  // ── Bill to ──
+  doc.setFont('helvetica','bold').setFontSize(8).setTextColor(GOLD[0],GOLD[1],GOLD[2]);
   doc.text(data.type === 'receipt' ? 'RECEIPT FOR' : 'BILL TO', L, y);
-  doc.setFont('helvetica','bold').setFontSize(11).setTextColor(13,23,38);
+  doc.setFont('helvetica','bold').setFontSize(12).setTextColor(NAVYD[0],NAVYD[1],NAVYD[2]);
   doc.text(data.custName || '—', L, y + 16);
   if (data.custAddress) {
-    doc.setFont('helvetica','normal').setFontSize(9).setTextColor(90,98,106);
+    doc.setFont('helvetica','normal').setFontSize(9).setTextColor(INKSOFT[0],INKSOFT[1],INKSOFT[2]);
     doc.text(String(data.custAddress), L, y + 30);
   }
-  y += 52;
+  y += 56;
 
+  // ── Items table (navy header, zebra rows) ──
   const cDesc = L, cQty = R - 200, cPrice = R - 110, cTot = R;
-  doc.setFillColor(245,242,235).rect(L, y - 12, R - L, 22, 'F');
-  doc.setFont('helvetica','bold').setFontSize(8.5).setTextColor(90,98,106);
-  doc.text('DESCRIPTION', cDesc + 6, y + 3);
+  doc.setFillColor(NAVY[0],NAVY[1],NAVY[2]).rect(L, y - 13, R - L, 24, 'F');
+  doc.setFont('helvetica','bold').setFontSize(8.5).setTextColor(255,255,255);
+  doc.text('DESCRIPTION', cDesc + 8, y + 3);
   doc.text('QTY', cQty, y + 3, { align:'center' });
   doc.text('PRICE', cPrice, y + 3, { align:'right' });
-  doc.text('TOTAL', cTot - 6, y + 3, { align:'right' });
-  y += 22;
+  doc.text('TOTAL', cTot - 8, y + 3, { align:'right' });
+  y += 27;
 
-  doc.setFont('helvetica','normal').setFontSize(10).setTextColor(13,23,38);
-  items.forEach(i => {
+  doc.setFont('helvetica','normal').setFontSize(10).setTextColor(INK[0],INK[1],INK[2]);
+  items.forEach((i, idx) => {
     const qty = parseFloat(i.qty)||0, price = parseFloat(i.price)||0, lt = qty*price;
-    const lines = doc.splitTextToSize(String(i.desc), cQty - cDesc - 20);
-    doc.text(lines, cDesc + 6, y);
+    const lines = doc.splitTextToSize(String(i.desc), cQty - cDesc - 24);
+    const rowH = 14 * lines.length + 6;
+    if (idx % 2 === 1) doc.setFillColor(248,244,236).rect(L, y - 11, R - L, rowH, 'F');
+    doc.setTextColor(INK[0],INK[1],INK[2]);
+    doc.text(lines, cDesc + 8, y);
     doc.text(String(qty), cQty, y, { align:'center' });
     doc.text('£' + price.toFixed(2), cPrice, y, { align:'right' });
-    doc.text('£' + lt.toFixed(2), cTot - 6, y, { align:'right' });
-    y += 14 * lines.length + 6;
-    doc.setDrawColor(238,240,242).line(L, y - 8, R, y - 8);
+    doc.text('£' + lt.toFixed(2), cTot - 8, y, { align:'right' });
+    y += rowH;
   });
 
-  y += 6;
-  doc.setFont('helvetica','bold').setFontSize(12).setTextColor(13,23,38);
+  // ── Grand total ──
+  doc.setDrawColor(GOLD[0],GOLD[1],GOLD[2]).setLineWidth(1.2).line(cQty - 10, y - 1, R, y - 1);
+  y += 18;
+  doc.setFont('helvetica','bold').setFontSize(12).setTextColor(NAVYD[0],NAVYD[1],NAVYD[2]);
   doc.text('Grand Total', cPrice, y, { align:'right' });
-  doc.text('£' + total.toFixed(2), cTot - 6, y, { align:'right' });
+  doc.setFontSize(13).setTextColor(OX[0],OX[1],OX[2]);
+  doc.text('£' + total.toFixed(2), cTot - 8, y, { align:'right' });
 
-  y += 40;
-  doc.setFillColor(245,242,235).roundedRect(L, y - 14, R - L, 64, 6, 6, 'F');
-  doc.setFont('helvetica','bold').setFontSize(9).setTextColor(13,23,38);
-  doc.text('Bank details for payment', L + 14, y + 2);
-  doc.setFont('helvetica','normal').setFontSize(9).setTextColor(70,80,90);
-  doc.text('HSBC · Mr J B Green', L + 14, y + 17);
-  doc.text('Account: 51476998 · Sort code: 40-31-33', L + 14, y + 30);
-  doc.setFont('helvetica','bold').setTextColor(13,23,38);
-  doc.text('Ref: ' + ref, L + 14, y + 43);
+  // ── Bank details (cream box, gold accent bar) ──
+  y += 34;
+  doc.setFillColor(CREAM[0],CREAM[1],CREAM[2]).roundedRect(L, y - 14, R - L, 66, 7, 7, 'F');
+  doc.setFillColor(GOLD[0],GOLD[1],GOLD[2]).rect(L, y - 8, 4, 54, 'F');
+  doc.setFont('helvetica','bold').setFontSize(9).setTextColor(NAVYD[0],NAVYD[1],NAVYD[2]);
+  doc.text('Bank details for payment', L + 16, y + 3);
+  doc.setFont('helvetica','normal').setFontSize(9).setTextColor(INKSOFT[0],INKSOFT[1],INKSOFT[2]);
+  doc.text('HSBC · Mr J B Green', L + 16, y + 18);
+  doc.text('Account: 51476998 · Sort code: 40-31-33', L + 16, y + 31);
+  doc.setFont('helvetica','bold').setTextColor(NAVYD[0],NAVYD[1],NAVYD[2]);
+  doc.text('Ref: ' + ref, L + 16, y + 44);
+
+  // ── Footer ──
+  doc.setFont('helvetica','normal').setFontSize(8).setTextColor(150,142,130);
+  doc.text('Thank you for your order  ·  JG Foods', W / 2, 815, { align:'center' });
 
   return doc;
 }
@@ -5724,8 +5747,8 @@ const HELP_PAGES = {
     label: 'VIP',
     sections: [
       { icon:'⭐', title:'What is this page?', body:'The VIP section is for sending special messages to your best customers — loyalty deals, early access to offers, or a simple thank-you.' },
-      { icon:'✍️', title:'Writing a message', body:'Type your message in the box, choose which customers to send it to, then press <strong>Send</strong>. You can also press <strong>Redraft with AI</strong> to get a polished version written for you.' },
-      { icon:'📱', title:'How it sends', body:'Messages go out by text or email depending on what contact details you have for each customer. The system handles it — you just write the message.' },
+      { icon:'✍️', title:'Writing a message', body:'Type your message in the box at the top — use <strong>[Name]</strong> and it\'s swapped for each customer\'s first name automatically. You can also press <strong>Redraft with AI</strong> to get a polished version written for you.' },
+      { icon:'💬', title:'Sending on WhatsApp', body:'Tap the <strong>💬 WhatsApp</strong> button next to each VIP to open WhatsApp with your message ready to send to them. WhatsApp sends one chat at a time, so you go down the list tapping send — quick, personal, and free. Works the same as sending a receipt.' },
     ]
   },
   temps: {
