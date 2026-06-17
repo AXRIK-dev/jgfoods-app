@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JG Foods — Try It Out: Testing Worksheet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Mulish:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#16273f; --navy-deep:#0d1726; --gold:#c2954a; --gold-bright:#e0bd72;
+    --cream:#f1e8d6; --paper:#fbf6ea; --ink:#262019; --ink-soft:#6a5f51;
+    --line:#e4ddcb; --green:#1a6640; --oxblood:#8c322c;
+    --display:'Fraunces',Georgia,serif; --body:'Mulish',-apple-system,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--body);color:var(--ink);background:#efe7d6;line-height:1.6;padding:24px}
+  .sheet{max-width:840px;margin:0 auto;background:var(--paper);border-radius:16px;overflow:hidden;box-shadow:0 20px 60px -30px rgba(13,23,38,.5)}
+  .top{background:var(--navy-deep);color:#fff;padding:34px 40px;border-bottom:4px solid var(--gold)}
+  .brand{font-family:var(--display);font-size:30px;font-weight:700}
+  .brand span{display:block;font-family:var(--body);font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:var(--gold-bright);font-weight:800;margin-top:6px}
+  .top h1{font-family:var(--display);font-weight:600;font-size:23px;margin-top:18px}
+  .top p{color:rgba(255,255,255,.8);font-size:14px;margin-top:6px}
+  .intro{padding:26px 40px;background:var(--cream);border-bottom:1px solid var(--line);font-size:14px}
+  .intro b{color:var(--navy)}
+  .body{padding:14px 40px 40px}
+  h2{font-family:var(--display);font-weight:600;color:var(--navy);font-size:21px;margin:34px 0 4px;padding-top:18px;border-top:2px solid var(--gold)}
+  h2 .num{display:inline-block;background:var(--navy);color:var(--gold-bright);font-family:var(--body);font-weight:800;font-size:13px;width:26px;height:26px;line-height:26px;text-align:center;border-radius:50%;margin-right:10px;vertical-align:middle}
+  .lead{color:var(--ink-soft);font-size:13.5px;margin-bottom:14px}
+  h3{font-size:15px;font-weight:800;color:var(--navy);margin:20px 0 8px}
+  .step{display:flex;gap:12px;padding:11px 14px;background:#fff;border:1px solid var(--line);border-radius:11px;margin-bottom:9px}
+  .box{flex-shrink:0;width:20px;height:20px;border:2px solid var(--gold);border-radius:5px;margin-top:1px}
+  .step .do{font-weight:700;color:var(--ink)}
+  .step .exp{color:var(--ink-soft);font-size:13px;margin-top:2px}
+  .tip{background:var(--paper);border-left:4px solid var(--gold);border-radius:0 8px 8px 0;padding:11px 15px;font-size:13px;margin:10px 0;color:var(--ink-soft)}
+  .tip b{color:var(--navy)}
+  .warn{background:#fbeee9;border:1px solid #e8c6bd;border-radius:11px;padding:16px 18px;margin:14px 0}
+  .warn b{color:var(--oxblood)}
+  .reset h2{border-top-color:var(--oxblood)}
+  .reset h2 .num{background:var(--oxblood)}
+  .order-note{background:var(--navy);color:#fff;border-radius:11px;padding:14px 18px;font-size:13.5px;margin:14px 0}
+  .order-note b{color:var(--gold-bright)}
+  .foot{padding:24px 40px 34px;border-top:1px solid var(--line);color:var(--ink-soft);font-size:13px}
+  .print-btn{display:inline-block;margin:0 0 18px;background:var(--navy);color:#fff;border:none;border-radius:9px;padding:10px 18px;font-family:var(--body);font-weight:700;font-size:13px;cursor:pointer}
+  ol.clean{margin:6px 0 0 20px}
+  ol.clean li{margin-bottom:7px;font-size:13.5px}
+  @media print{ body{background:#fff;padding:0} .sheet{box-shadow:none;max-width:100%} .print-btn{display:none} .step{break-inside:avoid} .box{border-color:#888} }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="top">
+    <div class="brand">JG Foods<span>Mobile Butcher · North Liverpool, Ormskirk &amp; West Lancashire</span></div>
+    <h1>Try it out — your testing worksheet</h1>
+    <p>A simple walk-through of your new website and admin system. Take your time over the next few days.</p>
+  </div>
+
+  <div class="intro">
+    Hi Jon — this is your playground. Nothing here is live to real customers yet, so <b>click everything, place pretend orders, make mistakes — you can't break it.</b> Work through each section and tick the box as you go. Jot any notes or anything that feels off, and send them over.
+    <br><br>
+    You'll need: your <b>website</b> address, your <b>admin</b> address (admin.jgfoodsnorthwest.com) and the <b>email &amp; password</b> Phil set up for you. When you're done testing, the last section shows you how to wipe all your practice data so you start clean on day one.
+    <button class="print-btn" onclick="window.print()" style="display:block;margin-top:16px">🖨 Print this worksheet</button>
+  </div>
+
+  <div class="body">
+
+    <h2><span class="num">1</span>The website (what your customers see)</h2>
+    <p class="lead">Open your website on your phone and on a computer if you can — it should look good on both.</p>
+
+    <div class="step"><div class="box"></div><div><div class="do">Look around the homepage.</div><div class="exp">Check the wording reads right — including "North Liverpool, Ormskirk &amp; West Lancashire" and the "refer a friend, free pack of sausages or bacon" banner.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Read the "About" section.</div><div class="exp">Have a proper read of the About part — your story and who you are. Does it sound right and like you? Let me know if it's spot on, needs a few tweaks, or you'd rather we rewrote it from scratch.</div></div></div>
+    <div class="tip">📸 <b>A favour:</b> a good photo of you next to the van would be brilliant for the website — it puts a face to the name, and customers really warm to that. Send one over whenever you can.</div>
+    <div class="step"><div class="box"></div><div><div class="do">Browse this week's products.</div><div class="exp">These come straight from your Availability list in the admin. If it's empty, that's because you haven't added products yet (you'll do that in section 2).</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Place a pretend order.</div><div class="exp">Add a few items, go to checkout, fill in a name, your own phone/email and an address, pick a delivery day, and submit. Use your own details so you can see the order come through.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Check it arrived in the admin.</div><div class="exp">Open the admin → Delivery Runs. Your pretend order should be there on the day you chose.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Try the contact form.</div><div class="exp">Scroll to the bottom (Contact) and use the <b>"Send Jon a message"</b> form. Fill it in and send. You should get the message come through to your email — that's a customer enquiry landing with you automatically.</div></div></div>
+
+    <h2><span class="num">2</span>Logging in &amp; your products</h2>
+    <div class="step"><div class="box"></div><div><div class="do">Log in to the admin.</div><div class="exp">Go to admin.jgfoodsnorthwest.com and sign in with your email and password.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Add a few real products.</div><div class="exp">Go to <b>Availability</b> → <b>+ Add product</b>. Add a name, category, price and switch it <b>Live</b>. Add a photo if you like. These show on the website and in the order/invoice dropdowns.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Edit a price.</div><div class="exp">Tap a price to change it. Turn a product off with the Live toggle and check it disappears from the website.</div></div></div>
+
+    <h2><span class="num">3</span>Taking orders</h2>
+    <div class="step"><div class="box"></div><div><div class="do">Log an order by hand.</div><div class="exp"><b>Log Order</b> → choose <b>Enter manually</b>. Type a customer name, phone, address, pick the items and a delivery day, then <b>Save order</b>.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Try the "paste a message" magic.</div><div class="exp"><b>Log Order</b> → <b>📋 Paste a message</b>. Paste a pretend WhatsApp order like <i>"Hi Jon, can I get 2x chicken fillets and a BBQ pack for Monday please? It's Dave, 9 Elm Close, 07700 000000"</i> and press <b>Extract details</b>. It should fill the form in for you. Always check it before saving.</div></div></div>
+    <div class="order-note">📌 <b>Good to know:</b> every order you save automatically creates a <b>receipt</b> (home customers) or an <b>invoice</b> (trade customers) for you — you'll see it in the next section. You don't have to write them out.</div>
+
+    <h2><span class="num">4</span>Receipts &amp; invoices</h2>
+    <div class="step"><div class="box"></div><div><div class="do">Find the receipt from your order.</div><div class="exp">Go to <b>Invoices</b>. The order you just logged should have created a receipt/invoice in the <b>Saved invoices &amp; receipts</b> list. (Refresh the page if it's not showing yet.)</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Open it as a PDF.</div><div class="exp">On that row, <b>Actions → Download PDF</b>. Check it looks smart with your JG Foods header, the items and your bank details.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Send it on WhatsApp.</div><div class="exp"><b>Actions → Send via WhatsApp</b>. WhatsApp opens with the message and a link to the PDF already written — to your own number if you used it. Tap the link to check the PDF opens.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Send it by email.</div><div class="exp"><b>Actions → Send via email</b>. Your Gmail opens with everything filled in. Send it to yourself and check it arrives.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Build one by hand &amp; log a payment.</div><div class="exp">At the top of the Invoices page, pick a customer, add a couple of items, <b>Generate</b> then <b>Save invoice</b>. Then on an unpaid one, press <b>Log payment</b> and mark it paid.</div></div></div>
+
+    <h2><span class="num">5</span>Your delivery days &amp; runs</h2>
+    <div class="step"><div class="box"></div><div><div class="do">Set your usual days.</div><div class="exp"><b>Schedule</b> → turn on the days you normally deliver and Save. Try taking a day off, and adding a one-off day.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Look at a delivery run.</div><div class="exp"><b>Delivery Runs</b> → tap a day. You'll see the orders, a pick list, and quick temperature entry.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Plan the route.</div><div class="exp">Press <b>Plan route</b>, then <b>Open in Google Maps</b> — it should open Maps with your stops for real directions.</div></div></div>
+
+    <h2><span class="num">6</span>Money &amp; your spreadsheets</h2>
+    <div class="step"><div class="box"></div><div><div class="do">Enter a day's takings.</div><div class="exp"><b>Finance → Daily Sales → + Add day</b>. Put in a date, bank and cash amount. It saves on its own. Refresh the page and check it's still there.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Import an old spreadsheet (optional).</div><div class="exp">On the Daily Sales tab, drag one of your past takings spreadsheets onto the <b>Import past takings</b> box (it needs Date, Bank and Cash columns). It'll read your figures straight in. Do this whenever you're ready — no rush.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Have a look at the other tabs.</div><div class="exp">Weekly, Bank Payments and Monthly (for your accountant). Check the top figures (Paid, Unpaid, Overdue) look sensible as you add invoices and payments.</div></div></div>
+
+    <h2><span class="num">7</span>Social posts &amp; VIPs</h2>
+    <div class="step"><div class="box"></div><div><div class="do">Write a Facebook/Instagram post.</div><div class="exp"><b>Social</b> → jot a few notes, press <b>Generate post</b>, tweak it, then Copy and paste into Facebook or Instagram.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Message a VIP.</div><div class="exp"><b>VIP</b> → write a message (use [Name] and it fills in each person's name), then tap <b>💬 WhatsApp</b> next to a customer to send it.</div></div></div>
+
+    <h2><span class="num">8</span>Temperatures (food safety)</h2>
+    <div class="step"><div class="box"></div><div><div class="do">Log a temperature.</div><div class="exp"><b>Temps</b> → tap a cell and enter a fridge temperature. You can also do this from a delivery run while you're out.</div></div></div>
+
+    <h2><span class="num">9</span>Managing logins (you're the boss)</h2>
+    <div class="step"><div class="box"></div><div><div class="do">Open your account page.</div><div class="exp">Tap <b>your name in the top-right corner</b>.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Change your own password.</div><div class="exp">Under <b>My password</b>, type a new one twice and update it. Try logging out and back in with it.</div></div></div>
+    <div class="step"><div class="box"></div><div><div class="do">Add a login for your driver.</div><div class="exp">Under <b>Add a login</b>, enter their email and a password, choose <b>Driver</b> (deliveries only — no money), and Create. Tell them the details so they can sign in. You can reset their password or remove them any time.</div></div></div>
+
+    <div class="reset">
+    <h2><span class="num">★</span>Before you go live — wipe your practice data</h2>
+    <p class="lead">Once you're happy and ready for real customers, clear out everything you added while testing so you start with a clean, accurate system. Do it in <b>this order</b> (it matters):</p>
+
+    <div class="warn"><b>⚠️ Important:</b> delete things in the order below. The system won't let you delete a customer who still has invoices or orders attached — so invoices first, then orders, then the customer last.</div>
+
+    <ol class="clean">
+      <li><b>Invoices &amp; receipts</b> — Invoices page → on each test one, <b>Actions → Delete invoice</b>.</li>
+      <li><b>Orders</b> — Delivery Runs → open each test day → open each test order → <b>Delete</b>.</li>
+      <li><b>Daily takings</b> — Finance → Daily Sales → press the <b>×</b> on any practice rows (leave the real imported ones if you want to keep them).</li>
+      <li><b>Customers</b> — Customers page → open each test customer → <b>Delete</b>.</li>
+      <li><b>Products</b> — Availability → remove any made-up test products (keep your real range).</li>
+      <li><b>VIPs</b> — VIP page → <b>Remove</b> any test entries.</li>
+      <li><b>Extra logins</b> — your name (top-right) → remove any test driver logins you don't need. (Keep your own!)</li>
+    </ol>
+    <div class="tip">When you're done, the <b>Dashboard</b> and <b>Finance</b> figures should read back to zero / empty. That's your sign you're starting fresh. From that point on, every real order builds your real records.</div>
+    </div>
+
+  </div>
+
+  <div class="foot">
+    Built for JG Foods by AXRIK. Anything not working as you'd expect, or wording you'd like changed — write it down and send it over. There's also a <b>?</b> help button in the bottom corner of every admin screen.
+  </div>
+</div>
+</body>
+</html>

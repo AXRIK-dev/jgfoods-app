@@ -745,8 +745,40 @@
         <div><b style="font-size:13px;font-weight:800;color:var(--ink);display:block">Email</b><span style="font-size:12px;color:var(--ink-soft)">jongreen347@gmail.com</span></div>
       </a>
     </div>
+
+    <!-- Contact form (Netlify Forms — emails Jon on submit) -->
+    <div style="max-width:680px;margin-top:24px">
+      <div style="background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:22px 22px 24px">
+        <h3 style="font-family:var(--display);font-size:19px;color:var(--navy);margin:0 0 4px">Or send Jon a message</h3>
+        <p style="font-size:13px;color:var(--ink-soft);margin:0 0 16px">Got a question or a special request? Pop it here and Jon will get back to you.</p>
+        <form name="contact" method="POST" data-netlify="true" netlify-honeypot="bot-field" onsubmit="return submitContactForm(this)" id="contactForm">
+          <input type="hidden" name="form-name" value="contact">
+          <p style="display:none"><label>Don't fill this in if you're human: <input name="bot-field"></label></p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div><label style="display:block;font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:5px">Your name *</label><input type="text" name="name" required placeholder="Sarah Taylor" style="width:100%;border:1.5px solid var(--line);border-radius:9px;padding:11px 13px;font-size:14px;font-family:inherit;background:#fff"></div>
+            <div><label style="display:block;font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:5px">Phone</label><input type="tel" name="phone" placeholder="07700 000000" style="width:100%;border:1.5px solid var(--line);border-radius:9px;padding:11px 13px;font-size:14px;font-family:inherit;background:#fff"></div>
+          </div>
+          <div style="margin-top:12px"><label style="display:block;font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:5px">Email</label><input type="email" name="email" placeholder="you@email.com" style="width:100%;border:1.5px solid var(--line);border-radius:9px;padding:11px 13px;font-size:14px;font-family:inherit;background:#fff"></div>
+          <div style="margin-top:12px"><label style="display:block;font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:5px">Message *</label><textarea name="message" required rows="4" placeholder="Your question or request…" style="width:100%;border:1.5px solid var(--line);border-radius:9px;padding:11px 13px;font-size:14px;font-family:inherit;background:#fff;resize:vertical"></textarea></div>
+          <button type="submit" class="btn-primary" style="margin-top:14px">Send message</button>
+          <p id="contactFormMsg" style="font-size:13px;margin-top:10px"></p>
+        </form>
+      </div>
+    </div>
   </div>
 </section>
+<script>
+function submitContactForm(form){
+  var msg=document.getElementById('contactFormMsg');
+  var btn=form.querySelector('button[type="submit"]');
+  if(btn){btn.disabled=true;btn.textContent='Sending…';}
+  var body=new URLSearchParams(new FormData(form)).toString();
+  fetch('/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body})
+    .then(function(){form.reset();if(btn){btn.disabled=false;btn.textContent='Send message';}if(msg){msg.style.color='#1a6640';msg.textContent='✓ Thanks! Your message has been sent — Jon will be in touch soon.';}})
+    .catch(function(){if(btn){btn.disabled=false;btn.textContent='Send message';}if(msg){msg.style.color='#8c322c';msg.textContent='Sorry, something went wrong — please call or text Jon on 07702 852704.';}});
+  return false;
+}
+</script>
 
 <!-- ============ FOOTER ============ -->
 <footer>
