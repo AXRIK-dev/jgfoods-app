@@ -513,8 +513,8 @@
       <div class="tn-link" id="nav-invoices" onclick="showPage('invoices')">📄 Invoices</div>
     </div>
     <div class="tn-right">
-      <div class="tn-avatar" id="nav-avatar">J</div>
-      <span class="tn-user" id="nav-username">Jon</span>
+      <div class="tn-avatar" id="nav-avatar" onclick="showPage('users')" style="cursor:pointer" title="Account & access">J</div>
+      <span class="tn-user" id="nav-username" onclick="showPage('users')" style="cursor:pointer" title="Account & access">Jon</span>
       <button onclick="signOut()" id="nav-signout" style="margin-left:10px;padding:5px 11px;border:1px solid rgba(224,189,114,.3);border-radius:6px;background:transparent;color:var(--gold-soft);font-size:11px;cursor:pointer;font-family:var(--body)">Sign out</button>
     </div>
   </div>
@@ -1010,22 +1010,22 @@
   <div class="stats-row">
     <div class="stat-card green">
       <div class="sc-label">Paid this month</div>
-      <div class="sc-val">£6,240</div>
-      <div class="sc-sub"><b>↑ 12%</b> vs last month</div>
+      <div class="sc-val" id="finPaidVal">£0</div>
+      <div class="sc-sub" id="finPaidSub">This month's receipts &amp; paid invoices</div>
     </div>
     <div class="stat-card red">
       <div class="sc-label">Unpaid</div>
-      <div class="sc-val">£340</div>
-      <div class="sc-sub">3 invoices outstanding</div>
+      <div class="sc-val" id="finUnpaidVal">£0</div>
+      <div class="sc-sub" id="finUnpaidSub">0 invoices outstanding</div>
     </div>
     <div class="stat-card gold">
       <div class="sc-label">Overdue (30+ days)</div>
-      <div class="sc-val">£120</div>
-      <div class="sc-sub">1 invoice — chase needed</div>
+      <div class="sc-val" id="finOverdueVal">£0</div>
+      <div class="sc-sub" id="finOverdueSub">Nothing overdue</div>
     </div>
     <div class="stat-card blue">
       <div class="sc-label">Month total</div>
-      <div class="sc-val">£6,580</div>
+      <div class="sc-val" id="finMonthVal">£0</div>
       <div class="sc-sub">Target: £10k/week</div>
     </div>
   </div>
@@ -1042,6 +1042,15 @@
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
       <p style="font-size:13px;color:var(--ink-soft)">Log each delivery day's takings — bank transfer and cash separately.</p>
       <button class="btn-navy" style="font-size:12px" onclick="addDailySalesRow()">+ Add day</button>
+    </div>
+    <div id="dsDropZone" ondragover="event.preventDefault();this.style.borderColor='var(--gold)'" ondragleave="this.style.borderColor='var(--line)'" ondrop="dsHandleDrop(event)" style="border:1.5px dashed var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--paper)">
+      <span style="font-size:20px">📥</span>
+      <div style="flex:1;min-width:220px">
+        <p style="font-size:13px;font-weight:700;color:var(--ink)">Import past takings from a spreadsheet</p>
+        <p style="font-size:11.5px;color:var(--ink-soft)">Drag an Excel or CSV file here (columns: <b>Date</b>, <b>Bank</b>, <b>Cash</b>) — or choose a file. Days already entered are updated, not duplicated.</p>
+      </div>
+      <label class="btn-add" style="cursor:pointer;font-size:12px;padding:8px 14px">Choose file<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="dsHandleFile(this.files[0])"></label>
+      <p id="dsImportMsg" style="font-size:12px;width:100%;margin:2px 0 0"></p>
     </div>
     <div style="overflow-x:auto">
       <table class="fin-table" style="max-width:700px">
@@ -1403,6 +1412,54 @@
   </div>
 </div>
 
+<!-- ============ PAGE: USERS & ACCESS ============ -->
+<div class="page" id="page-users">
+  <div class="pagehead">
+    <div>
+      <div class="eyebrow">Account &amp; access</div>
+      <h1>Users &amp; Access</h1>
+      <p>Change your own password, and — if you're an admin — manage who can log in.</p>
+    </div>
+  </div>
+
+  <!-- My account (everyone) -->
+  <div class="dash-card" style="max-width:540px;margin-bottom:22px">
+    <h3>My password</h3>
+    <p style="font-size:12px;color:var(--ink-soft);margin:4px 0 12px" id="myAccountEmail">—</p>
+    <div class="field"><label>New password</label><input type="password" id="myNewPass" placeholder="At least 6 characters"></div>
+    <div class="field"><label>Confirm new password</label><input type="password" id="myNewPass2" placeholder="Repeat it"></div>
+    <button class="btn-navy" style="margin-top:6px" onclick="changeMyPassword(this)">Update my password</button>
+    <p id="myPassMsg" style="font-size:12.5px;margin-top:10px"></p>
+  </div>
+
+  <!-- Team access (admin only) -->
+  <div id="teamAccessCard" style="display:none">
+    <div class="dash-card" style="max-width:680px;margin-bottom:18px">
+      <h3>Add a login</h3>
+      <p style="font-size:12px;color:var(--ink-soft);margin:4px 0 14px">Create a login for yourself or your delivery driver. They sign in here with the email and password you set. <b>Driver</b> = deliveries, runs and customers only. <b>Admin</b> = everything, including finance.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field"><label>Name</label><input type="text" id="nu-name" placeholder="e.g. Dave (driver)"></div>
+        <div class="field"><label>Role</label>
+          <select id="nu-role" style="background:var(--paper);border:1.5px solid var(--line);border-radius:9px;padding:11px 13px;font-size:13px;width:100%">
+            <option value="driver">Driver — deliveries only</option>
+            <option value="admin">Admin — full access</option>
+          </select>
+        </div>
+        <div class="field"><label>Email</label><input type="email" id="nu-email" placeholder="name@email.com" autocomplete="off"></div>
+        <div class="field"><label>Password</label><input type="text" id="nu-pass" placeholder="At least 6 characters"></div>
+      </div>
+      <button class="btn-add" style="margin-top:6px;justify-content:center;padding:11px 18px" onclick="addTeamUser(this)">+ Create login</button>
+      <p id="nuMsg" style="font-size:12.5px;margin-top:10px"></p>
+    </div>
+    <div class="dash-card" style="max-width:680px">
+      <h3>People with access</h3>
+      <div id="teamList" style="margin-top:10px">
+        <p style="font-size:12.5px;color:var(--ink-soft)">Loading…</p>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ============ SEND MODAL ============ -->
 <div class="send-modal-overlay" id="sendModalOverlay">
   <div class="send-modal">
@@ -1659,6 +1716,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 // ============ SUPABASE CLIENT ============
 // For now the admin runs on demo data — no network dependency.
@@ -1780,6 +1838,122 @@ function applyRoleRestrictions() {
   if (roleTag) { roleTag.textContent = 'Delivery'; roleTag.style.display = 'inline-block'; }
 }
 
+// ============ USERS & ACCESS ============
+async function authedManageUsers(payload) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Please sign in again.');
+  const resp = await fetch('/.netlify/functions/manage-users', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify(payload),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+async function openUsersPage() {
+  const { data: { user } } = await supabase.auth.getUser();
+  const emEl = document.getElementById('myAccountEmail');
+  if (emEl) emEl.textContent = user ? `Signed in as ${user.email}` : '';
+  const team = document.getElementById('teamAccessCard');
+  if (currentUserRole === 'admin') {
+    if (team) team.style.display = 'block';
+    loadTeamUsers();
+  } else if (team) {
+    team.style.display = 'none';
+  }
+}
+
+async function changeMyPassword(btn) {
+  const p1 = document.getElementById('myNewPass').value;
+  const p2 = document.getElementById('myNewPass2').value;
+  const msg = document.getElementById('myPassMsg');
+  const show = (t, ok) => { if (msg) { msg.textContent = t; msg.style.color = ok ? 'var(--green)' : 'var(--oxblood)'; } };
+  if (p1.length < 6) return show('Password must be at least 6 characters.', false);
+  if (p1 !== p2)     return show("The two passwords don't match.", false);
+  if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
+  try {
+    const { error } = await supabase.auth.updateUser({ password: p1 });
+    if (error) throw error;
+    document.getElementById('myNewPass').value = '';
+    document.getElementById('myNewPass2').value = '';
+    show('✓ Password updated.', true);
+  } catch (e) {
+    show("Couldn't update: " + (e.message || e), false);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Update my password'; }
+  }
+}
+
+async function loadTeamUsers() {
+  const list = document.getElementById('teamList');
+  if (!list) return;
+  list.innerHTML = '<p style="font-size:12.5px;color:var(--ink-soft)">Loading…</p>';
+  let me = null;
+  try { const { data: { user } } = await supabase.auth.getUser(); me = user?.id; } catch (e) {}
+  try {
+    const { users } = await authedManageUsers({ action: 'list' });
+    if (!users || !users.length) { list.innerHTML = '<p style="font-size:12.5px;color:var(--ink-soft)">No logins yet.</p>'; return; }
+    list.innerHTML = users.map(u => `
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 0;border-bottom:1px solid var(--line-soft)">
+        <div style="flex:1;min-width:160px"><div style="font-size:13px;font-weight:700;color:var(--ink)">${u.email}${u.id === me ? ' <span style="font-weight:400;color:var(--ink-soft)">(you)</span>' : ''}</div></div>
+        <select onchange="setUserRole('${u.id}', this.value)" style="border:1.5px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12px;background:var(--paper)">
+          <option value="driver" ${u.role !== 'admin' ? 'selected' : ''}>Driver</option>
+          <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+        </select>
+        <button onclick="resetUserPassword('${u.id}','${u.email}')" style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer">Reset password</button>
+        ${u.id === me ? '' : `<button onclick="removeUser('${u.id}','${u.email}')" style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:#fbe9e7;border:1px solid #f3c7c0;color:#c0392b;cursor:pointer">Remove</button>`}
+      </div>
+    `).join('');
+  } catch (e) {
+    list.innerHTML = `<p style="font-size:12.5px;color:var(--oxblood)">Couldn't load users: ${e.message || e}</p>`;
+  }
+}
+
+async function addTeamUser(btn) {
+  const email = document.getElementById('nu-email').value.trim();
+  const pass  = document.getElementById('nu-pass').value;
+  const role  = document.getElementById('nu-role').value;
+  const name  = document.getElementById('nu-name').value.trim();
+  const msg = document.getElementById('nuMsg');
+  const show = (t, ok) => { if (msg) { msg.textContent = t; msg.style.color = ok ? 'var(--green)' : 'var(--oxblood)'; } };
+  if (!email) return show('Enter an email.', false);
+  if (pass.length < 6) return show('Password must be at least 6 characters.', false);
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+  try {
+    await authedManageUsers({ action: 'create', email, password: pass, role, full_name: name });
+    document.getElementById('nu-email').value = '';
+    document.getElementById('nu-pass').value = '';
+    document.getElementById('nu-name').value = '';
+    show(`✓ Login created for ${email}.`, true);
+    loadTeamUsers();
+  } catch (e) {
+    show("Couldn't create: " + (e.message || e), false);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '+ Create login'; }
+  }
+}
+
+async function setUserRole(userId, role) {
+  try { await authedManageUsers({ action: 'setRole', userId, role }); }
+  catch (e) { alert("Couldn't change role: " + (e.message || e)); loadTeamUsers(); }
+}
+
+async function resetUserPassword(userId, email) {
+  const pass = prompt(`New password for ${email} (at least 6 characters):`);
+  if (pass === null) return;
+  if (pass.length < 6) { alert('Password must be at least 6 characters.'); return; }
+  try { await authedManageUsers({ action: 'resetPassword', userId, password: pass }); alert(`✓ Password reset for ${email}.`); }
+  catch (e) { alert("Couldn't reset: " + (e.message || e)); }
+}
+
+async function removeUser(userId, email) {
+  if (!confirm(`Remove ${email}'s login? They won't be able to sign in any more.`)) return;
+  try { await authedManageUsers({ action: 'delete', userId }); loadTeamUsers(); }
+  catch (e) { alert("Couldn't remove: " + (e.message || e)); }
+}
+
 // ============ LOAD APP DATA FROM SUPABASE ============
 async function loadAppData() {
   if (!supabase) return;
@@ -1890,6 +2064,7 @@ async function loadAppData() {
         ref:      inv.invoice_number || '',
         name:     inv.customers?.name || '',
         date:     new Date(inv.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+        created:  inv.created_at,
         amount:   parseFloat(inv.total_amount),
         status:   inv.status,
         payments: [],
@@ -1903,11 +2078,13 @@ async function loadAppData() {
       if (id === 'runs')      renderOrders();
       if (id === 'stock')     renderStock();
       if (id === 'customers') renderCustomers();
-      if (id === 'finance')   renderInvoices();
+      if (id === 'finance')   renderFinance();
+      if (id === 'invoices')  renderInvoices();
     }
     renderDashboard();
     rebuildInvoiceCustomers();
     refreshLogProductOptions();
+    renderFinance();
 
   } catch (err) {
     console.error('loadAppData error:', err);
@@ -2089,50 +2266,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ============ SAMPLE DATA ============
 // Fallback data — replaced at runtime by loadAppData() once the user logs in
 
-const sampleOrders = [
-  {id:'o1', name:'Sarah Taylor', type:'domestic', slot:'mon', items:'5kg Chicken Fillets × 2, Lean Mince 1kg', total:80, channel:'Website', status:'confirmed', address:'14 Oak Street, Ormskirk'},
-  {id:'o2', name:'The Crown Pub', type:'trade', slot:'mon', items:'Ribeye Steaks ×5 × 3, BBQ Pack × 2, Kebab Pack ×5', total:225, channel:'Phone', status:'confirmed', address:'High Street, Skelmersdale'},
-  {id:'o3', name:'Mike Donoghue', type:'domestic', slot:'mon', items:'Family Value Pack × 1, Chicken Thighs 3kg', total:70, channel:'WhatsApp', status:'new', address:'7 Mill Lane, Burscough'},
-  {id:'o4', name:'Café Verde', type:'trade', slot:'mon', items:'5kg Chicken Fillets × 3, Lean Mince 1kg × 4', total:150, channel:'Text', status:'packed', address:'Market Place, Ormskirk'},
-  {id:'o5', name:'Janet Rimmer', type:'domestic', slot:'mon', items:'BBQ Pack × 1, Diced Beef 1kg × 2', total:67.50, channel:'Facebook', status:'confirmed', address:'22 Beech Ave, Upholland'},
-  {id:'o6', name:'Dave Walsh', type:'domestic', slot:'mon', items:'Extra Lean Meat Pack × 1', total:38.50, channel:'Website', status:'new', address:'9 Elm Close, Skelmersdale'},
-  {id:'o7', name:'The Red Lion', type:'trade', slot:'thu', items:'5kg Chicken Fillets × 4, Ribeye Steaks ×5 × 2', total:196, channel:'Phone', status:'confirmed', address:'Church Road, Ormskirk'},
-  {id:'o8', name:'Karen Holt', type:'domestic', slot:'thu', items:'Kebab Pack ×5 × 2, Lean Mince 1kg × 1', total:52, channel:'Instagram', status:'confirmed', address:'34 Pine Street, Burscough'},
-];
-
-const sampleCustomers = [
-  {id:'c1', name:'Sarah Taylor', type:'domestic', phone:'07711 111111', orders:4, total:310, lastOrder:'27 May', referredBy:'', exempt:false},
-  {id:'c2', name:'The Crown Pub', type:'trade', phone:'01695 123456', orders:8, total:620, lastOrder:'26 May', referredBy:'', exempt:false},
-  {id:'c3', name:'Café Verde', type:'trade', phone:'07722 222222', orders:3, total:280, lastOrder:'26 May', referredBy:'', exempt:false},
-  {id:'c4', name:'Mike Donoghue', type:'domestic', phone:'07733 333333', orders:3, total:195, lastOrder:'29 May', referredBy:'Sarah Taylor', exempt:false},
-  {id:'c5', name:'Janet Rimmer', type:'domestic', phone:'07744 444444', orders:2, total:135, lastOrder:'29 May', referredBy:'', exempt:true, cashTab:true, tabSettleDay:'Friday'},
-  {id:'c6', name:'The Red Lion', type:'trade', phone:'01695 654321', orders:5, total:480, lastOrder:'22 May', referredBy:'', exempt:false},
-  {id:'c7', name:'Karen Holt', type:'domestic', phone:'07755 555555', orders:2, total:104, lastOrder:'29 May', referredBy:'', exempt:true},
-  {id:'c8', name:'Dave Walsh', type:'domestic', phone:'07766 666666', orders:1, total:38.50, lastOrder:'1 Jun', referredBy:'', exempt:false},
-];
-
-const sampleProducts = [
-  {id:'sp1', name:'5kg Chicken Fillets', cat:'Chicken', price:34.00, live:true},
-  {id:'sp2', name:'BBQ Pack', cat:'BBQ & Grill', price:47.50, live:true},
-  {id:'sp3', name:'Ribeye Steaks ×5', cat:'Steak & Beef', price:30.00, live:true},
-  {id:'sp4', name:'Lean Mince 1kg', cat:'Steak & Beef', price:12.00, live:true},
-  {id:'sp5', name:'Extra Lean Meat Pack', cat:'Meat Packs', price:38.50, live:true},
-  {id:'sp6', name:'Kebab Pack ×5', cat:'Kebabs', price:20.00, live:true},
-  {id:'sp7', name:'Chicken Thighs 3kg', cat:'Chicken', price:18.00, live:true},
-  {id:'sp8', name:'Family Value Pack', cat:'Meat Packs', price:52.00, live:true},
-  {id:'sp9', name:'Diced Beef 1kg', cat:'Steak & Beef', price:10.00, live:false},
-];
-
-const sampleInvoices = [
-  {id:'i1', ref:'INV-2605', name:'The Crown Pub', date:'26 May 2026', amount:225, status:'paid', payments:[{method:'bacs',amount:225,note:'',date:'27 May 2026'}]},
-  {id:'i2', ref:'INV-2606', name:'Café Verde', date:'26 May 2026', amount:150, status:'paid', payments:[{method:'cash',amount:100,note:'',date:'26 May 2026'},{method:'bacs',amount:50,note:'',date:'28 May 2026'}]},
-  {id:'i3', ref:'INV-2607', name:'Sarah Taylor', date:'27 May 2026', amount:80, status:'paid', payments:[{method:'cash',amount:80,note:'',date:'27 May 2026'}]},
-  {id:'i4', ref:'INV-2608', name:'The Red Lion', date:'22 May 2026', amount:196, status:'sent', payments:[]},
-  {id:'i5', ref:'INV-2609', name:'Mike Donoghue', date:'29 May 2026', amount:70, status:'sent', payments:[]},
-  {id:'i6', ref:'INV-2610', name:'The Anchor Inn', date:'30 Apr 2026', amount:120, status:'overdue', payments:[]},
-  {id:'i7', ref:'INV-2611', name:'Karen Holt', date:'29 May 2026', amount:52, status:'paid', payments:[{method:'cash',amount:52,note:'',date:'29 May 2026'}]},
-  {id:'i8', ref:'INV-2612', name:'Dave Walsh', date:'1 Jun 2026', amount:38.50, status:'sent', payments:[]},
-];
+// Live data — these arrays are filled from Supabase by loadAppData() once Jon
+// logs in. They start empty so nothing fake ever shows before real data loads.
+const sampleOrders = [];
+const sampleCustomers = [];
+const sampleProducts = [];
+const sampleInvoices = [];
 
 // ============ NAV ============
 function showPage(id) {
@@ -2148,8 +2287,9 @@ function showPage(id) {
   if (id === 'runs')      renderOrders();
   if (id === 'stock')     renderStock();
   if (id === 'customers') renderCustomers();
-  if (id === 'finance')   renderInvoices();
+  if (id === 'finance')   renderFinance();
   if (id === 'invoices')  { populateInvoiceCustomerSelect(); renderInvoices(); }
+  if (id === 'users')     openUsersPage();
   if (id === 'dashboard') renderDashboard();
   if (id === 'schedule')  loadSchedule();
   if (id === 'logorder')  { populateLogSlots(); refreshLogProductOptions(); }
@@ -3016,6 +3156,8 @@ async function deleteCustomer(id, name) {
   if (idx !== -1) sampleCustomers.splice(idx, 1);
   renderCustomers();
   renderDashboard();
+  rebuildInvoiceCustomers();   // refresh the invoice customer dropdown
+  renderFinance();             // refresh bank-payments table
 }
 
 function filterCustomers(type) {
@@ -3161,6 +3303,33 @@ function invPaymentSummary(inv) {
   if (hasCash && hasBank) return 'Split: cash + bank';
   if (hasCash) return 'Cash';
   return 'Bank transfer';
+}
+
+// Finance page top cards — computed from real invoices (this calendar month)
+function renderFinance() {
+  const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  const money = n => '£' + Math.round(n || 0).toLocaleString('en-GB');
+  const now = new Date();
+  const inMonth = d => { if (!d) return false; const x = new Date(d); return x.getMonth() === now.getMonth() && x.getFullYear() === now.getFullYear(); };
+
+  const monthInvs   = sampleInvoices.filter(i => inMonth(i.created));
+  const paid        = monthInvs.reduce((s, i) => s + invPaidTotal(i), 0);
+  const unpaidInvs  = sampleInvoices.filter(i => (i.status === 'sent' || i.status === 'overdue') && invBalance(i) > 0.001);
+  const unpaid      = unpaidInvs.reduce((s, i) => s + invBalance(i), 0);
+  const overdueInvs = sampleInvoices.filter(i => i.status === 'overdue' && invBalance(i) > 0.001);
+  const overdue     = overdueInvs.reduce((s, i) => s + invBalance(i), 0);
+  const monthTotal  = monthInvs.reduce((s, i) => s + (i.amount || 0), 0);
+
+  set('finPaidVal', money(paid));
+  set('finUnpaidVal', money(unpaid));
+  set('finUnpaidSub', `${unpaidInvs.length} invoice${unpaidInvs.length !== 1 ? 's' : ''} outstanding`);
+  set('finOverdueVal', money(overdue));
+  set('finOverdueSub', overdueInvs.length ? `${overdueInvs.length} invoice${overdueInvs.length !== 1 ? 's' : ''} — chase needed` : 'Nothing overdue');
+  set('finMonthVal', money(monthTotal));
+
+  if (typeof renderBankPaymentsTable === 'function') renderBankPaymentsTable();
+  if (typeof renderCashTabs === 'function') renderCashTabs();
+  if (typeof loadDailySales === 'function') loadDailySales();
 }
 
 function renderInvoices(filter) {
@@ -4228,12 +4397,7 @@ function generateAIRoute() {
 }
 
 // ============ VIP LIST ============
-const sampleVIPs = [
-  {id:'v1', name:'The Crown Pub', phone:'01695 123456', type:'trade', note:'Always first at Christmas — big order every year'},
-  {id:'v2', name:'Sarah Taylor', phone:'07711 111111', type:'domestic', note:'Loyal customer since day one'},
-  {id:'v3', name:'Café Verde', phone:'07722 222222', type:'trade', note:''},
-  {id:'v4', name:'The Red Lion', phone:'01695 654321', type:'trade', note:'Christmas orders are large — contact early'},
-];
+let sampleVIPs = [];
 
 function renderVIPList() {
   const list = document.getElementById('vipList');
@@ -4960,6 +5124,7 @@ async function saveInvoice() {
       ref:      inv.invoice_number,
       name:     cust.name || inv.customers?.name || '',
       date:     new Date(inv.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }),
+      created:  inv.created_at,
       amount:   parseFloat(inv.total_amount),
       status:   inv.status,
       payments: invType === 'receipt' ? [{ method:'cash', amount:total, note:'paid on the day', date:issued.toLocaleDateString('en-GB') }] : [],
@@ -5127,10 +5292,110 @@ async function downloadInvoiceById(invId) {
 
 // ============ DAILY SALES ============
 let dailySalesRows = [];
+let dailyRowSeq = 0;
+const dailySaveTimers = {};
 
 function addDailySalesRow(date='', bank=0, cash=0, holiday=false) {
-  dailySalesRows.push({id: Date.now(), date, bank, cash, holiday});
+  dailySalesRows.push({ id: ++dailyRowSeq, date, bank, cash, holiday });
   renderDailySales();
+}
+
+// Load saved daily takings from Supabase
+async function loadDailySales() {
+  if (!window.supabase) return;
+  try {
+    const { data, error } = await window.supabase
+      .from('daily_sales')
+      .select('id, sale_date, bank, cash, is_holiday')
+      .order('sale_date', { ascending: true });
+    if (error) { console.error('loadDailySales', error); return; }
+    dailySalesRows = (data || []).map(r => ({
+      id: ++dailyRowSeq, date: r.sale_date,
+      bank: parseFloat(r.bank) || 0, cash: parseFloat(r.cash) || 0, holiday: !!r.is_holiday,
+    }));
+    if (!dailySalesRows.length) addDailySalesRow();   // one blank row to start
+    else renderDailySales();
+  } catch (e) { console.error('loadDailySales', e); }
+}
+
+// Upsert a single day's takings (keyed by date)
+async function saveDailyRow(row) {
+  if (!window.supabase || !row.date) return;
+  try {
+    await window.supabase.from('daily_sales').upsert({
+      sale_date: row.date,
+      bank: parseFloat(row.bank) || 0,
+      cash: parseFloat(row.cash) || 0,
+      is_holiday: !!row.holiday,
+    }, { onConflict: 'sale_date' });
+  } catch (e) { console.error('saveDailyRow', e); }
+}
+
+// ── Import past takings from an Excel/CSV file ──
+function dsHandleDrop(e) {
+  e.preventDefault();
+  const zone = document.getElementById('dsDropZone');
+  if (zone) zone.style.borderColor = 'var(--line)';
+  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file) importDailySalesFile(file);
+}
+function dsHandleFile(file) { if (file) importDailySalesFile(file); }
+
+function dsNum(v) {
+  if (v === '' || v == null) return 0;
+  const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ''));
+  return isNaN(n) ? 0 : n;
+}
+function dsToISODate(v) {
+  if (v instanceof Date && !isNaN(v)) return v.toISOString().slice(0, 10);
+  if (typeof v === 'number') { const d = new Date(Math.round((v - 25569) * 86400 * 1000)); return !isNaN(d) ? d.toISOString().slice(0, 10) : ''; }
+  const s = String(v).trim(); if (!s) return '';
+  let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);   // dd/mm/yyyy (UK)
+  if (m) { let [, dd, mm, yy] = m; if (yy.length === 2) yy = '20' + yy; const dt = new Date(`${yy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}T00:00:00`); if (!isNaN(dt)) return dt.toISOString().slice(0, 10); }
+  const d = new Date(s); return !isNaN(d) ? d.toISOString().slice(0, 10) : '';
+}
+
+async function importDailySalesFile(file) {
+  const msg = document.getElementById('dsImportMsg');
+  const show = (t, ok) => { if (msg) { msg.textContent = t; msg.style.color = ok ? 'var(--green)' : 'var(--oxblood)'; } };
+  if (!window.XLSX) { show('Spreadsheet reader is still loading — try again in a second.', false); return; }
+  if (!window.supabase) { show('Not connected to the database — refresh and try again.', false); return; }
+  show('Reading…', true);
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    if (!rows.length) { show('That file looks empty.', false); return; }
+
+    const keys = Object.keys(rows[0]);
+    const find = re => keys.find(k => re.test(k));
+    const dateK = find(/date/i);
+    const bankK = find(/bank|card|transfer/i);
+    const cashK = find(/cash/i);
+    const salesK = find(/sales|total|amount|takings/i);
+    if (!dateK) { show('Couldn\'t find a "Date" column. Make sure one column header is Date.', false); return; }
+
+    const parsed = [];
+    rows.forEach(r => {
+      const d = dsToISODate(r[dateK]);
+      if (!d) return;
+      let bank = bankK ? dsNum(r[bankK]) : 0;
+      let cash = cashK ? dsNum(r[cashK]) : 0;
+      if (!bankK && !cashK && salesK) bank = dsNum(r[salesK]);   // only a single total column
+      parsed.push({ sale_date: d, bank, cash, is_holiday: false });
+    });
+    if (!parsed.length) { show('Couldn\'t read any dated rows from that file.', false); return; }
+
+    const { error } = await window.supabase.from('daily_sales').upsert(parsed, { onConflict: 'sale_date' });
+    if (error) throw error;
+    await loadDailySales();
+    if (typeof renderFinance === 'function') renderFinance();
+    show(`✓ Imported ${parsed.length} day${parsed.length !== 1 ? 's' : ''} of takings.`, true);
+  } catch (e) {
+    console.error('importDailySales', e);
+    show("Couldn't import that file: " + (e.message || e), false);
+  }
 }
 
 function renderDailySales() {
@@ -5150,13 +5415,23 @@ function renderDailySales() {
 
 function updateDailyRow(id, field, val) {
   const row = dailySalesRows.find(r => r.id === id);
-  if (row) row[field] = val;
+  if (!row) return;
+  row[field] = val;
   updateDailyTotals();
+  if (row.date) {                                  // persist once there's a date (debounced)
+    clearTimeout(dailySaveTimers[id]);
+    dailySaveTimers[id] = setTimeout(() => saveDailyRow(row), 700);
+  }
 }
 
-function removeDailyRow(id) {
+async function removeDailyRow(id) {
+  const row = dailySalesRows.find(r => r.id === id);
   dailySalesRows = dailySalesRows.filter(r => r.id !== id);
   renderDailySales();
+  if (window.supabase && row && row.date) {
+    try { await window.supabase.from('daily_sales').delete().eq('sale_date', row.date); }
+    catch (e) { console.error('removeDailyRow', e); }
+  }
 }
 
 function updateDailyTotals() {
@@ -5172,11 +5447,7 @@ function updateDailyTotals() {
 }
 
 // ============ CASH TABS ============
-let cashTabEntries = [
-  // Pre-seeded example: Janet Rimmer has a running tab this week
-  {id: Date.now()+1, custId:'c5', custName:'Janet Rimmer', date:'Mon 1 Jun', amount:98, items:'Chicken fillets, mince', settled:false},
-  {id: Date.now()+2, custId:'c5', custName:'Janet Rimmer', date:'Thu 4 Jun', amount:105, items:'BBQ pack, diced beef', settled:false},
-];
+let cashTabEntries = [];
 
 function renderCashTabs() {
   const el = document.getElementById('cashTabList');
@@ -5772,7 +6043,8 @@ const HELP_PAGES = {
     label: 'Finance',
     sections: [
       { icon:'💰', title:'What is this page?', body:'Finance has four tabs that match your actual bookkeeping process: Daily Sales, Weekly Sheet, Bank Payments, and Monthly Export.' },
-      { icon:'📅', title:'Daily Sales tab', body:'Enter each day\'s takings here — split between bank (card payments) and cash. The weekly total calculates automatically. Use <strong>+ Add day</strong> to log a new delivery day.' },
+      { icon:'📅', title:'Daily Sales tab', body:'Enter each day\'s takings — split between bank (card) and cash. Totals calculate automatically and everything saves as you type. Use <strong>+ Add day</strong> for a new day.' },
+      { icon:'📥', title:'Import past takings', body:'Already got your figures in a spreadsheet? On the Daily Sales tab, drag your Excel or CSV file onto the <strong>Import past takings</strong> box (or tap Choose file). As long as it has <strong>Date</strong>, <strong>Bank</strong> and <strong>Cash</strong> columns, it reads them straight in — so you\'re not starting from scratch. Days you already have are updated, not duplicated.' },
       { icon:'💰', title:'Cash tabs', body:'Some customers pay their full week\'s cash in one go on a set day. These are tracked in the <strong>Cash Tabs</strong> section at the bottom of the Daily tab — separate from your daily cash total. Use <strong>+ Add tab order</strong> to log each delivery against their tab. On payment day, press <strong>Settle tab</strong> and the total moves into that day\'s cash automatically.' },
       { icon:'📊', title:'Weekly Sheet tab', body:'Your weekly reconciliation. Enter supplier payments and expenses, and the sheet works out what should be in the bank. Export it as a spreadsheet to match your existing format.' },
       { icon:'🏦', title:'Bank Payments tab', body:'Records all payments out to suppliers and any other bank transactions. Keeps a running total so you can check it against your statement.' },
@@ -5810,6 +6082,15 @@ const HELP_PAGES = {
       { icon:'💷', title:'Logging a payment', body:'When a customer pays, press <strong>Log payment</strong> on their invoice. Choose the method (cash or bank transfer), enter the amount, and press <strong>Add this payment</strong>. You can add as many entries as needed — for example £50 cash and £50 bank transfer against the same invoice. The invoice marks itself as paid automatically once the full balance is cleared.' },
       { icon:'🔀', title:'Split payments', body:'If a customer pays part in cash and part by bank transfer, just log both separately using <strong>Log payment</strong>. Each entry shows up on the invoice with its method and amount. The remaining balance updates as you go.' },
       { icon:'🔴', title:'Overdue invoices', body:'Any invoice not paid after 30 days turns <strong>Overdue</strong> and shows in red. You\'ll see a count on the Dashboard too.' },
+    ]
+  },
+  users: {
+    label: 'Users & Access',
+    sections: [
+      { icon:'👤', title:'What is this page?', body:'Tap your name (top right) to open this page. Here you can change your own password, and — as an admin — give other people access or take it away.' },
+      { icon:'🔑', title:'Change your password', body:'Type a new password twice under <strong>My password</strong> and press <strong>Update my password</strong>. That\'s it — use the new one next time you sign in.' },
+      { icon:'➕', title:'Add someone (e.g. your driver)', body:'Under <strong>Add a login</strong>, enter their email and a password and pick a role: <strong>Driver</strong> (deliveries, runs and customers only — no money) or <strong>Admin</strong> (everything). Press <strong>Create login</strong> and tell them the email and password — they sign in here.' },
+      { icon:'🛟', title:'Reset or remove access', body:'Under <strong>People with access</strong> you can switch someone between Driver and Admin, <strong>Reset password</strong> if they\'re locked out, or <strong>Remove</strong> their login entirely. You can\'t remove your own login.' },
     ]
   }
 };

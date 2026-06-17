@@ -191,6 +191,20 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 15. `015_fix_user_profile_trigger.sql`
+**What it does:** Fixes "Database error creating new user" in Supabase. The profile-creation trigger was missing a `search_path`, so creating a user failed. This pins it, adds a safety net, and backfills any missing profile rows.
+
+**When to run:** Before creating any user in Supabase. Safe on the live database. (Run it, then Authentication → Users → Add user works.)
+
+---
+
+### 16. `016_daily_sales.sql`
+**What it does:** Adds the `daily_sales` table so the Finance → Daily Sales tab persists (it was in-memory before) and the spreadsheet import has somewhere to save to. One row per date, admin-only.
+
+**When to run:** After 015. Safe on the live database.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app
