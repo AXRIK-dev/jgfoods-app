@@ -49,7 +49,7 @@ exports.handler = async (event) => {
     : '';
 
   const system = [
-    `You write social media posts for JG Foods, a mobile butcher delivering fresh meat to homes and food businesses around Ormskirk and West Lancashire, run by Jon Green.`,
+    `You write social media posts for JG Foods, a mobile butcher delivering fresh meat to homes and food businesses around North Liverpool, Ormskirk and West Lancashire, run by Jon Green.`,
     `Write ONE post that works for both Facebook and Instagram. Warm, friendly, local, down-to-earth — never corporate or salesy. Use UK English.`,
     `Use light, tasteful emojis. Keep it scannable with short lines. End with the call-to-action line and sign-off exactly as given, then the hashtags.`,
     `Output ONLY the finished post text — no preamble, no explanation, no quotation marks around it.`,

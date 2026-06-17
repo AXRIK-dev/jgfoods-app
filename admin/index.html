@@ -1239,7 +1239,7 @@
       <label>Business name</label>
       <input id="ac-business" type="text" placeholder="The Crown Pub">
     </div>
-    <div class="field"><label>Referred by <span style="font-weight:400;color:var(--ink-soft)">(optional)</span></label><input id="ac-referredby" type="text" placeholder="e.g. Sarah Taylor — gets free sausage/bacon on first order"></div>
+    <div class="field"><label>Referred by <span style="font-weight:400;color:var(--ink-soft)">(optional)</span></label><input id="ac-referredby" type="text" placeholder="e.g. Sarah Taylor — she gets a free sausage/bacon pack as a thank-you"></div>
     <div class="field" style="display:flex;align-items:center;gap:10px;background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:12px 14px">
       <input type="checkbox" id="ac-exempt" style="width:17px;height:17px;accent-color:var(--oxblood);cursor:pointer;flex-shrink:0">
       <div>
@@ -2578,7 +2578,7 @@ function addNewProduct() {
 const SOCIAL_STYLE_DEFAULTS = {
   channels: '💬 DM to order  ·  🌐 jgfoodsnorthwest.com  ·  📞 07702 852704',
   signoff:  'Thanks, Jon 😊',
-  hashtags: '#JGFoods #FreshMeat #Ormskirk #WestLancashire #LocalButcher #MeatDelivery #HomeDelivery #SupportLocal',
+  hashtags: '#JGFoods #FreshMeat #NorthLiverpool #Ormskirk #WestLancashire #LocalButcher #MeatDelivery #HomeDelivery #SupportLocal',
 };
 let socialStyle   = { ...SOCIAL_STYLE_DEFAULTS };
 let socialHistory = [];      // recent posts (for reuse + AI examples)
@@ -4308,7 +4308,7 @@ async function generateVIPMessage(btn) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         max_tokens: 400,
-        system: `You write short, warm WhatsApp/text messages for JG Foods, a mobile butcher near Ormskirk run by Jon Green. UK English, friendly and personal, never corporate or pushy. Keep [Name] exactly as a literal placeholder so it can be filled in per customer. Light, tasteful emoji is fine. Output ONLY the message text — no preamble, no quotation marks.`,
+        system: `You write short, warm WhatsApp/text messages for JG Foods, a mobile butcher serving North Liverpool, Ormskirk and West Lancashire, run by Jon Green. UK English, friendly and personal, never corporate or pushy. Keep [Name] exactly as a literal placeholder so it can be filled in per customer. Light, tasteful emoji is fine. Output ONLY the message text — no preamble, no quotation marks.`,
         prompt: current
           ? `Rewrite and improve this VIP customer message. Keep the same intent and any link or web address, and keep [Name] as a placeholder:\n\n${current}`
           : `Write a short VIP message offering the customer early access to JG Foods' Christmas delivery slots before general release. Keep [Name] as a placeholder and point them to jgfoodsnorthwest.com.`,
@@ -4854,7 +4854,7 @@ function generateInvoicePreview() {
   document.getElementById('invoicePreview').innerHTML = `
     <div class="inv-header">
       <div>
-        <div class="inv-logo">JG Foods<span>Mobile Butcher · Ormskirk & West Lancashire</span></div>
+        <div class="inv-logo">JG Foods<span>Mobile Butcher · North Liverpool, Ormskirk & West Lancashire</span></div>
         <div style="font-size:11.5px;color:var(--ink-soft);margin-top:8px;line-height:1.6">
           07702 852 704<br>jongreen347@gmail.com
         </div>
@@ -4997,7 +4997,7 @@ function buildInvoiceDoc(data) {
   doc.setFont('helvetica','bold').setFontSize(26).setTextColor(255,255,255);
   doc.text('JG Foods', L, 50);
   doc.setFont('helvetica','bold').setFontSize(8).setTextColor(GOLDB[0],GOLDB[1],GOLDB[2]);
-  doc.text('MOBILE BUTCHER · ORMSKIRK & WEST LANCASHIRE', L, 66);
+  doc.text('MOBILE BUTCHER · NORTH LIVERPOOL, ORMSKIRK & WEST LANCASHIRE', L, 66);
   doc.setFont('helvetica','normal').setFontSize(8.5).setTextColor(206,213,222);
   doc.text('07702 852 704   ·   jongreen347@gmail.com', L, 82);
 
@@ -5763,7 +5763,7 @@ const HELP_PAGES = {
       { icon:'👥', title:'What is this page?', body:'The Customers page is your full customer list — domestic and trade. You can search, filter, and open any customer to see their history.' },
       { icon:'🔍', title:'Finding a customer', body:'Type a name or postcode in the search bar at the top. Use the <strong>All / Domestic / Trade</strong> buttons to filter by customer type.' },
       { icon:'⭐', title:'Exempt customers', body:'Family and friends who shouldn\'t be charged the £5 small-order fee can be marked as <strong>Exempt</strong> on their profile. Tick the box in their customer record.' },
-      { icon:'🎁', title:'Referral gift', body:'When a customer was recommended by someone else, fill in the <strong>Referred by</strong> field on their profile. Their first order will be flagged so you remember to include the free sausage or bacon.' },
+      { icon:'🎁', title:'Referral reward', body:'When a new customer was recommended by an existing one, put the existing customer\'s name in the <strong>Referred by</strong> field. It\'s flagged so you remember to thank the person who referred them with a free pack of sausages or bacon on their next delivery.' },
       { icon:'🏢', title:'Trade accounts', body:'Trade customers have a <strong>Trade</strong> badge. You can set their individual pricing, credit terms, and invoice details from their profile.' },
       { icon:'➕', title:'Adding a new customer', body:'Press <strong>+ Add customer</strong>. Fill in their name, address, and type. You can add notes too — e.g. access instructions or preferred contact method.' },
     ]
