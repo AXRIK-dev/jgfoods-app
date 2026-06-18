@@ -1040,14 +1040,68 @@ const SUPABASE_URL = 'https://hnkidhqjsitrqhsxghjd.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhua2lkaHFqc2l0cnFoc3hnaGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NDI2NjMsImV4cCI6MjA5NjUxODY2M30.LI1QzERO5WMB2h9v2lUFIxN_NoEzCf8F6Q4tN1Jaq5A';
 window.sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ── Category → CSS class mapping ─────────────────────────
-const CAT_SLUG = {
+// ── Category → slug mapping ──────────────────────────────
+// Defaults match the original prototype; overwritten by loadCategories()
+// once the managed list comes back from Supabase (categories table).
+let CAT_SLUG = {
   'Chicken':     'chicken',
   'Steak & Beef':'steak',
   'BBQ & Grill': 'bbq',
   'Kebabs':      'kebab',
   'Meat Packs':  'pack',
+  'Other':       'other',
 };
+// Ordered list of active categories (name + slug), drives the filter chips.
+let categoryList = [
+  { name:'Chicken',      slug:'chicken' },
+  { name:'Steak & Beef', slug:'steak'   },
+  { name:'BBQ & Grill',  slug:'bbq'     },
+  { name:'Kebabs',       slug:'kebab'   },
+  { name:'Meat Packs',   slug:'pack'    },
+];
+
+function slugifyCat(s) {
+  return (s||'').toLowerCase().trim()
+    .replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'') || 'cat';
+}
+
+// Load the managed category list (active only — RLS hides inactive ones).
+async function loadCategories() {
+  try {
+    const { data, error } = await window.sbClient
+      .from('categories')
+      .select('name, slug, sort_order, is_active')
+      .order('sort_order', { ascending: true });
+    if (error || !data || !data.length) return;   // keep defaults
+    categoryList = data
+      .filter(c => c.is_active !== false)
+      .map(c => ({ name:c.name, slug:c.slug || slugifyCat(c.name) }));
+    CAT_SLUG = {};
+    categoryList.forEach(c => { CAT_SLUG[c.name] = c.slug; });
+  } catch (e) { /* keep defaults */ }
+}
+
+// Render the filter chips (mobile) + sidebar list (desktop) from the
+// categories that actually have products on the page. Same markup/classes
+// as the prototype, just data-driven.
+function renderCategoryFilters() {
+  const present = new Set();
+  document.querySelectorAll('.prod-card').forEach(c => present.add(c.dataset.cat));
+  const cats = categoryList.filter(c => present.has(c.slug));
+
+  const chips = document.getElementById('mobileChips');
+  if (chips) {
+    chips.innerHTML =
+      `<button class="chip on" data-cat="all" onclick="filterCategory(this,'all')">All</button>` +
+      cats.map(c => `<button class="chip" data-cat="${c.slug}" onclick="filterCategory(this,'${c.slug}')">${c.name}</button>`).join('');
+  }
+  const list = document.querySelector('.filter-panel .filter-list');
+  if (list) {
+    list.innerHTML =
+      `<div class="filter-item on" data-cat="all" onclick="filterCategory(this,'all')">All products</div>` +
+      cats.map(c => `<div class="filter-item" data-cat="${c.slug}" onclick="filterCategory(this,'${c.slug}')">${c.name}</div>`).join('');
+  }
+}
 
 // ── Load products from Supabase ───────────────────────────
 async function loadProducts() {
@@ -1097,10 +1151,8 @@ async function loadProducts() {
     grid.appendChild(card);
   });
 
-  // Re-apply any active category filter
-  const activeFilter = document.querySelector('.filter-item.on, .chip.on');
-  const activeCat = activeFilter?.dataset?.cat || 'all';
-  if (activeCat !== 'all') filterCategory(activeFilter, activeCat);
+  // Build the filter controls from the categories that have products
+  renderCategoryFilters();
 }
 
 // ── Delivery banner: live home-delivery days for the coming week ──
@@ -1131,7 +1183,12 @@ async function loadDeliveryBanner() {
   el.innerHTML = `<b>Home delivery this week:</b> ${days} · order early to secure your slot. &nbsp;${TRADE_NOTE}`;
 }
 
-document.addEventListener('DOMContentLoaded', () => { loadProducts(); loadSlots(); loadDeliveryBanner(); });
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadCategories();   // build CAT_SLUG + filter list before products render
+  loadProducts();
+  loadSlots();
+  loadDeliveryBanner();
+});
 
 // ============ ORDER RULES ============
 // TODO: Load these from Supabase admin settings table so Jon can update them
@@ -1442,20 +1499,10 @@ function showConfirmation(ref) {
 
 // ============ CATEGORY FILTER ============
 function filterCategory(el, cat) {
-  // update sidebar
-  document.querySelectorAll('.filter-item').forEach(f => f.classList.remove('on'));
-  document.querySelectorAll('.chip').forEach(c => c.classList.remove('on'));
-
-  if (el.classList.contains('filter-item')) el.classList.add('on');
-  if (el.classList.contains('chip')) el.classList.add('on');
-
-  // sync the other control
-  document.querySelectorAll(`.filter-item`).forEach(f => {
-    if ((f.textContent.toLowerCase().includes('all') && cat === 'all') ||
-        f.textContent.toLowerCase().replace(/\s+&\s+/,' ').includes(cat.replace('steak','steak'))) {
-      f.classList.add('on');
-    }
-  });
+  // Clear both controls, then highlight the matching item in each by data-cat
+  document.querySelectorAll('.filter-item, .chip').forEach(x => x.classList.remove('on'));
+  document.querySelectorAll(`.filter-item[data-cat="${cat}"], .chip[data-cat="${cat}"]`)
+    .forEach(x => x.classList.add('on'));
 
   document.querySelectorAll('.prod-card').forEach(card => {
     card.classList.toggle('hidden', cat !== 'all' && card.dataset.cat !== cat);

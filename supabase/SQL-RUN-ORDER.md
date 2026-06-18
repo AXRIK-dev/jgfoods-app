@@ -203,6 +203,11 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 **When to run:** After 015. Safe on the live database.
 
+### 17. `017_categories.sql`
+**What it does:** Adds the `categories` table and seeds the six existing categories, so Jon can add / rename / reorder / hide / delete categories from the Availability page instead of them being hard-coded. Public read (active only) + admin full access. Products keep their text `category` column, so this is non-breaking.
+
+**When to run:** After 016. Safe on the live database — idempotent and seeds match the current hard-coded list.
+
 ---
 
 ## After running all migrations

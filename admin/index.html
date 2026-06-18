@@ -886,6 +886,7 @@
       <p>Toggle items on/off and set prices. Changes go live on the website immediately.</p>
     </div>
     <div class="btn-row">
+      <button class="btn-gold" onclick="openCategoryManager()">Manage categories</button>
       <button class="btn-navy" onclick="addNewProduct()">+ Add product</button>
       <button class="btn-add" id="savePricesBtn" onclick="savePrices()">Save changes</button>
     </div>
@@ -1622,7 +1623,7 @@
 <div class="modal-overlay" id="editProductModal">
   <div class="modal">
     <div class="modal-head">
-      <h3>Edit product</h3>
+      <h3 id="ep-title">Edit product</h3>
       <button class="modal-close" onclick="closeModal('editProductModal')">✕</button>
     </div>
     <input type="hidden" id="ep-id">
@@ -1630,14 +1631,7 @@
     <div class="field-row">
       <div class="field">
         <label>Category</label>
-        <select id="ep-cat">
-          <option>Chicken</option>
-          <option>Steak & Beef</option>
-          <option>BBQ & Grill</option>
-          <option>Kebabs</option>
-          <option>Meat Packs</option>
-          <option>Other</option>
-        </select>
+        <select id="ep-cat"><!-- populated by renderCategoryOptions() --></select>
       </div>
       <div class="field"><label>Price (£) *</label><input id="ep-price" type="number" min="0" step="0.50" placeholder="34.00"></div>
     </div>
@@ -1645,6 +1639,33 @@
     <div style="display:flex;gap:9px;margin-top:6px">
       <button class="btn-add" style="flex:1;justify-content:center;padding:13px" onclick="saveEditProduct()">Save changes</button>
       <button onclick="closeModal('editProductModal')" style="padding:13px 18px;border-radius:9px;font-weight:800;font-size:13px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft)">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MANAGE CATEGORIES MODAL ============ -->
+<div class="modal-overlay" id="categoryModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <h3>Manage categories</h3>
+        <p style="font-size:12px;color:var(--ink-soft);margin-top:3px">These are the sections customers browse by on the website. Drag order with the arrows. Hidden categories stay on existing products but don't show on the website.</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('categoryModal')">✕</button>
+    </div>
+
+    <div id="catList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"><!-- populated by renderCategoryManager() --></div>
+
+    <div class="field" style="border-top:1px solid var(--line);padding-top:14px;margin-bottom:6px">
+      <label>Add a new category</label>
+      <div style="display:flex;gap:8px">
+        <input id="newCatName" type="text" placeholder="e.g. Lamb, Sausages, Deli" onkeydown="if(event.key==='Enter'){event.preventDefault();addCategory();}" style="flex:1">
+        <button class="btn-navy" style="padding:10px 16px" onclick="addCategory()">Add</button>
+      </div>
+    </div>
+
+    <div style="margin-top:10px">
+      <button class="btn-add" style="width:100%;justify-content:center;padding:13px" onclick="closeModal('categoryModal')">Done</button>
     </div>
   </div>
 </div>
@@ -1986,7 +2007,7 @@ async function loadAppData() {
 
   try {
     // Fetch all in parallel
-    const [productsRes, customersRes, ordersRes, invoicesRes, runSlotsRes] = await Promise.all([
+    const [productsRes, customersRes, ordersRes, invoicesRes, runSlotsRes, categoriesRes] = await Promise.all([
       supabase
         .from('products')
         .select('id, name, category, price, description, is_available, img_url, sort_order')
@@ -2020,10 +2041,22 @@ async function loadAppData() {
         .select('id, delivery_date, day_label, capacity, orders_count, is_open, cutoff_at')
         .gte('delivery_date', new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10))
         .order('delivery_date', { ascending: true }),
+
+      supabase
+        .from('categories')
+        .select('id, name, slug, sort_order, is_active')
+        .order('sort_order').order('name'),
     ]);
 
     // ── Run days (delivery slots) ─────────────────────────
     runDaySlots = (runSlotsRes && !runSlotsRes.error) ? (runSlotsRes.data || []) : [];
+
+    // ── Categories ────────────────────────────────────────
+    // Keep the built-in defaults if the table isn't there yet (migration 017).
+    if (categoriesRes && !categoriesRes.error && (categoriesRes.data || []).length) {
+      categories = categoriesRes.data;
+    }
+    renderCategoryOptions();
 
     // ── Products ──────────────────────────────────────────
     if (!productsRes.error) {
@@ -2298,6 +2331,18 @@ const sampleOrders = [];
 const sampleCustomers = [];
 const sampleProducts = [];
 const sampleInvoices = [];
+
+// Product categories — source of truth for the dropdowns + website filters.
+// Loaded from Supabase (categories table); falls back to the six defaults
+// so the app still works offline / before the migration is run.
+let categories = [
+  { id:'c-chicken', name:'Chicken',      slug:'chicken', sort_order:1, is_active:true },
+  { id:'c-steak',   name:'Steak & Beef', slug:'steak',   sort_order:2, is_active:true },
+  { id:'c-bbq',     name:'BBQ & Grill',  slug:'bbq',     sort_order:3, is_active:true },
+  { id:'c-kebab',   name:'Kebabs',       slug:'kebab',   sort_order:4, is_active:true },
+  { id:'c-pack',    name:'Meat Packs',   slug:'pack',    sort_order:5, is_active:true },
+  { id:'c-other',   name:'Other',        slug:'other',   sort_order:6, is_active:true },
+];
 
 // ============ NAV ============
 function toggleNav() {
@@ -2742,12 +2787,17 @@ async function savePrices() {
 }
 
 function addNewProduct() {
-  const name = prompt('Product name:');
-  if (!name) return;
-  const price = parseFloat(prompt('Price (£):') || '0');
-  const cat = prompt('Category (e.g. Chicken, Steak & Beef, BBQ & Grill, Meat Packs, Kebabs):') || 'Other';
-  sampleProducts.push({id:'sp'+Date.now(), name, cat, price, live:true});
-  renderStock();
+  // Open the product modal in "create" mode so the category comes from
+  // the managed dropdown (no more free-text typos / orphan categories).
+  document.getElementById('ep-title').textContent = 'Add product';
+  document.getElementById('ep-id').value = '';
+  document.getElementById('ep-name').value = '';
+  document.getElementById('ep-price').value = '';
+  document.getElementById('ep-desc').value = '';
+  renderCategoryOptions();
+  const sel = document.getElementById('ep-cat');
+  if (sel.options.length) sel.selectedIndex = 0;
+  document.getElementById('editProductModal').classList.add('show');
 }
 
 // ============ SOCIAL POSTS ============
@@ -2942,8 +2992,10 @@ function copyPost(textareaId, btn) {
 function openEditProduct(id) {
   const p = sampleProducts.find(x => x.id === id);
   if (!p) return;
+  document.getElementById('ep-title').textContent = 'Edit product';
   document.getElementById('ep-id').value = id;
   document.getElementById('ep-name').value = p.name;
+  renderCategoryOptions(p.cat);
   document.getElementById('ep-cat').value = p.cat;
   document.getElementById('ep-price').value = p.price.toFixed(2);
   document.getElementById('ep-desc').value = p.desc || '';
@@ -2951,24 +3003,214 @@ function openEditProduct(id) {
 }
 
 async function saveEditProduct() {
-  const id = document.getElementById('ep-id').value;
+  const id   = document.getElementById('ep-id').value;
+  const name = document.getElementById('ep-name').value.trim();
+  const cat  = document.getElementById('ep-cat').value.trim() || 'Other';
+  const price= parseFloat(document.getElementById('ep-price').value) || 0;
+  const desc = document.getElementById('ep-desc').value.trim();
+  if (!name) { alert('Please enter a product name.'); return; }
+
+  const isUUID = x => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
+
+  // ── New product ──────────────────────────────────────────
+  if (!id) {
+    const local = { id:'sp'+Date.now(), name, cat, price, desc, live:true, img:null };
+    sampleProducts.push(local);
+    closeModal('editProductModal');
+    renderStock();
+    if (supabase) {
+      const { data, error } = await supabase.from('products')
+        .insert({ name, category:cat, price, description:desc || null, is_available:true })
+        .select('id').single();
+      if (error) { console.error('Create product error:', error); }
+      else if (data) { local.id = data.id; }   // swap temp id for real UUID
+    }
+    return;
+  }
+
+  // ── Existing product ─────────────────────────────────────
   const p = sampleProducts.find(x => x.id === id);
   if (!p) return;
-  p.name  = document.getElementById('ep-name').value.trim()  || p.name;
-  p.cat   = document.getElementById('ep-cat').value.trim()   || p.cat;
-  p.price = parseFloat(document.getElementById('ep-price').value) || p.price;
-  p.desc  = document.getElementById('ep-desc').value.trim();
+  p.name = name; p.cat = cat; p.price = price; p.desc = desc;
   closeModal('editProductModal');
   renderStock();
 
-  if (supabase && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+  if (supabase && isUUID(id)) {
     const { error } = await supabase.from('products').update({
-      name:        p.name,
-      category:    p.cat,
-      price:       p.price,
-      description: p.desc || null,
+      name, category:cat, price, description: desc || null,
     }).eq('id', id);
     if (error) console.error('Update product error:', error);
+  }
+}
+
+// ============ CATEGORIES ============
+function slugify(s) {
+  return s.toLowerCase().trim()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'cat';
+}
+
+// Fill the product modal's category <select> from the managed list.
+// Always includes the product's current category even if it's been hidden.
+function renderCategoryOptions(current) {
+  const sel = document.getElementById('ep-cat');
+  if (!sel) return;
+  const names = categories
+    .filter(c => c.is_active !== false || c.name === current)
+    .sort((a,b) => (a.sort_order||0) - (b.sort_order||0))
+    .map(c => c.name);
+  if (current && !names.includes(current)) names.push(current);
+  if (!names.length) names.push('Other');
+  sel.innerHTML = names.map(n =>
+    `<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('');
+}
+
+function openCategoryManager() {
+  renderCategoryManager();
+  document.getElementById('categoryModal').classList.add('show');
+}
+
+function renderCategoryManager() {
+  const wrap = document.getElementById('catList');
+  if (!wrap) return;
+  const sorted = [...categories].sort((a,b) => (a.sort_order||0) - (b.sort_order||0));
+  if (!sorted.length) {
+    wrap.innerHTML = `<p style="font-size:13px;color:var(--ink-soft);text-align:center;padding:14px">No categories yet — add one below.</p>`;
+    return;
+  }
+  wrap.innerHTML = sorted.map((c, i) => {
+    const count = sampleProducts.filter(p => p.cat === c.name).length;
+    const off = c.is_active === false;
+    return `
+    <div class="stock-row${off ? ' off' : ''}" style="padding:10px 12px;gap:10px">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <button onclick="moveCategory('${c.id}',-1)" ${i===0?'disabled':''} style="border:1px solid var(--line);background:var(--cream);border-radius:6px;width:26px;height:20px;cursor:pointer;font-size:11px;line-height:1;opacity:${i===0?'.4':'1'}">▲</button>
+        <button onclick="moveCategory('${c.id}',1)" ${i===sorted.length-1?'disabled':''} style="border:1px solid var(--line);background:var(--cream);border-radius:6px;width:26px;height:20px;cursor:pointer;font-size:11px;line-height:1;opacity:${i===sorted.length-1?'.4':'1'}">▼</button>
+      </div>
+      <div class="sr-main" style="flex:1">
+        <input value="${(c.name||'').replace(/"/g,'&quot;')}" onchange="renameCategory('${c.id}',this.value)" aria-label="Category name"
+          style="font-size:13.5px;font-weight:800;color:var(--ink);border:1px solid transparent;background:transparent;border-radius:6px;padding:4px 6px;width:100%"
+          onfocus="this.style.borderColor='var(--line)';this.style.background='#fff'"
+          onblur="this.style.borderColor='transparent';this.style.background='transparent'">
+        <span class="cat-tag" style="margin-left:6px">${count} product${count===1?'':'s'}</span>
+      </div>
+      <span class="sr-state ${off ? 'hidden' : 'live'}">${off ? 'Hidden' : 'Shown'}</span>
+      <div class="toggle${off ? '' : ' on'}" onclick="toggleCategoryActive('${c.id}')" role="switch" aria-checked="${!off}" title="Show on website"></div>
+      <button onclick="deleteCategory('${c.id}')" style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:7px;background:#fff0f0;border:1px solid #fcc;color:#c0392b;cursor:pointer;flex-shrink:0">Delete</button>
+    </div>`;
+  }).join('');
+}
+
+async function addCategory() {
+  const input = document.getElementById('newCatName');
+  const name = input.value.trim();
+  if (!name) return;
+  if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+    alert('That category already exists.'); return;
+  }
+  const slug = slugify(name);
+  const sort_order = (categories.reduce((m,c) => Math.max(m, c.sort_order||0), 0)) + 1;
+  const cat = { id:'tc'+Date.now(), name, slug, sort_order, is_active:true };
+  categories.push(cat);
+  input.value = '';
+  renderCategoryManager();
+  renderCategoryOptions();
+
+  if (supabase) {
+    const { data, error } = await supabase.from('categories')
+      .insert({ name, slug, sort_order, is_active:true })
+      .select('id').single();
+    if (error) { console.error('Add category error:', error); alert('Could not save category: ' + error.message); }
+    else if (data) { cat.id = data.id; }
+  }
+}
+
+async function renameCategory(id, newName) {
+  const c = categories.find(x => x.id === id);
+  if (!c) return;
+  newName = (newName || '').trim();
+  if (!newName || newName === c.name) { renderCategoryManager(); return; }
+  if (categories.some(x => x.id !== id && x.name.toLowerCase() === newName.toLowerCase())) {
+    alert('Another category already uses that name.'); renderCategoryManager(); return;
+  }
+  const oldName = c.name;
+  c.name = newName;
+  c.slug = slugify(newName);
+  // Cascade the rename onto products that used the old name (local + DB)
+  sampleProducts.forEach(p => { if (p.cat === oldName) p.cat = newName; });
+  renderCategoryManager();
+  renderCategoryOptions();
+  renderStock();
+
+  if (supabase) {
+    const isUUID = x => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
+    if (isUUID(id)) {
+      const { error } = await supabase.from('categories').update({ name:newName, slug:c.slug }).eq('id', id);
+      if (error) console.error('Rename category error:', error);
+    }
+    const { error: pErr } = await supabase.from('products').update({ category:newName }).eq('category', oldName);
+    if (pErr) console.error('Cascade rename to products error:', pErr);
+  }
+}
+
+async function toggleCategoryActive(id) {
+  const c = categories.find(x => x.id === id);
+  if (!c) return;
+  c.is_active = c.is_active === false;   // flip
+  renderCategoryManager();
+  renderCategoryOptions();
+  if (supabase) {
+    const { error } = await supabase.from('categories').update({ is_active:c.is_active }).eq('id', id);
+    if (error) console.error('Toggle category error:', error);
+  }
+}
+
+async function moveCategory(id, dir) {
+  const sorted = [...categories].sort((a,b) => (a.sort_order||0) - (b.sort_order||0));
+  const idx = sorted.findIndex(c => c.id === id);
+  const swap = idx + dir;
+  if (idx < 0 || swap < 0 || swap >= sorted.length) return;
+  // Swap sort_order values
+  const a = sorted[idx], b = sorted[swap];
+  const tmp = a.sort_order; a.sort_order = b.sort_order; b.sort_order = tmp;
+  renderCategoryManager();
+  renderCategoryOptions();
+  if (supabase) {
+    const isUUID = x => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
+    for (const c of [a, b]) {
+      if (isUUID(c.id)) {
+        const { error } = await supabase.from('categories').update({ sort_order:c.sort_order }).eq('id', c.id);
+        if (error) console.error('Reorder category error:', error);
+      }
+    }
+  }
+}
+
+async function deleteCategory(id) {
+  const c = categories.find(x => x.id === id);
+  if (!c) return;
+  const count = sampleProducts.filter(p => p.cat === c.name).length;
+  let msg = `Delete the "${c.name}" category?`;
+  if (count) msg += `\n\n${count} product${count===1?' is':'s are'} still in it — ${count===1?'it':'they'} will be moved to "Other".`;
+  if (!confirm(msg)) return;
+
+  // Reassign affected products to "Other" (local + DB)
+  if (count) {
+    sampleProducts.forEach(p => { if (p.cat === c.name) p.cat = 'Other'; });
+    renderStock();
+    if (supabase) await supabase.from('products').update({ category:'Other' }).eq('category', c.name);
+  }
+  categories = categories.filter(x => x.id !== id);
+  renderCategoryManager();
+  renderCategoryOptions();
+
+  if (supabase) {
+    const isUUID = x => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
+    if (isUUID(id)) {
+      const { error } = await supabase.from('categories').delete().eq('id', id);
+      if (error) { console.error('Delete category error:', error); alert('Could not delete: ' + error.message); }
+    }
   }
 }
 
@@ -6064,7 +6306,8 @@ const HELP_PAGES = {
       { icon:'🥩', title:'What is this page?', body:'Availability is where you manage your product list — what\'s on offer, the price, and whether it\'s live on the website for customers to order.' },
       { icon:'👁️', title:'Live / not live', body:'Each product has a <strong>Live</strong> toggle. Switch it off to hide a product from the website without deleting it — useful when you\'re out of stock temporarily.' },
       { icon:'💷', title:'Changing prices', body:'Click the price on any product to edit it. Changes take effect immediately on the website once the database is connected.' },
-      { icon:'➕', title:'Adding a new product', body:'Press <strong>+ Add product</strong> at the top right. Fill in the name, category, and price, then switch it to Live when you\'re ready.' },
+      { icon:'➕', title:'Adding a new product', body:'Press <strong>+ Add product</strong> at the top right. Fill in the name, pick a category, set the price, then save. The product goes live on the website straight away.' },
+      { icon:'🏷️', title:'Managing categories', body:'Press <strong>Manage categories</strong> to add, rename, reorder or hide the sections customers browse by on the website (Chicken, Steak & Beef, and so on). Add a new one any time — type the name and press <strong>Add</strong>. Rename one and every product in it updates automatically. Hide a category to take it off the website without losing it, or delete it (its products move to "Other"). The order you set here is the order customers see.' },
       { icon:'📷', title:'Adding a photo', body:'Tap the photo box on any product and choose a picture. You\'ll see it straight away. For a brand-new product, the photo is saved up to the website when you press <strong>Save changes</strong> — so always Save after adding a photo. For a product that\'s already saved, the photo uploads right away.' },
     ]
   },
