@@ -1185,8 +1185,8 @@
         <p style="font-size:12px;color:var(--ink-soft);margin-top:4px">Select month then export — data pulls from your weekly sheets.</p>
       </div>
       <div style="display:flex;gap:8px">
-        <select id="monthlyMonth" class="fin-input" style="width:160px">
-          <option>May 2026</option><option>June 2026</option><option>July 2026</option>
+        <select id="monthlyMonth" class="fin-input" style="width:160px" onchange="renderMonthlySheet()">
+          <!-- populated by populateMonthlyMonths() -->
         </select>
         <button class="btn-gold" onclick="exportMonthly()">⬇ Export for accountant</button>
       </div>
@@ -6012,84 +6012,152 @@ function downloadCSV(content, filename) {
   document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
-// ============ MONTHLY EXPORT ============
-function renderMonthlySheet() {
+// ============ MONTHLY (ACCOUNTANT) ============
+const MONTH_NAMES = ['January','February','March','April','May','June',
+                     'July','August','September','October','November','December'];
+
+// Fill the month dropdown with the last 12 months, newest first.
+function populateMonthlyMonths() {
+  const sel = document.getElementById('monthlyMonth');
+  if (!sel) return;
+  const now = new Date();
+  let html = '';
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    html += `<option${i === 0 ? ' selected' : ''}>${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}</option>`;
+  }
+  sel.innerHTML = html;
+}
+
+// Work out the date range for whichever month is selected.
+function getSelectedMonthRange() {
+  const sel = document.getElementById('monthlyMonth');
+  let year, monthIdx;
+  if (sel && sel.value) {
+    const [mName, yStr] = sel.value.split(' ');
+    monthIdx = MONTH_NAMES.indexOf(mName);
+    year = parseInt(yStr, 10);
+  }
+  if (year == null || isNaN(year) || monthIdx < 0) {
+    const now = new Date();
+    year = now.getFullYear();
+    monthIdx = now.getMonth();
+  }
+  const mm = String(monthIdx + 1).padStart(2, '0');
+  const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+  return {
+    year, monthIdx,
+    label: `${MONTH_NAMES[monthIdx]} ${year}`,
+    start: `${year}-${mm}-01`,
+    end:   `${year}-${mm}-${String(lastDay).padStart(2, '0')}`,
+  };
+}
+
+// Pull the saved weekly sheets for the selected month from Supabase.
+async function fetchMonthlyWeeks() {
+  const { start, end } = getSelectedMonthRange();
+  if (!window.supabase) return [];
+  try {
+    const { data, error } = await window.supabase
+      .from('weekly_sheets')
+      .select('week_ending, sales_total, carried_forward, banked, purchases, expenses')
+      .gte('week_ending', start)
+      .lte('week_ending', end)
+      .order('week_ending');
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Load monthly sheet error:', err);
+    return [];
+  }
+}
+
+// Turn the saved weeks into the Income / Expenditure breakdown the
+// accountant expects: one sales row per week, purchases grouped by
+// supplier, other costs grouped by expense label.
+function buildMonthlySheet(weeks) {
+  const fmtWeek = (iso) => {
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  };
+  const incomeRows = weeks.map(w => ({
+    label: `Sales (w/e ${fmtWeek(w.week_ending)})`,
+    sales: w.sales_total || 0,
+    vat: 0,
+  }));
+
+  const purchMap = {}, otherMap = {};
+  weeks.forEach(w => {
+    (w.purchases || []).forEach(p => {
+      const amt = p.total != null ? p.total : ((p.cash || 0) + (p.bank || 0));
+      if (amt) purchMap[p.supplier] = (purchMap[p.supplier] || 0) + amt;
+    });
+    (w.expenses || []).forEach(e => {
+      const amt = e.net || 0;
+      if (amt) otherMap[e.label] = (otherMap[e.label] || 0) + amt;
+    });
+  });
+  const expRows = [
+    ...Object.keys(purchMap).map(k => ({ label: k, purch: purchMap[k], other: 0 })),
+    ...Object.keys(otherMap).map(k => ({ label: k, purch: 0, other: otherMap[k] })),
+  ];
+
+  return {
+    incomeRows, expRows,
+    iTot: incomeRows.reduce((s, r) => s + r.sales, 0),
+    eTot: expRows.reduce((s, r) => s + r.purch, 0),
+    eOth: expRows.reduce((s, r) => s + r.other, 0),
+  };
+}
+
+async function renderMonthlySheet() {
   const ib = document.getElementById('monthlyIncomeBody');
   const eb = document.getElementById('monthlyExpBody');
   if (!ib || !eb) return;
-  const incomeRows = [
-    {label:'Bank receipts (week 1)', sales:0, vat:0},
-    {label:'Sales (week 1)', sales:5737.23, vat:0},
-    {label:'Sales (week 2)', sales:6569.98, vat:0},
-    {label:'Sales (week 3)', sales:7155.15, vat:0},
-    {label:'Sales (week 4)', sales:6093.89, vat:0},
-    {label:'Unders / Overs', sales:0.23, vat:0},
-    {label:'VAT Reclaim', sales:0, vat:0},
-  ];
-  const expRows = [
-    {label:'Hogans', purch:2675.02, other:0},
-    {label:'Cottoms', purch:1756.84, other:0},
-    {label:'Clayton Park Bakery', purch:601.93, other:0},
-    {label:'Proctors Cheeses', purch:418.21, other:0},
-    {label:'Bacon Factory', purch:915.91, other:0},
-    {label:'Mancunian Foods', purch:371.55, other:0},
-    {label:'Shukers Butchers', purch:640, other:0},
-    {label:'PM Foods', purch:367.1, other:0},
-    {label:'A&L Poultry', purch:367.5, other:0},
-    {label:'Fuel', purch:0, other:83.33},
-    {label:'Insurance', purch:0, other:18},
-    {label:'Drawings', purch:0, other:625},
-    {label:'HMRC (Tax & NI)', purch:0, other:107.74},
-    {label:'Tunnel Toll', purch:0, other:75},
-    {label:'Public Liability', purch:0, other:15},
-  ];
+
+  const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = '£' + v.toFixed(2); };
+  const weeks = await fetchMonthlyWeeks();
+
+  if (!weeks.length) {
+    ib.innerHTML = `<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--ink-soft);font-size:13px">No weekly sheets saved for this month yet. Save each week on the Weekly tab and the figures will appear here automatically.</td></tr>`;
+    eb.innerHTML = `<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--ink-soft);font-size:13px">—</td></tr>`;
+    ['mi-total', 'mi-vat', 'me-total', 'me-other'].forEach(id => setEl(id, 0));
+    return;
+  }
+
+  const { incomeRows, expRows, iTot, eTot, eOth } = buildMonthlySheet(weeks);
   ib.innerHTML = incomeRows.map(r => `<tr><td>${r.label}</td><td class="right">£${r.sales.toFixed(2)}</td><td class="right">£${r.vat.toFixed(2)}</td></tr>`).join('');
-  eb.innerHTML = expRows.map(r => `<tr><td>${r.label}</td><td class="right">£${r.purch.toFixed(2)}</td><td class="right">£${r.other.toFixed(2)}</td></tr>`).join('');
-  const iTot = incomeRows.reduce((s,r)=>s+r.sales,0);
-  const eTot = expRows.reduce((s,r)=>s+r.purch,0);
-  const eOth = expRows.reduce((s,r)=>s+r.other,0);
-  const setEl = (id,v) => { const el=document.getElementById(id); if(el) el.textContent='£'+v.toFixed(2); };
+  eb.innerHTML = expRows.length
+    ? expRows.map(r => `<tr><td>${r.label}</td><td class="right">£${r.purch.toFixed(2)}</td><td class="right">£${r.other.toFixed(2)}</td></tr>`).join('')
+    : `<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--ink-soft);font-size:13px">No purchases or expenses recorded this month</td></tr>`;
   setEl('mi-total', iTot); setEl('mi-vat', 0);
   setEl('me-total', eTot); setEl('me-other', eOth);
 }
 
 async function exportMonthly() {
-  // Fetch weekly sheets for current month from Supabase if available
-  let rows = [];
-  const now   = new Date();
-  const year  = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const monthStart = `${year}-${month}-01`;
-  const monthEnd   = `${year}-${month}-31`;
+  const { label, year, monthIdx } = getSelectedMonthRange();
+  const weeks = await fetchMonthlyWeeks();
 
-  if (supabase) {
-    const { data } = await supabase
-      .from('weekly_sheets')
-      .select('week_ending, sales_total, carried_forward, banked, purchases, expenses')
-      .gte('week_ending', monthStart)
-      .lte('week_ending', monthEnd)
-      .order('week_ending');
-    if (data && data.length) {
-      rows = data.map(w => {
-        const purTotal = (w.purchases || []).reduce((s, p) => s + (p.total || 0), 0);
-        const expTotal = (w.expenses  || []).reduce((s, e) => s + (e.net  || 0), 0);
-        return [w.week_ending, w.sales_total, w.carried_forward, purTotal, expTotal, w.banked];
-      });
-    }
+  if (!weeks.length) {
+    alert(`No weekly sheets saved for ${label} yet. Save each week on the Weekly tab first, then export.`);
+    return;
   }
 
-  // Build CSV
+  const { incomeRows, expRows, iTot, eTot, eOth } = buildMonthlySheet(weeks);
   const lines = [
-    ['Week Ending', 'Sales Total', 'Carried Forward', 'Total Purchases', 'Total Expenses', 'Banked'].join(','),
-    ...rows.map(r => r.map(v => typeof v === 'string' ? `"${v}"` : Number(v).toFixed(2)).join(',')),
+    `"JG Foods — Monthly summary — ${label}"`,
+    '',
+    'INCOME,Sales,VAT',
+    ...incomeRows.map(r => `"${r.label}",${r.sales.toFixed(2)},${r.vat.toFixed(2)}`),
+    `"Total income",${iTot.toFixed(2)},0.00`,
+    '',
+    'EXPENDITURE,Purchases,Other',
+    ...expRows.map(r => `"${r.label}",${r.purch.toFixed(2)},${r.other.toFixed(2)}`),
+    `"Total expenditure",${eTot.toFixed(2)},${eOth.toFixed(2)}`,
   ];
 
-  if (rows.length === 0) {
-    lines.push('"No weekly sheets saved for this month yet. Save each week using the Weekly Sheet page."');
-  }
-
-  const filename = `JG Foods Monthly Export ${year}-${month}.csv`;
-  downloadCSV(lines.join('\n'), filename);
+  const mm = String(monthIdx + 1).padStart(2, '0');
+  downloadCSV(lines.join('\n'), `JG Foods Monthly Export ${year}-${mm}.csv`);
 }
 
 // ============ INIT ============
@@ -6103,6 +6171,7 @@ renderGDPRBanner();
 renderTempGrid();
 renderWeeklySheet();
 renderBankPaymentsTable();
+populateMonthlyMonths();
 renderMonthlySheet();
 renderCashTabs();
 populateInvoiceCustomerSelect();
