@@ -56,6 +56,11 @@
   .tn-right{display:flex;align-items:center;gap:10px;margin-left:auto;flex-shrink:0}
   .tn-avatar{width:32px;height:32px;border-radius:50%;background:var(--gold);color:var(--navy-deep);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px}
   .tn-user{color:#fff;font-size:12.5px;font-weight:700}
+  .tn-burger{display:none;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:40px;height:36px;padding:0;margin-right:6px;background:transparent;border:1px solid rgba(224,189,114,.3);border-radius:8px;cursor:pointer;flex-shrink:0}
+  .tn-burger span{display:block;width:19px;height:2px;border-radius:2px;background:var(--gold-soft);transition:transform .22s ease,opacity .15s ease}
+  .topnav.nav-open .tn-burger span:nth-child(1){transform:translateY(6px) rotate(45deg)}
+  .topnav.nav-open .tn-burger span:nth-child(2){opacity:0}
+  .topnav.nav-open .tn-burger span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
 
   /* ============ PAGE SHELL ============ */
   .page{display:none;max-width:1400px;margin:0 auto;padding:28px 24px 60px}
@@ -410,8 +415,26 @@
     .pick-panel{position:static}
     .dash-layout{grid-template-columns:1fr}
   }
+  /* ── Mobile / tablet nav: hamburger dropdown ── */
+  @media(max-width:1024px){
+    .tn-burger{display:flex}
+    .tn-nav{
+      position:absolute;top:58px;left:0;right:0;
+      flex:none;flex-direction:column;gap:3px;
+      background:var(--navy-deep);
+      border-bottom:1px solid rgba(224,189,114,.18);
+      box-shadow:0 16px 30px -12px rgba(13,23,38,.7);
+      padding:0 12px;
+      max-height:0;overflow:hidden;opacity:0;pointer-events:none;
+      transition:max-height .28s ease,opacity .2s ease,padding .28s ease;
+    }
+    .topnav.nav-open .tn-nav{
+      max-height:calc(100vh - 58px);opacity:1;pointer-events:auto;
+      padding:10px 12px 14px;overflow-y:auto;
+    }
+    .tn-link{font-size:15px;padding:13px 14px;border-radius:9px}
+  }
   @media(max-width:700px){
-    .tn-nav{display:none}
     .page{padding:18px 14px 50px}
     .stats-row{grid-template-columns:1fr 1fr}
     .field-row{grid-template-columns:1fr}
@@ -512,6 +535,9 @@
       <div class="tn-link" onclick="showPage('temps')">🌡️ Temps</div>
       <div class="tn-link" id="nav-invoices" onclick="showPage('invoices')">📄 Invoices</div>
     </div>
+    <button class="tn-burger" id="nav-burger" onclick="toggleNav()" aria-label="Menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
     <div class="tn-right">
       <div class="tn-avatar" id="nav-avatar" onclick="showPage('users')" style="cursor:pointer" title="Account & access">J</div>
       <span class="tn-user" id="nav-username" onclick="showPage('users')" style="cursor:pointer" title="Account & access">Jon</span>
@@ -2274,7 +2300,21 @@ const sampleProducts = [];
 const sampleInvoices = [];
 
 // ============ NAV ============
+function toggleNav() {
+  const tn = document.querySelector('.topnav');
+  const open = tn.classList.toggle('nav-open');
+  const b = document.getElementById('nav-burger');
+  if (b) b.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+function closeNav() {
+  const tn = document.querySelector('.topnav');
+  if (tn) tn.classList.remove('nav-open');
+  const b = document.getElementById('nav-burger');
+  if (b) b.setAttribute('aria-expanded', 'false');
+}
+
 function showPage(id) {
+  closeNav();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tn-link').forEach(l => l.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
