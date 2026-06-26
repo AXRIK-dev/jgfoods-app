@@ -580,6 +580,14 @@
     <!-- enquiry form + aside -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:36px;align-items:start">
 
+      <!-- Hidden static form so Netlify detects + captures trade enquiries (emailed to Jon) -->
+      <form name="trade-enquiry" data-netlify="true" netlify-honeypot="bot-field" hidden>
+        <input type="text" name="name"><input type="tel" name="phone">
+        <input type="text" name="business"><input type="text" name="address">
+        <input type="text" name="type"><input type="text" name="delivery">
+        <textarea name="products"></textarea><input name="bot-field">
+      </form>
+
       <!-- form -->
       <div style="background:#fff;border:1px solid var(--line-soft);border-radius:16px;padding:28px">
         <div id="tradeFormBody">
@@ -1540,7 +1548,7 @@ function filterCategory(el, cat) {
 }
 
 // ============ TRADE ENQUIRY ============
-function submitTradeEnquiry() {
+async function submitTradeEnquiry() {
   const name     = document.getElementById('tr-name').value.trim();
   const phone    = document.getElementById('tr-phone').value.trim();
   const business = document.getElementById('tr-business').value.trim();
@@ -1549,13 +1557,28 @@ function submitTradeEnquiry() {
     alert('Please fill in your name, phone, business name and address.');
     return;
   }
-  // TODO: EmailJS send — same service as order notifications
-  // emailjs.send('SERVICE_ID','TEMPLATE_TRADE',{ name, phone, business, address,
-  //   type: document.getElementById('tr-type').value,
-  //   delivery: document.getElementById('tr-delivery').value,
-  //   products: document.getElementById('tr-products').value });
-  document.getElementById('tradeFormBody').style.display = 'none';
-  document.getElementById('tradeFormSuccess').style.display = 'block';
+  const btn = document.querySelector('#tradeFormBody .place-btn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+
+  // Send to Netlify Forms (lands in the dashboard + emails Jon if a notification is set)
+  const params = new URLSearchParams();
+  params.append('form-name', 'trade-enquiry');
+  params.append('name', name);
+  params.append('phone', phone);
+  params.append('business', business);
+  params.append('address', address);
+  params.append('type', document.getElementById('tr-type').value);
+  params.append('delivery', document.getElementById('tr-delivery').value);
+  params.append('products', document.getElementById('tr-products').value.trim());
+
+  try {
+    await fetch('/', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString() });
+    document.getElementById('tradeFormBody').style.display = 'none';
+    document.getElementById('tradeFormSuccess').style.display = 'block';
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+    alert('Sorry, something went wrong sending your enquiry — please call or text Jon on 07702 852704.');
+  }
 }
 
 // ============ MOBILE NAV ============
