@@ -580,27 +580,21 @@
     <!-- enquiry form + aside -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:36px;align-items:start">
 
-      <!-- Hidden static form so Netlify detects + captures trade enquiries (emailed to Jon) -->
-      <form name="trade-enquiry" data-netlify="true" netlify-honeypot="bot-field" hidden>
-        <input type="text" name="name"><input type="tel" name="phone">
-        <input type="text" name="business"><input type="text" name="address">
-        <input type="text" name="type"><input type="text" name="delivery">
-        <textarea name="products"></textarea><input name="bot-field">
-      </form>
-
-      <!-- form -->
+      <!-- form (a real Netlify form so it is detected at deploy + captured, then emailed to Jon) -->
       <div style="background:#fff;border:1px solid var(--line-soft);border-radius:16px;padding:28px">
-        <div id="tradeFormBody">
+        <form id="tradeFormBody" name="trade-enquiry" method="POST" data-netlify="true" netlify-honeypot="bot-field" onsubmit="return submitTradeEnquiry(event)">
+          <input type="hidden" name="form-name" value="trade-enquiry">
+          <p style="display:none"><label>Don't fill this in if you're human: <input name="bot-field"></label></p>
           <h3 style="font-family:var(--display);font-size:19px;font-weight:600;color:var(--navy);margin-bottom:18px">Open a trade account</h3>
           <div class="field-row">
-            <div class="field"><label>Your name *</label><input type="text" id="tr-name" placeholder="Jon Smith"></div>
-            <div class="field"><label>Phone number *</label><input type="tel" id="tr-phone" placeholder="07700 000000"></div>
+            <div class="field"><label>Your name *</label><input type="text" id="tr-name" name="name" placeholder="Jon Smith"></div>
+            <div class="field"><label>Phone number *</label><input type="tel" id="tr-phone" name="phone" placeholder="07700 000000"></div>
           </div>
-          <div class="field"><label>Business name *</label><input type="text" id="tr-business" placeholder="The Crown Pub"></div>
-          <div class="field"><label>Business address *</label><input type="text" id="tr-address" placeholder="High Street, Ormskirk"></div>
+          <div class="field"><label>Business name *</label><input type="text" id="tr-business" name="business" placeholder="The Crown Pub"></div>
+          <div class="field"><label>Business address *</label><input type="text" id="tr-address" name="address" placeholder="High Street, Ormskirk"></div>
           <div class="field">
             <label>Type of business</label>
-            <select id="tr-type">
+            <select id="tr-type" name="type">
               <option value="">— select —</option>
               <option>Pub or bar</option>
               <option>Restaurant</option>
@@ -613,7 +607,7 @@
           </div>
           <div class="field">
             <label>Preferred delivery day</label>
-            <select id="tr-delivery">
+            <select id="tr-delivery" name="delivery">
               <option value="">— select —</option>
               <option>Flexible — happy to discuss</option>
               <option>Monday</option>
@@ -624,12 +618,12 @@
               <option>Saturday</option>
             </select>
           </div>
-          <div class="field"><label>What products do you mainly use?</label><textarea id="tr-products" placeholder="e.g. Chicken breast, ribeye steaks, mince — roughly how much per week" style="min-height:70px;resize:vertical"></textarea></div>
-          <button class="place-btn" onclick="submitTradeEnquiry()">
+          <div class="field"><label>What products do you mainly use?</label><textarea id="tr-products" name="products" placeholder="e.g. Chicken breast, ribeye steaks, mince — roughly how much per week" style="min-height:70px;resize:vertical"></textarea></div>
+          <button type="submit" class="place-btn">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h10M9 5l3 3-3 3" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Send enquiry
           </button>
-        </div>
+        </form>
         <div id="tradeFormSuccess" style="display:none;text-align:center;padding:30px 10px">
           <div style="width:64px;height:64px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;box-shadow:0 0 0 10px rgba(70,96,74,.15)">
             <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M5 14l6 6 12-12" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1548,7 +1542,8 @@ function filterCategory(el, cat) {
 }
 
 // ============ TRADE ENQUIRY ============
-async function submitTradeEnquiry() {
+async function submitTradeEnquiry(e) {
+  if (e) e.preventDefault();
   const name     = document.getElementById('tr-name').value.trim();
   const phone    = document.getElementById('tr-phone').value.trim();
   const business = document.getElementById('tr-business').value.trim();
