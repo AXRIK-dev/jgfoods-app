@@ -226,6 +226,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 20. `020_social_graphics.sql`
+**What it does:** Backs the new **Graphics** page (brand graphics studio). Adds a `social_graphics` table (the editable graphic + a link to the exported PNG, admin-only) and a public-read `social-graphics` storage bucket for the saved images.
+
+**When to run:** After 012 and 015. Safe on the live database — idempotent.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

@@ -532,6 +532,7 @@
       <div class="tn-link" id="nav-finance" onclick="showPage('finance')">Finance</div>
       <div class="tn-link" onclick="showPage('vip')">⭐ VIP</div>
       <div class="tn-link" id="nav-social" onclick="showPage('social')">📣 Social</div>
+      <div class="tn-link" id="nav-graphics" onclick="showPage('graphics')">🎨 Graphics</div>
       <div class="tn-link" onclick="showPage('temps')">🌡️ Temps</div>
       <div class="tn-link" id="nav-invoices" onclick="showPage('invoices')">📄 Invoices</div>
     </div>
@@ -985,6 +986,73 @@
     <h3 style="font-size:14px;margin-bottom:4px">Recent posts</h3>
     <p style="font-size:12px;color:var(--ink-soft);margin-bottom:12px">Your last posts. Tap one to reuse it — and new posts learn from these so they keep your voice.</p>
     <div id="socialHistory"><p style="font-size:12.5px;color:var(--ink-soft)">No saved posts yet.</p></div>
+  </div>
+</div>
+
+<!-- ============ PAGE: GRAPHICS (brand graphics studio) ============ -->
+<div class="page" id="page-graphics">
+  <div class="pagehead">
+    <div>
+      <div class="eyebrow">Brand graphics studio</div>
+      <h1>Graphics</h1>
+      <p>Make a branded post graphic in seconds. Tell it what you want, tweak the words, then download or save it.</p>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:22px;align-items:start;max-width:980px">
+
+    <!-- Controls -->
+    <div>
+      <div class="dash-card">
+        <label style="font-size:12px;font-weight:800;color:var(--ink-soft);display:block;margin-bottom:6px">What do you want a graphic for?</label>
+        <textarea id="gfxPrompt" rows="2" placeholder="e.g. this week's availability — or a BBQ pack offer for the weekend" style="width:100%;border:1.5px solid var(--line);border-radius:9px;padding:11px;font-size:13px;font-family:var(--body);resize:vertical"></textarea>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px">
+          <button class="gfx-chip" onclick="gfxQuick('availability')">This week's availability</button>
+          <button class="gfx-chip" onclick="gfxQuick('offer')">Product offer</button>
+          <button class="gfx-chip" onclick="gfxQuick('delivery')">Delivery days</button>
+        </div>
+        <button class="btn-navy" id="gfxGenBtn" style="width:100%;margin-top:12px;font-size:13.5px;padding:12px" onclick="gfxGenerate(this)">✦ Generate graphic</button>
+        <p id="gfxGenHint" style="font-size:11px;color:var(--ink-soft);margin-top:7px"></p>
+      </div>
+
+      <div class="dash-card" id="gfxEditCard" style="margin-top:16px;display:none">
+        <h3 style="font-size:14px;margin:0 0 10px">Edit the wording</h3>
+        <label class="gfx-lbl">Headline</label>
+        <input id="gfxHeadline" class="gfx-in" oninput="gfxSyncFromFields()">
+        <label class="gfx-lbl">Sub-line</label>
+        <input id="gfxSubhead" class="gfx-in" oninput="gfxSyncFromFields()">
+        <div id="gfxItemsWrap">
+          <label class="gfx-lbl">Items (one per line — <b>Name | price</b>)</label>
+          <textarea id="gfxItems" rows="6" class="gfx-in" style="font-family:var(--body)" oninput="gfxSyncFromFields()"></textarea>
+        </div>
+        <label class="gfx-lbl">Footer line</label>
+        <input id="gfxFooter" class="gfx-in" oninput="gfxSyncFromFields()">
+        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+          <button class="btn-add" style="font-size:12.5px;padding:11px 16px" onclick="gfxDownload()">⬇ Download PNG</button>
+          <button class="btn-add" style="font-size:12.5px;padding:11px 16px;background:#fff;border:1.5px solid var(--line);color:var(--ink)" onclick="gfxSave(this)">💾 Save to app</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Preview -->
+    <div>
+      <div style="position:sticky;top:16px">
+        <div id="gfxStage" style="width:380px;height:380px;max-width:100%;overflow:hidden;border-radius:16px;box-shadow:0 10px 30px rgba(13,23,38,.22);background:#16273F">
+          <div id="gfxScale" style="transform:scale(0.35185);transform-origin:top left;width:1080px;height:1080px">
+            <div id="gfxCanvas" style="width:1080px;height:1080px;position:relative;background:#16273F;overflow:hidden"></div>
+          </div>
+        </div>
+        <p style="font-size:11px;color:var(--ink-soft);margin-top:8px">Square post · 1080×1080 · Facebook &amp; Instagram</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Saved gallery -->
+  <div style="margin-top:26px;max-width:980px">
+    <h3 style="font-family:var(--display);font-size:16px;color:var(--navy);margin-bottom:12px">Saved graphics</h3>
+    <div id="gfxGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px">
+      <p style="font-size:12.5px;color:var(--ink-soft)">Nothing saved yet — generate one above and press <b>Save to app</b>.</p>
+    </div>
   </div>
 </div>
 
@@ -1789,6 +1857,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
 // ============ SUPABASE CLIENT ============
 // For now the admin runs on demo data — no network dependency.
@@ -2417,6 +2486,7 @@ function showPage(id) {
   if (id === 'schedule')  loadSchedule();
   if (id === 'logorder')  { populateLogSlots(); refreshLogProductOptions(); }
   if (id === 'social')    loadSocial();
+  if (id === 'graphics')  gfxInit();
 }
 
 // ============ TABS ============
@@ -6718,6 +6788,16 @@ const HELP_PAGES = {
       { icon:'🕑', title:'Recent posts', body:'Posts you save show under <strong>Recent posts</strong>. Tap one to reuse it, and new posts learn from these so they keep your voice and wording.' },
     ]
   },
+  graphics: {
+    label: 'Graphics',
+    sections: [
+      { icon:'🎨', title:'What is this page?', body:'Graphics makes you a branded social media picture in seconds — in your navy &amp; gold style with your logo. Tell it what you want, tweak the words, then download it to post or save it in the app for later.' },
+      { icon:'✍️', title:'Make one', body:'Type what it\'s for — e.g. "this week\'s availability" or "a BBQ pack offer" — or tap a quick button (<strong>This week\'s availability</strong>, <strong>Product offer</strong>, <strong>Delivery days</strong>). Press <strong>Generate graphic</strong>. It writes the words for you and pulls in your live products, prices and delivery days automatically.' },
+      { icon:'📝', title:'Edit the words', body:'Anything you don\'t like, change it in the boxes under <strong>Edit the wording</strong> — the picture updates as you type. For the availability list, put one item per line as <strong>Name | price</strong>.' },
+      { icon:'⬇️', title:'Download &amp; post', body:'Press <strong>Download PNG</strong> to save the picture to your device, then post it on Facebook or Instagram like any other photo. It\'s sized 1080×1080 — perfect for a feed post.' },
+      { icon:'💾', title:'Save &amp; reuse', body:'Press <strong>Save to app</strong> and the graphic is kept under <strong>Saved graphics</strong> at the bottom. Tap any saved one to open it back up, change a few words, and download a fresh version — handy each week.' },
+    ]
+  },
   runs: {
     label: 'Delivery Runs',
     sections: [
@@ -6944,6 +7024,265 @@ showPage = function(id) {
     renderHelpPage(helpCurrentPage);
   }
 };
+</script>
+<style>
+  .gfx-chip{font-size:11.5px;font-weight:700;padding:7px 12px;border-radius:20px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer}
+  .gfx-chip:hover{border-color:var(--navy);color:var(--navy)}
+  .gfx-lbl{display:block;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--ink-soft);margin:12px 0 5px}
+  .gfx-in{width:100%;border:1.5px solid var(--line);border-radius:9px;padding:10px 12px;font-size:13px;font-family:var(--body);color:var(--ink)}
+  .gfx-thumb{border:1px solid var(--line);border-radius:10px;overflow:hidden;cursor:pointer;background:#16273F;transition:.15s}
+  .gfx-thumb:hover{border-color:var(--gold);transform:translateY(-2px)}
+  .gfx-thumb img{width:100%;display:block;aspect-ratio:1/1;object-fit:cover}
+</style>
+<script>
+// ============ BRAND GRAPHICS STUDIO ============
+let gfxSpec = null;
+let gfxChosenTemplate = null;
+let gfxGalleryLoaded = false;
+let gfxGalleryMap = {};
+
+function gfxInit() {
+  if (!gfxSpec) { gfxSpec = gfxDefaultSpec('availability', gfxLiveData()); gfxFillFields(); gfxRender(); document.getElementById('gfxEditCard').style.display = 'block'; }
+  if (!gfxGalleryLoaded) gfxLoadGallery();
+}
+
+function gfxLiveData() {
+  const products = (typeof sampleProducts !== 'undefined' ? sampleProducts : [])
+    .filter(p => p && p.live !== false && p.price)
+    .map(p => ({ name: p.name, price: Number(p.price) }));
+  let days = [];
+  try {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const slots = (typeof SCHEDULE !== 'undefined' && SCHEDULE.slots) ? SCHEDULE.slots : [];
+    const seen = new Set();
+    slots.filter(s => s.is_open && new Date(s.delivery_date + 'T00:00:00') >= today)
+      .sort((a,b) => a.delivery_date < b.delivery_date ? -1 : 1)
+      .forEach(s => { const n = new Date(s.delivery_date + 'T00:00:00').toLocaleDateString('en-GB',{weekday:'long'}); if(!seen.has(n)){seen.add(n);days.push(n);} });
+    if (!days.length && SCHEDULE && SCHEDULE.usualDays) days = SCHEDULE.usualDays.slice();
+  } catch(e){}
+  return { products, days };
+}
+
+function gfxFormatDays(days) {
+  if (!days || !days.length) return '';
+  if (days.length === 1) return days[0];
+  return days.slice(0,-1).join(', ') + ' & ' + days[days.length-1];
+}
+
+function gfxDefaultSpec(template, data) {
+  const daysStr = gfxFormatDays(data.days);
+  if (template === 'delivery') {
+    return { template, headline: 'We Deliver', subhead: daysStr || 'This Week', items: [], footer: 'Order by 5pm the day before · jgfoodsnorthwest.com' };
+  }
+  if (template === 'offer') {
+    const p = data.products[0] || { name: 'Family BBQ Pack', price: 35 };
+    return { template, headline: p.name, subhead: 'THIS WEEK ONLY', items: [{ name: 'A great mix of our best cuts', price: p.price ? ('£'+Number(p.price).toFixed(2)) : '' }], footer: 'Order now · jgfoodsnorthwest.com' };
+  }
+  return {
+    template: 'availability',
+    headline: "This Week's Availability",
+    subhead: daysStr ? ('Delivering ' + daysStr) : 'Fresh to your door',
+    items: data.products.slice(0,8).map(p => ({ name: p.name, price: p.price ? ('£'+Number(p.price).toFixed(2)) : '' })),
+    footer: 'Order at jgfoodsnorthwest.com · 07702 852704',
+  };
+}
+
+function gfxQuick(template) { gfxChosenTemplate = template; document.getElementById('gfxPrompt').value = ''; gfxGenerate(document.getElementById('gfxGenBtn'), template); }
+
+async function gfxGenerate(btn, forceTemplate) {
+  const data = gfxLiveData();
+  const prompt = (document.getElementById('gfxPrompt').value || '').trim();
+  const template = forceTemplate || gfxChosenTemplate || gfxDetectTemplate(prompt);
+  gfxSpec = gfxDefaultSpec(template, data);
+  gfxFillFields(); gfxRender();
+  document.getElementById('gfxEditCard').style.display = 'block';
+
+  const hint = document.getElementById('gfxGenHint');
+  if (btn) { btn.disabled = true; btn.textContent = 'Writing copy…'; }
+  hint.textContent = '';
+  const ai = await gfxAI(gfxSpec, prompt, data);
+  if (ai) {
+    if (ai.headline) gfxSpec.headline = String(ai.headline).slice(0,60);
+    if (ai.subhead)  gfxSpec.subhead  = String(ai.subhead).slice(0,80);
+    if (ai.footer)   gfxSpec.footer   = String(ai.footer).slice(0,90);
+    gfxFillFields(); gfxRender();
+    hint.textContent = 'Copy written for you — edit anything below, then download or save.';
+  } else {
+    hint.textContent = 'Built from your live products & delivery days. Edit anything below, then download or save.';
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '✦ Generate graphic'; }
+  gfxChosenTemplate = null;
+}
+
+function gfxDetectTemplate(text) {
+  const t = (text || '').toLowerCase();
+  if (/deliver|day|monday|thursday|slot/.test(t)) return 'delivery';
+  if (/offer|pack|deal|special|bbq|bundle|£|discount/.test(t)) return 'offer';
+  return 'availability';
+}
+
+async function gfxAI(spec, userPrompt, data) {
+  try {
+    const system = 'You write short, punchy copy for JG Foods, a friendly Lancashire mobile butcher (quality fresh meat, delivered). British English, warm, no emojis. Return ONLY a JSON object.';
+    const prompt = `Graphic type: ${spec.template}. Owner request: "${userPrompt || spec.template}".\n`
+      + `Delivery days: ${data.days.join(', ') || 'n/a'}. Products: ${data.products.slice(0,12).map(p=>p.name+' £'+Number(p.price).toFixed(2)).join('; ') || 'n/a'}.\n`
+      + `Return ONLY JSON with keys: headline (max 5 words), subhead (max 8 words), footer (max 10 words, include a prompt to order). No other keys, no markdown.`;
+    const resp = await fetch('/.netlify/functions/ai', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ system, prompt, max_tokens: 300 }) });
+    if (!resp.ok) return null;
+    const out = await resp.json();
+    if (!out.text) return null;
+    const m = out.text.match(/\{[\s\S]*\}/);
+    return m ? JSON.parse(m[0]) : null;
+  } catch(e) { return null; }
+}
+
+function gfxFillFields() {
+  if (!gfxSpec) return;
+  document.getElementById('gfxHeadline').value = gfxSpec.headline || '';
+  document.getElementById('gfxSubhead').value  = gfxSpec.subhead || '';
+  document.getElementById('gfxFooter').value   = gfxSpec.footer || '';
+  document.getElementById('gfxItems').value    = (gfxSpec.items || []).map(i => i.price ? `${i.name} | ${i.price}` : i.name).join('\n');
+  document.getElementById('gfxItemsWrap').style.display = (gfxSpec.template === 'availability') ? 'block' : 'none';
+}
+
+function gfxSyncFromFields() {
+  if (!gfxSpec) return;
+  gfxSpec.headline = document.getElementById('gfxHeadline').value;
+  gfxSpec.subhead  = document.getElementById('gfxSubhead').value;
+  gfxSpec.footer   = document.getElementById('gfxFooter').value;
+  gfxSpec.items = (document.getElementById('gfxItems').value || '').split('\n').filter(l => l.trim()).map(l => {
+    const parts = l.split('|'); return { name: (parts[0]||'').trim(), price: (parts[1]||'').trim() };
+  });
+  gfxRender();
+}
+
+function gfxEsc(s){ return String(s==null?'':s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+function gfxRender() {
+  const c = document.getElementById('gfxCanvas');
+  if (!c || !gfxSpec) return;
+  const s = gfxSpec;
+  const header = `
+    <div style="position:absolute;top:58px;left:0;right:0;text-align:center">
+      <div style="font-family:Georgia,'Times New Roman',serif;font-size:46px;font-weight:bold;color:#E0BD72;letter-spacing:2px">JG Foods</div>
+      <div style="font-family:Arial,sans-serif;font-size:17px;letter-spacing:7px;color:#E3D6B8;margin-top:6px">MOBILE BUTCHER</div>
+      <div style="width:110px;height:3px;background:#C2954A;margin:16px auto 0"></div>
+    </div>`;
+  const footer = `<div style="position:absolute;bottom:0;left:0;right:0;background:#C2954A;color:#16273F;font-family:Arial,sans-serif;font-weight:bold;font-size:23px;text-align:center;padding:26px 24px;line-height:1.3">${gfxEsc(s.footer)}</div>`;
+
+  let body = '';
+  if (s.template === 'availability') {
+    const rows = (s.items||[]).slice(0,9).map(it => `
+      <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid rgba(224,189,114,.28);padding-bottom:11px">
+        <span style="font-family:Georgia,serif;font-size:33px;color:#ffffff">${gfxEsc(it.name)}</span>
+        <span style="font-family:Georgia,serif;font-size:33px;color:#E0BD72;font-weight:bold;white-space:nowrap;padding-left:18px">${gfxEsc(it.price)}</span>
+      </div>`).join('');
+    body = `
+      <div style="position:absolute;top:226px;left:84px;right:84px;bottom:118px;display:flex;flex-direction:column">
+        <div style="font-family:Georgia,serif;font-size:58px;font-weight:bold;color:#fff;text-align:center;line-height:1.05">${gfxEsc(s.headline)}</div>
+        <div style="font-family:Arial,sans-serif;font-size:25px;color:#E3D6B8;text-align:center;margin-top:10px">${gfxEsc(s.subhead)}</div>
+        <div style="margin-top:30px;flex:1;display:flex;flex-direction:column;gap:15px;justify-content:center">${rows}</div>
+      </div>`;
+  } else if (s.template === 'offer') {
+    const blurb = (s.items && s.items[0]) ? s.items[0] : { name:'', price:'' };
+    const badge = blurb.price ? `<div style="display:inline-block;margin-top:34px;background:#E0BD72;color:#16273F;font-family:Georgia,serif;font-weight:bold;font-size:64px;padding:18px 44px;border-radius:18px">${gfxEsc(blurb.price)}</div>` : '';
+    body = `
+      <div style="position:absolute;top:300px;left:80px;right:80px;text-align:center">
+        <div style="font-family:Arial,sans-serif;font-size:23px;letter-spacing:6px;color:#E3D6B8">${gfxEsc(s.subhead)}</div>
+        <div style="font-family:Georgia,serif;font-size:82px;font-weight:bold;color:#fff;line-height:1.05;margin-top:16px">${gfxEsc(s.headline)}</div>
+        ${badge}
+        <div style="font-family:Georgia,serif;font-size:30px;color:#E3D6B8;margin-top:30px">${gfxEsc(blurb.name)}</div>
+      </div>`;
+  } else { // delivery
+    body = `
+      <div style="position:absolute;top:340px;left:80px;right:80px;text-align:center">
+        <div style="font-family:Arial,sans-serif;font-size:26px;letter-spacing:9px;color:#E3D6B8;text-transform:uppercase">${gfxEsc(s.headline)}</div>
+        <div style="font-family:Georgia,serif;font-size:92px;font-weight:bold;color:#E0BD72;line-height:1.1;margin-top:24px">${gfxEsc(s.subhead)}</div>
+      </div>`;
+  }
+  // gold corner frame
+  const frame = `<div style="position:absolute;inset:30px;border:2px solid rgba(224,189,114,.35);border-radius:14px;pointer-events:none"></div>`;
+  c.innerHTML = frame + header + body + footer;
+}
+
+async function gfxCapture() {
+  const node = document.getElementById('gfxCanvas');
+  const scaleEl = document.getElementById('gfxScale');
+  const prev = scaleEl.style.transform;
+  scaleEl.style.transform = 'none';
+  try {
+    const canvas = await html2canvas(node, { backgroundColor:'#16273F', width:1080, height:1080, scale:1, useCORS:true, logging:false });
+    return canvas;
+  } finally { scaleEl.style.transform = prev; }
+}
+
+function gfxFilename() {
+  const base = (gfxSpec && gfxSpec.headline ? gfxSpec.headline : 'jg-foods-graphic').replace(/[^a-z0-9]+/gi,'-').toLowerCase().replace(/^-|-$/g,'');
+  return 'jg-' + (base || 'graphic');
+}
+
+async function gfxDownload() {
+  if (!window.html2canvas) { alert('Image tool still loading — try again in a second.'); return; }
+  try {
+    const canvas = await gfxCapture();
+    const a = document.createElement('a');
+    a.download = gfxFilename() + '.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  } catch(e) { alert('Could not render the image: ' + (e.message || e)); }
+}
+
+async function gfxSave(btn) {
+  if (!window.supabase) { alert('Saving needs the live database.'); return; }
+  if (!window.html2canvas) { alert('Image tool still loading — try again in a second.'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const canvas = await gfxCapture();
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/png', 0.92));
+    const path = 'gfx/' + Date.now() + '.png';
+    const { error: upErr } = await window.supabase.storage.from('social-graphics').upload(path, blob, { contentType:'image/png', upsert:true });
+    if (upErr) throw upErr;
+    const { data: pub } = window.supabase.storage.from('social-graphics').getPublicUrl(path);
+    const { error: dbErr } = await window.supabase.from('social_graphics').insert({
+      title: (gfxSpec.headline || 'Graphic').slice(0,80), template: gfxSpec.template, spec: gfxSpec, png_url: pub?.publicUrl || null
+    });
+    if (dbErr) throw dbErr;
+    if (btn) { btn.textContent = '✓ Saved'; setTimeout(() => { btn.textContent = '💾 Save to app'; btn.disabled = false; }, 2200); }
+    gfxLoadGallery();
+  } catch(e) {
+    console.error('Graphic save failed:', e);
+    if (btn) { btn.textContent = 'Save failed'; btn.disabled = false; }
+    alert('Could not save: ' + (e.message || e));
+  }
+}
+
+async function gfxLoadGallery() {
+  gfxGalleryLoaded = true;
+  const grid = document.getElementById('gfxGallery');
+  if (!window.supabase) { grid.innerHTML = '<p style="font-size:12.5px;color:var(--ink-soft)">Saved graphics appear here once connected.</p>'; return; }
+  const { data, error } = await window.supabase.from('social_graphics').select('id, title, template, spec, png_url, created_at').order('created_at', { ascending:false }).limit(40);
+  if (error || !data || !data.length) {
+    grid.innerHTML = '<p style="font-size:12.5px;color:var(--ink-soft)">Nothing saved yet — generate one above and press <b>Save to app</b>.</p>';
+    return;
+  }
+  gfxGalleryMap = {};
+  grid.innerHTML = data.map(g => {
+    gfxGalleryMap[g.id] = g.spec;
+    return `
+    <div class="gfx-thumb" onclick="gfxLoadGraphic('${g.id}')" title="${gfxEsc(g.title)} — click to edit">
+      ${g.png_url ? `<img src="${g.png_url}" alt="${gfxEsc(g.title)}">` : ''}
+      <div style="padding:7px 9px;background:#fff;font-size:11px;color:var(--ink);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${gfxEsc(g.title)}</div>
+    </div>`; }).join('');
+}
+
+function gfxLoadGraphic(id) {
+  const spec = gfxGalleryMap[id];
+  if (!spec) return;
+  gfxSpec = spec;
+  gfxFillFields(); gfxRender();
+  document.getElementById('gfxEditCard').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 </script>
 <script src="js/pie-alert.js"></script>
 </body>
