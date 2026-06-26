@@ -367,6 +367,7 @@
   @media(max-width:600px){
     .trust-grid{grid-template-columns:repeat(2,1fr)}
     .trust-card.wide{grid-column:span 2}
+    .field-row{grid-template-columns:1fr}
     .prod-grid{grid-template-columns:1fr 1fr}
     .hero h1{font-size:32px}
     .hero-btns{flex-direction:column}
@@ -577,7 +578,7 @@
     </div>
 
     <!-- enquiry form + aside -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:start">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:36px;align-items:start">
 
       <!-- form -->
       <div style="background:#fff;border:1px solid var(--line-soft);border-radius:16px;padding:28px">
@@ -653,7 +654,7 @@
 <!-- ============ ABOUT ============ -->
 <section class="section" id="about">
   <div class="section-inner">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:48px;align-items:center">
 
       <div>
         <div class="sec-head">
@@ -682,6 +683,9 @@
       </div>
 
       <div>
+        <!-- Jon photo -->
+        <img src="jon-delivery.jpg" alt="Jon Green delivering fresh eggs from his JG Foods van" loading="lazy" style="width:100%;height:auto;border-radius:18px;border:1px solid rgba(224,189,114,.22);margin-bottom:16px;display:block">
+
         <!-- Profile card -->
         <div style="background:linear-gradient(160deg,var(--navy-2),var(--navy));border-radius:18px;padding:30px;border:1px solid rgba(224,189,114,.22);margin-bottom:16px">
           <div style="display:flex;align-items:center;gap:16px;margin-bottom:18px">
@@ -739,6 +743,10 @@
       <a href="https://www.facebook.com/JGFoodsLiverpool" target="_blank" rel="noopener" style="display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:16px 18px;transition:.15s" onmouseover="this.style.borderColor='var(--navy)'" onmouseout="this.style.borderColor='var(--line-soft)'">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="16" height="16" rx="4" stroke="var(--navy)" stroke-width="1.5"/><path d="M11 18v-7h2.5l.5-3H11V6.5c0-.83.33-1.5 1.5-1.5H14V2.5h-2C9.5 2.5 8 4 8 6.5V8H6v3h2v7h3z" fill="var(--navy)"/></svg>
         <div><b style="font-size:13px;font-weight:800;color:var(--ink);display:block">Facebook</b><span style="font-size:12px;color:var(--ink-soft)">@JGFoodsLiverpool</span></div>
+      </a>
+      <a href="https://www.instagram.com/jgfoodsliverpool" target="_blank" rel="noopener" style="display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:16px 18px;transition:.15s" onmouseover="this.style.borderColor='var(--navy)'" onmouseout="this.style.borderColor='var(--line-soft)'">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="16" height="16" rx="5" stroke="var(--navy)" stroke-width="1.5"/><circle cx="10" cy="10" r="3.5" stroke="var(--navy)" stroke-width="1.5"/><circle cx="14.5" cy="5.5" r="1" fill="var(--navy)"/></svg>
+        <div><b style="font-size:13px;font-weight:800;color:var(--ink);display:block">Instagram</b><span style="font-size:12px;color:var(--ink-soft)">@jgfoodsliverpool</span></div>
       </a>
       <a href="mailto:jongreen347@gmail.com" style="display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:16px 18px;transition:.15s" onmouseover="this.style.borderColor='var(--navy)'" onmouseout="this.style.borderColor='var(--line-soft)'">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="4" width="16" height="12" rx="2" stroke="var(--navy)" stroke-width="1.5"/><path d="M2 7l8 5 8-5" stroke="var(--navy)" stroke-width="1.5"/></svg>
@@ -1138,6 +1146,7 @@ async function loadProducts() {
     card.dataset.price = p.price.toFixed(2);
     card.dataset.cls   = cat;
     card.dataset.unit  = p.unit || 'pack';
+    card.dataset.img   = p.img_url || '';
     card.innerHTML = `
       ${imgHtml}
       <div class="prod-body">
@@ -1246,7 +1255,10 @@ function addToBasket(id, name, price, cls, unit) {
   if (basket[id]) {
     basket[id].qty++;
   } else {
-    basket[id] = { id, name, price, cls, unit: unit || 'pack', qty: 1 };
+    // Pull the product photo (if any) straight off the card so it shows in the basket
+    const cardEl = document.querySelector(`[data-id="${id}"]`);
+    const img = cardEl?.dataset.img || '';
+    basket[id] = { id, name, price, cls, unit: unit || 'pack', qty: 1, img };
   }
   updateBasketUI();
 
@@ -1300,7 +1312,7 @@ function updateBasketUI() {
 
   itemsDiv.innerHTML = items.map(item => `
     <div class="basket-item">
-      <div class="bi-thumb ${item.cls}"></div>
+      <div class="bi-thumb ${item.img ? '' : item.cls}"${item.img ? ` style="background:url('${item.img}') center/cover;border:1px solid var(--line-soft)"` : ''}></div>
       <div class="bi-info">
         <h4>${item.name}</h4>
         <span>${formatGBP(item.price)} each</span>

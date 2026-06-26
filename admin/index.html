@@ -895,7 +895,7 @@
   <div class="stock-banner">
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="#e0bd72" stroke-width="1.5"/><path d="M10 6v4l3 2" stroke="#e0bd72" stroke-width="1.5" stroke-linecap="round"/></svg>
     <div>
-      <b>Monday cut-off: tonight at midnight</b>
+      <b id="stockCutoffBanner">Changes apply to this week's orders</b>
       <p>Any changes you make now will affect this week's orders. Price changes apply to new orders only.</p>
     </div>
   </div>
@@ -951,8 +951,8 @@
       <span id="socialSourceTag" style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;padding:3px 9px;border-radius:10px;background:var(--green-soft, #d9f0e0);color:#1a6640"></span>
     </div>
     <textarea id="socialResult" style="width:100%;min-height:260px;border:1.5px solid var(--line);border-radius:9px;padding:12px;font-size:12.5px;line-height:1.6;resize:vertical;font-family:var(--body);color:var(--ink);background:var(--paper)"></textarea>
-    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn-add" style="font-size:12px;padding:9px 14px" onclick="copyPost('socialResult',this)">📋 Copy</button>
+    <button class="btn-add" style="width:100%;margin-top:12px;font-size:15px;font-weight:800;padding:15px;border-radius:11px" onclick="copyPost('socialResult',this)">📋 Copy post</button>
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn-add" style="font-size:12px;padding:9px 14px;background:#fff;border:1.5px solid var(--line);color:var(--ink)" onclick="saveSocialToHistory(this)">💾 Save to history</button>
       <a href="https://business.facebook.com/latest/composer" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;background:var(--navy);color:#fff;font-weight:800;font-size:12px;padding:9px 14px;border-radius:9px;text-decoration:none">Open Facebook →</a>
       <a href="https://www.instagram.com" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045);color:#fff;font-weight:800;font-size:12px;padding:9px 14px;border-radius:9px;text-decoration:none">Open Instagram →</a>
@@ -2243,6 +2243,20 @@ function renderRevenueChart() {
   }
 }
 
+// Friendly cut-off phrase from a slot's cutoff_at, e.g. "tonight at 5pm",
+// "tomorrow at 5pm", "Sunday at 5pm". Reads the live slot value, so it
+// always matches the Schedule (no hard-coded times).
+function friendlyCutoff(cutoffAt, today0) {
+  const c = new Date(cutoffAt);
+  const cDay = new Date(c); cDay.setHours(0, 0, 0, 0);
+  const cDiff = Math.round((cDay - today0) / 86400000);
+  const time = c.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true })
+                .replace(':00', '').replace(/\s/g, '').toLowerCase();   // 17:00 -> 5pm
+  const dayWord = cDiff === 0 ? 'tonight' : cDiff === 1 ? 'tomorrow'
+                : c.toLocaleDateString('en-GB', { weekday: 'long' });
+  return `${dayWord} at ${time}`;
+}
+
 function renderDashboard() {
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   const now = new Date();
@@ -2268,15 +2282,7 @@ function renderDashboard() {
   const notice = document.getElementById('dashNotice');
   if (run) {
     const runCount = sampleOrders.filter(o => o.date === run.delivery_date && o.status !== 'cancelled').length;
-    let cutWhen = '';
-    if (run.cutoff_at) {
-      const c = new Date(run.cutoff_at);
-      const cDay = new Date(c); cDay.setHours(0, 0, 0, 0);
-      const cDiff = Math.round((cDay - today0) / 86400000);
-      const time = c.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-      const dayWord = cDiff === 0 ? 'tonight' : cDiff === 1 ? 'tomorrow' : c.toLocaleDateString('en-GB', { weekday: 'long' });
-      cutWhen = `${dayWord} at ${time}`;
-    }
+    const cutWhen = run.cutoff_at ? friendlyCutoff(run.cutoff_at, today0) : '';
     set('dashNoticeTitle', cutWhen
       ? `${runDayLabel(run.delivery_date)} order cut-off is ${cutWhen}`
       : `${runDayLabel(run.delivery_date)} is your next run`);
@@ -2284,6 +2290,13 @@ function renderDashboard() {
     if (notice) notice.style.display = '';
   } else if (notice) {
     notice.style.display = 'none';
+  }
+
+  // ── Availability page cut-off banner — follows the same live cut-off ──
+  if (run && run.cutoff_at) {
+    set('stockCutoffBanner', `${runDayLabel(run.delivery_date)} cut-off: ${friendlyCutoff(run.cutoff_at, today0)}`);
+  } else {
+    set('stockCutoffBanner', `Changes apply to this week's orders`);
   }
 
   // ── Stat cards ──
@@ -3488,6 +3501,7 @@ async function openCustomerDetail(id) {
       <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px">Order History</div>
       <p style="font-size:12.5px;color:var(--ink-soft);padding:10px;background:var(--cream);border-radius:8px">Loading…</p>
     </div>
+    <button class="btn-add" style="width:100%;margin-top:14px;font-size:13px;padding:12px" onclick="downloadYearStatement('${c.id}')">📄 Download year's order statement (PDF)</button>
   `;
   document.getElementById('orderModal').classList.add('show');
 
@@ -5782,6 +5796,132 @@ async function downloadInvoicePDF() {
   if (!doc) { alert('PDF builder is still loading — please try again in a second.'); return; }
   const safeName = (cust.name || 'customer').replace(/[^a-z0-9]+/gi, '-');
   doc.save(`${currentInvoiceRef}-${safeName}.pdf`);
+}
+
+// ── Build a branded "year's orders" statement PDF (paginates over many rows) ──
+function buildYearStatementDoc(data) {
+  const JS = window.jspdf && window.jspdf.jsPDF;
+  if (!JS) return null;
+  const NAVY=[22,39,63], NAVYD=[13,23,38], GOLD=[194,149,74], GOLDB=[224,189,114],
+        CREAM=[241,232,214], INK=[38,32,25], INKSOFT=[106,95,81], OX=[140,50,44];
+  const doc = new JS({ unit:'pt', format:'a4' });
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+  const L = 48, R = W - 48;
+  const cDate = L, cDay = L + 95, cItems = L + 200, cTot = R;
+
+  function header() {
+    doc.setFillColor(...NAVYD).rect(0, 0, W, 104, 'F');
+    doc.setFillColor(...GOLD).rect(0, 104, W, 3, 'F');
+    doc.setFont('helvetica','bold').setFontSize(26).setTextColor(255,255,255);
+    doc.text('JG Foods', L, 50);
+    doc.setFont('helvetica','bold').setFontSize(8).setTextColor(...GOLDB);
+    doc.text('MOBILE BUTCHER · NORTH LIVERPOOL, ORMSKIRK & WEST LANCASHIRE', L, 66);
+    doc.setFont('helvetica','normal').setFontSize(8.5).setTextColor(206,213,222);
+    doc.text('07702 852 704   ·   jongreen347@gmail.com', L, 82);
+    doc.setFont('helvetica','bold').setFontSize(15).setTextColor(255,255,255);
+    doc.text('ORDER STATEMENT', R, 50, { align:'right' });
+    doc.setFont('helvetica','normal').setFontSize(8.5).setTextColor(206,213,222);
+    doc.text('Issued: ' + new Date().toLocaleDateString('en-GB'), R, 68, { align:'right' });
+    doc.text('VAT No: 307458303', R, 80, { align:'right' });
+  }
+  function tableHead(y) {
+    doc.setFillColor(...NAVY).rect(L, y - 13, R - L, 24, 'F');
+    doc.setFont('helvetica','bold').setFontSize(8.5).setTextColor(255,255,255);
+    doc.text('DATE', cDate + 6, y + 3);
+    doc.text('DELIVERY', cDay, y + 3);
+    doc.text('ITEMS', cItems, y + 3);
+    doc.text('TOTAL', cTot - 8, y + 3, { align:'right' });
+    return y + 27;
+  }
+
+  header();
+  let y = 150;
+  // Statement-for block
+  doc.setFont('helvetica','bold').setFontSize(8).setTextColor(...GOLD);
+  doc.text('STATEMENT FOR', L, y);
+  doc.setFont('helvetica','bold').setFontSize(12).setTextColor(...NAVYD);
+  doc.text(data.custName || '—', L, y + 16);
+  if (data.custAddress) {
+    doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INKSOFT);
+    doc.text(String(data.custAddress), L, y + 30);
+  }
+  doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INKSOFT);
+  doc.text('Period: ' + data.periodLabel, R, y + 16, { align:'right' });
+  doc.text(`${data.count} order${data.count !== 1 ? 's' : ''}`, R, y + 30, { align:'right' });
+  y += 56;
+  y = tableHead(y);
+
+  doc.setFont('helvetica','normal').setFontSize(9.5).setTextColor(...INK);
+  (data.orders || []).forEach((o, idx) => {
+    const itemLines = doc.splitTextToSize(o.itemsSummary || '—', cTot - cItems - 60);
+    const rowH = 13 * itemLines.length + 6;
+    if (y + rowH > H - 90) {            // page break
+      doc.addPage(); header(); y = 150; y = tableHead(y);
+      doc.setFont('helvetica','normal').setFontSize(9.5).setTextColor(...INK);
+    }
+    if (idx % 2 === 1) doc.setFillColor(248,244,236).rect(L, y - 11, R - L, rowH, 'F');
+    doc.setTextColor(...INK);
+    doc.text(o.dateFmt, cDate + 6, y);
+    doc.setTextColor(...INKSOFT); doc.text(o.day || '—', cDay, y);
+    doc.setTextColor(...INK); doc.text(itemLines, cItems, y);
+    doc.text('£' + (o.amount || 0).toFixed(2), cTot - 8, y, { align:'right' });
+    y += rowH;
+  });
+
+  // Grand total
+  if (y > H - 110) { doc.addPage(); header(); y = 150; }
+  doc.setDrawColor(...GOLD).setLineWidth(1.2).line(cItems, y + 2, R, y + 2);
+  y += 22;
+  doc.setFont('helvetica','bold').setFontSize(12).setTextColor(...NAVYD);
+  doc.text('Total for period', cItems, y);
+  doc.setFontSize(13).setTextColor(...OX);
+  doc.text('£' + (data.total || 0).toFixed(2), cTot - 8, y, { align:'right' });
+
+  doc.setFont('helvetica','normal').setFontSize(8).setTextColor(150,142,130);
+  doc.text('Thank you for your custom  ·  JG Foods', W / 2, H - 30, { align:'center' });
+  return doc;
+}
+
+// ── Pull a customer's last 12 months of orders and download the statement ──
+async function downloadYearStatement(customerId) {
+  const c = sampleCustomers.find(x => x.id === customerId) || { name:'Customer', address:'' };
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customerId);
+  if (!supabase || !isUUID) { alert('Order statements need the live database — available once a customer has real orders.'); return; }
+
+  const since = new Date(); since.setFullYear(since.getFullYear() - 1); since.setHours(0,0,0,0);
+  const { data: orders, error } = await supabase
+    .from('orders')
+    .select('status, total_amount, created_at, delivery_slots (day_label, delivery_date), order_items (product_name, quantity)')
+    .eq('customer_id', customerId)
+    .gte('created_at', since.toISOString())
+    .neq('status', 'cancelled')
+    .order('created_at', { ascending: true });
+
+  if (error) { alert('Could not load orders: ' + error.message); return; }
+  if (!orders || !orders.length) { alert(`No orders for ${c.name} in the last 12 months.`); return; }
+
+  const rows = orders.map(o => {
+    const dWhen = o.delivery_slots?.delivery_date
+      ? new Date(o.delivery_slots.delivery_date + 'T00:00:00')
+      : new Date(o.created_at);
+    const itemsSummary = (o.order_items || []).map(i => `${i.product_name} ×${i.quantity}`).join(', ');
+    return {
+      dateFmt: dWhen.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }),
+      day: o.delivery_slots?.day_label || '',
+      itemsSummary,
+      amount: parseFloat(o.total_amount || 0),
+    };
+  });
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  const periodLabel = `${since.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })} – ${new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })}`;
+
+  const doc = buildYearStatementDoc({
+    custName: c.name, custAddress: c.address || '',
+    periodLabel, orders: rows, total, count: rows.length,
+  });
+  if (!doc) { alert('PDF builder is still loading — please try again in a second.'); return; }
+  const safeName = (c.name || 'customer').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  doc.save(`JG-Foods-statement-${safeName}.pdf`);
 }
 
 // ── Generate the PDF and upload it to Storage; returns a public URL (or null) ──
