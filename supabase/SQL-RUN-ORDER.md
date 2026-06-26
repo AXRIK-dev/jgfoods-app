@@ -217,6 +217,15 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 19. `019_customer_accounts.sql`
+**What it does:** Switches on real customer accounts (sign-in, registration, **password reset**). Adds a dedicated `customer` role so self-signups are kept separate from the staff `driver` role — closing the gap migration 012 flagged. Self-signups carry an `account_type=customer` flag that routes them to the `customer` role; staff accounts (no flag) still default to `driver`. Also lets a logged-in customer create and update **their own** linked customer record (RLS-restricted to their own `user_id`).
+
+**After running, in the Supabase dashboard:** (1) Authentication → Providers → Email is enabled; (2) Authentication → URL Configuration → Site URL = `https://jgfoodsnorthwest.com` and add redirect URL `https://jgfoodsnorthwest.com/**`; (3) optionally reword the "Reset Password" email template.
+
+**When to run:** After 012 and 015. Safe on the live database — idempotent.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

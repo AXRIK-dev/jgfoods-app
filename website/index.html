@@ -1003,7 +1003,10 @@ function submitContactForm(form){
       <div class="field"><label>Email address</label><input type="email" id="si-email" placeholder="you@example.com"></div>
       <div class="field"><label>Password</label><input type="password" id="si-password" placeholder="Your password"></div>
       <button style="width:100%;background:var(--navy);color:#fff;font-weight:800;font-size:13.5px;padding:13px;border-radius:10px;margin-top:6px;transition:.15s" onclick="signIn()">Sign in</button>
-      <p style="font-size:11.5px;color:var(--ink-soft);text-align:center;margin-top:14px">
+      <p style="text-align:center;margin-top:10px">
+        <button onclick="forgotPassword()" style="color:var(--ink-soft);font-weight:700;font-size:11.5px;text-decoration:underline">Forgot your password?</button>
+      </p>
+      <p style="font-size:11.5px;color:var(--ink-soft);text-align:center;margin-top:6px">
         Don't have an account? <button onclick="switchSpTab('register')" style="color:var(--navy);font-weight:800;font-size:11.5px">Create one →</button>
       </p>
     </div>
@@ -1681,78 +1684,216 @@ function showSignedInState() {
   }
 }
 
-function signIn() {
+async function signIn() {
   const email = document.getElementById('si-email').value.trim();
   const password = document.getElementById('si-password').value;
   if (!email || !password) { alert('Please enter your email and password.'); return; }
 
-  // TODO: supabase.auth.signInWithPassword({ email, password })
-  // Then: supabase.from('customers').select('*').eq('email', email).single()
-  // The `type` field on the customer record ('domestic' or 'trade') is set by Jon in the admin
-  // — customers never set this themselves
-
-  // Simulate: trade account example (Jon would have created this after the enquiry)
-  const isTradeDemo = email.toLowerCase().includes('trade') || email.toLowerCase().includes('pub');
-  currentUser = isTradeDemo
-    ? { name: 'The Crown Pub', email, phone: '01695 123456', address: 'High Street, Skelmersdale',
-        businessName: 'The Crown Pub', type: 'trade',
-        lastOrder: ['Ribeye Steaks ×5', '5kg Chicken Fillets', 'Lean Mince 1kg'] }
-    : { name: 'Sarah Taylor', email, phone: '07711 111111', address: '14 Oak Street, Ormskirk',
-        type: 'domestic', lastOrder: ['5kg Chicken Fillets', 'Lean Mince 1kg'] };
-
-  updateNavForUser();
-  showSignedInState();
+  const { data, error } = await window.sbClient.auth.signInWithPassword({ email, password });
+  if (error) {
+    alert(/confirm/i.test(error.message)
+      ? 'Please confirm your email first — check your inbox for the confirmation link.'
+      : 'Could not sign in: ' + error.message);
+    return;
+  }
+  await applyAuthedUser(data.session);
 }
 
-function registerAccount() {
+async function registerAccount() {
   const first = document.getElementById('reg-first').value.trim();
   const last  = document.getElementById('reg-last').value.trim();
   const email = document.getElementById('reg-email').value.trim();
   const password = document.getElementById('reg-password').value;
   if (!first || !last || !email || !password) { alert('Please fill in all required fields.'); return; }
+  if (password.length < 8) { alert('Please choose a password of at least 8 characters.'); return; }
 
-  // Self-registered accounts are always domestic — trade accounts are set up by Jon via the admin
-  // TODO: supabase.auth.signUp({ email, password })
-  // Then: supabase.from('customers').insert({ name, phone, address, email, type: 'domestic' })
-  // Trade accounts: Jon creates them in admin → type set to 'trade' → per-client pricing applied
-  currentUser = {
-    name:    `${first} ${last}`,
-    email,
+  const fullName = `${first} ${last}`;
+  // account_type flag routes the new profile to the 'customer' role (migration 019)
+  const { data, error } = await window.sbClient.auth.signUp({
+    email, password,
+    options: { data: { full_name: fullName, account_type: 'customer' } }
+  });
+  if (error) { alert('Could not create your account: ' + error.message); return; }
+
+  const profile = {
+    name: fullName, email,
     phone:   document.getElementById('reg-phone').value.trim(),
     address: document.getElementById('reg-address').value.trim(),
-    type:    'domestic', // always — trade accounts are created by Jon, never self-registered
-    lastOrder: []
   };
-  updateNavForUser();
-  showSignedInState();
+
+  if (data.session) {
+    // Email confirmation is off → signed in straight away; create the linked record
+    await upsertCustomerRecord(data.session.user.id, profile);
+    await applyAuthedUser(data.session);
+  } else {
+    // Email confirmation is on → no session yet. Stash details to save on first sign-in.
+    try { localStorage.setItem('jg_pending_profile', JSON.stringify(profile)); } catch(e) {}
+    alert('Almost there! We\'ve sent a confirmation link to ' + email + '. Click it, then sign in.');
+    switchSpTab('signin');
+  }
 }
 
-function signOut() {
-  // TODO: supabase.auth.signOut()
+async function signOut() {
+  await window.sbClient.auth.signOut();
   currentUser = null;
   updateNavForUser();
   closeSignInPanel();
 }
 
+// Create or update the customer's own linked record (RLS: user_id must be theirs)
+async function upsertCustomerRecord(userId, p) {
+  try {
+    const { data: existing } = await window.sbClient
+      .from('customers').select('id').eq('user_id', userId).maybeSingle();
+    if (existing) {
+      await window.sbClient.from('customers').update({
+        name: p.name, phone: p.phone || null, address_line_1: p.address || null, email: p.email || null
+      }).eq('id', existing.id);
+    } else {
+      await window.sbClient.from('customers').insert({
+        user_id: userId, name: p.name, email: p.email || null,
+        phone: p.phone || null, address_line_1: p.address || null,
+        customer_type: 'domestic', price_tier: 'standard'
+      });
+    }
+  } catch (e) { console.error('Customer record save failed:', e); }
+}
+
+// Load the signed-in customer's profile + last order, then show signed-in UI
+async function applyAuthedUser(session) {
+  if (!session) return;
+  const user = session.user;
+
+  // If a pending profile was stashed at registration (email-confirm flow), save it now
+  let pending = null;
+  try { pending = JSON.parse(localStorage.getItem('jg_pending_profile') || 'null'); } catch(e) {}
+  if (pending) { await upsertCustomerRecord(user.id, pending); localStorage.removeItem('jg_pending_profile'); }
+
+  const { data: cust } = await window.sbClient
+    .from('customers')
+    .select('name, customer_type, price_tier, business_name, phone, email, address_line_1')
+    .eq('user_id', user.id).maybeSingle();
+
+  const meta = user.user_metadata || {};
+  currentUser = {
+    name:    cust?.name || meta.full_name || (user.email || '').split('@')[0],
+    email:   user.email,
+    phone:   cust?.phone || '',
+    address: cust?.address_line_1 || '',
+    businessName: cust?.business_name || '',
+    type:    (cust?.customer_type === 'commercial' || cust?.price_tier === 'trade') ? 'trade' : 'domestic',
+    lastOrder: [],
+  };
+
+  // Last order items (own orders are readable via RLS) for the reorder banner
+  try {
+    const { data: lastOrd } = await window.sbClient
+      .from('orders')
+      .select('created_at, order_items (product_name), customers!inner(user_id)')
+      .eq('customers.user_id', user.id)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (lastOrd?.order_items?.length) currentUser.lastOrder = lastOrd.order_items.map(i => i.product_name);
+  } catch (e) { /* reorder is a nice-to-have */ }
+
+  updateNavForUser();
+  showSignedInState();
+}
+
+// ── Forgot password: send the reset email ──
+async function forgotPassword() {
+  let email = (document.getElementById('si-email').value || '').trim();
+  if (!email) email = (prompt('Enter your account email and we\'ll send you a reset link:') || '').trim();
+  if (!email) return;
+  const { error } = await window.sbClient.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + '/'
+  });
+  if (error) { alert('Could not send the reset email: ' + error.message); return; }
+  alert('Done! If an account exists for ' + email + ', a password-reset link is on its way. Check your inbox (and spam).');
+}
+
+// ── Set a new password (after following the reset link) ──
+function showResetPasswordForm() {
+  if (document.getElementById('pwResetOverlay')) return;
+  const html = `
+    <div id="pwResetOverlay" style="position:fixed;inset:0;background:rgba(15,23,38,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px">
+      <div style="background:#fff;border-radius:16px;max-width:380px;width:100%;padding:26px;box-shadow:0 20px 50px rgba(0,0,0,.3)">
+        <h3 style="font-family:var(--display);font-size:20px;color:var(--navy);margin:0 0 6px">Set a new password</h3>
+        <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 16px">Choose a new password for your JG Foods account.</p>
+        <div class="field"><label>New password</label><input type="password" id="pw-new" placeholder="At least 8 characters"></div>
+        <button id="pw-save" style="width:100%;background:var(--navy);color:#fff;font-weight:800;font-size:13.5px;padding:13px;border-radius:10px;margin-top:8px" onclick="submitNewPassword()">Save new password</button>
+        <p id="pw-msg" style="font-size:12px;margin-top:10px;text-align:center"></p>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function submitNewPassword() {
+  const pw = document.getElementById('pw-new').value;
+  const msg = document.getElementById('pw-msg');
+  if (!pw || pw.length < 8) { msg.style.color = '#8c322c'; msg.textContent = 'Password must be at least 8 characters.'; return; }
+  const btn = document.getElementById('pw-save');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  const { data, error } = await window.sbClient.auth.updateUser({ password: pw });
+  if (error) {
+    msg.style.color = '#8c322c'; msg.textContent = 'Could not update: ' + error.message;
+    if (btn) { btn.disabled = false; btn.textContent = 'Save new password'; }
+    return;
+  }
+  msg.style.color = '#1a6640'; msg.textContent = '✓ Password updated — you\'re signed in.';
+  // Clean the recovery token out of the URL, then continue signed in
+  history.replaceState(null, '', window.location.origin + '/');
+  setTimeout(async () => {
+    document.getElementById('pwResetOverlay')?.remove();
+    const { data: { session } } = await window.sbClient.auth.getSession();
+    if (session) await applyAuthedUser(session);
+  }, 1200);
+}
+
+// ── On load: restore an existing session + handle the reset-link return ──
+async function initAuth() {
+  if (!window.sbClient) return;
+  window.sbClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY') showResetPasswordForm();
+  });
+  try {
+    const { data: { session } } = await window.sbClient.auth.getSession();
+    // If we arrived via a recovery link, the SDK has a session but we must let them set a new password
+    if (/type=recovery/.test(window.location.hash)) { showResetPasswordForm(); return; }
+    if (session) await applyAuthedUser(session);
+  } catch (e) { /* not signed in */ }
+}
+document.addEventListener('DOMContentLoaded', initAuth);
+
 // ============ ACCOUNT CREATION FROM CONFIRMATION ============
-function createAccount() {
+async function createAccount() {
   const email = document.getElementById('sab-email').value.trim();
   const password = document.getElementById('sab-password').value;
   if (!email || !password) { alert('Please enter an email and password.'); return; }
   if (password.length < 8) { alert('Password must be at least 8 characters.'); return; }
 
-  // TODO: supabase.auth.signUp({ email, password }) — pre-fill name/address from completed order
   const name = (document.getElementById('f-first').value + ' ' + document.getElementById('f-last').value).trim();
-  currentUser = {
-    name: name || 'Customer',
-    email,
+  const profile = {
+    name: name || 'Customer', email,
     phone: document.getElementById('f-phone').value,
     address: document.getElementById('f-address').value,
-    lastOrder: Object.values(basket).map(i => i.name)
   };
-  updateNavForUser();
-  document.getElementById('saveAccountBox').innerHTML =
-    `<div style="text-align:center;padding:8px 0"><div style="font-size:28px;margin-bottom:8px">🎉</div><p style="font-family:var(--display);font-size:16px;font-weight:600;color:var(--navy)">Account created!</p><p style="font-size:12px;color:var(--ink-soft);margin-top:5px">Next time, your details will be saved and you can reorder in one tap.</p></div>`;
+  const { data, error } = await window.sbClient.auth.signUp({
+    email, password,
+    options: { data: { full_name: profile.name, account_type: 'customer' } }
+  });
+  if (error) { alert('Could not create your account: ' + error.message); return; }
+
+  if (data.session) {
+    await upsertCustomerRecord(data.session.user.id, profile);
+    currentUser = { ...profile, type: 'domestic', lastOrder: Object.values(basket).map(i => i.name) };
+    updateNavForUser();
+    document.getElementById('saveAccountBox').innerHTML =
+      `<div style="text-align:center;padding:8px 0"><div style="font-size:28px;margin-bottom:8px">🎉</div><p style="font-family:var(--display);font-size:16px;font-weight:600;color:var(--navy)">Account created!</p><p style="font-size:12px;color:var(--ink-soft);margin-top:5px">Next time, your details will be saved and you can reorder in one tap.</p></div>`;
+  } else {
+    try { localStorage.setItem('jg_pending_profile', JSON.stringify(profile)); } catch(e) {}
+    document.getElementById('saveAccountBox').innerHTML =
+      `<div style="text-align:center;padding:8px 0"><div style="font-size:28px;margin-bottom:8px">📧</div><p style="font-family:var(--display);font-size:16px;font-weight:600;color:var(--navy)">Almost done!</p><p style="font-size:12px;color:var(--ink-soft);margin-top:5px">We've emailed a confirmation link to ${email}. Click it, then sign in — your details are saved ready for one-tap reorders.</p></div>`;
+  }
   document.getElementById('confirmDoneBtn').style.display = 'inline-flex';
 }
 
