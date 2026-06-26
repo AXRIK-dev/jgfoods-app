@@ -415,8 +415,10 @@
     .pick-panel{position:static}
     .dash-layout{grid-template-columns:1fr}
   }
-  /* ── Mobile / tablet nav: hamburger dropdown ── */
-  @media(max-width:1024px){
+  /* ── Mobile / tablet / laptop nav: hamburger dropdown ──
+     Raised to 1600px so laptops use the tidy hamburger menu (the full
+     row of tabs only shows on wide external monitors). ── */
+  @media(max-width:1600px){
     .tn-burger{display:flex}
     .tn-nav{
       position:absolute;top:58px;left:0;right:0;
@@ -1021,6 +1023,11 @@
         <input id="gfxHeadline" class="gfx-in" oninput="gfxSyncFromFields()">
         <label class="gfx-lbl">Sub-line</label>
         <input id="gfxSubhead" class="gfx-in" oninput="gfxSyncFromFields()">
+        <div id="gfxPhotoRow" style="display:none;margin-top:12px">
+          <label style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--ink);font-weight:700;cursor:pointer">
+            <input type="checkbox" id="gfxUsePhoto" onchange="gfxSyncFromFields()" style="width:16px;height:16px"> Add the product photo
+          </label>
+        </div>
         <div id="gfxItemsWrap">
           <label class="gfx-lbl">Items (one per line — <b>Name | price</b>)</label>
           <textarea id="gfxItems" rows="6" class="gfx-in" style="font-family:var(--body)" oninput="gfxSyncFromFields()"></textarea>
@@ -6794,6 +6801,7 @@ const HELP_PAGES = {
       { icon:'🎨', title:'What is this page?', body:'Graphics makes you a branded social media picture in seconds — in your navy &amp; gold style with your logo. Tell it what you want, tweak the words, then download it to post or save it in the app for later.' },
       { icon:'✍️', title:'Make one', body:'Type what it\'s for — e.g. "this week\'s availability" or "a BBQ pack offer" — or tap a quick button (<strong>This week\'s availability</strong>, <strong>Product offer</strong>, <strong>Delivery days</strong>). Press <strong>Generate graphic</strong>. It writes the words for you and pulls in your live products, prices and delivery days automatically.' },
       { icon:'📝', title:'Edit the words', body:'Anything you don\'t like, change it in the boxes under <strong>Edit the wording</strong> — the picture updates as you type. For the availability list, put one item per line as <strong>Name | price</strong>.' },
+      { icon:'📷', title:'Add a product photo', body:'If the product has a photo (the ones you upload on the Availability page), tick <strong>Add the product photo</strong> to drop it onto the graphic. No photo on that product? The tick box won\'t show — add one on the Availability page first.' },
       { icon:'⬇️', title:'Download &amp; post', body:'Press <strong>Download PNG</strong> to save the picture to your device, then post it on Facebook or Instagram like any other photo. It\'s sized 1080×1080 — perfect for a feed post.' },
       { icon:'💾', title:'Save &amp; reuse', body:'Press <strong>Save to app</strong> and the graphic is kept under <strong>Saved graphics</strong> at the bottom. Tap any saved one to open it back up, change a few words, and download a fresh version — handy each week.' },
     ]
@@ -7049,7 +7057,7 @@ function gfxInit() {
 function gfxLiveData() {
   const products = (typeof sampleProducts !== 'undefined' ? sampleProducts : [])
     .filter(p => p && p.live !== false && p.price)
-    .map(p => ({ name: p.name, price: Number(p.price) }));
+    .map(p => ({ name: p.name, price: Number(p.price), img: p.img || p.img_url || null }));
   let days = [];
   try {
     const today = new Date(); today.setHours(0,0,0,0);
@@ -7072,20 +7080,22 @@ function gfxFormatDays(days) {
 function gfxDefaultSpec(template, data) {
   const daysStr = gfxFormatDays(data.days);
   if (template === 'delivery') {
-    return { template, headline: 'We Deliver', subhead: daysStr || 'This Week', items: [], footer: 'Order by 5pm the day before · jgfoodsnorthwest.com' };
+    return { template, headline: 'We Deliver', subhead: daysStr || 'This Week', items: [], image: null, usePhoto: false, footer: GFX_FOOTER };
   }
   if (template === 'offer') {
-    const p = data.products[0] || { name: 'Family BBQ Pack', price: 35 };
-    return { template, headline: p.name, subhead: 'THIS WEEK ONLY', items: [{ name: 'A great mix of our best cuts', price: p.price ? ('£'+Number(p.price).toFixed(2)) : '' }], footer: 'Order now · jgfoodsnorthwest.com' };
+    const p = data.products[0] || { name: 'Family BBQ Pack', price: 35, img: null };
+    return { template, headline: p.name, subhead: 'THIS WEEK', items: [{ name: 'A great mix of our best cuts', price: p.price ? ('£'+Number(p.price).toFixed(2)) : '' }], image: p.img || null, usePhoto: !!p.img, footer: GFX_FOOTER };
   }
   return {
     template: 'availability',
     headline: "This Week's Availability",
     subhead: daysStr ? ('Delivering ' + daysStr) : 'Fresh to your door',
     items: data.products.slice(0,8).map(p => ({ name: p.name, price: p.price ? ('£'+Number(p.price).toFixed(2)) : '' })),
-    footer: 'Order at jgfoodsnorthwest.com · 07702 852704',
+    image: data.products[0]?.img || null, usePhoto: false,
+    footer: GFX_FOOTER,
   };
 }
+const GFX_FOOTER = 'jgfoodsnorthwest.com   ·   07702 852704';
 
 function gfxQuick(template) { gfxChosenTemplate = template; document.getElementById('gfxPrompt').value = ''; gfxGenerate(document.getElementById('gfxGenBtn'), template); }
 
@@ -7104,7 +7114,7 @@ async function gfxGenerate(btn, forceTemplate) {
   if (ai) {
     if (ai.headline) gfxSpec.headline = String(ai.headline).slice(0,60);
     if (ai.subhead)  gfxSpec.subhead  = String(ai.subhead).slice(0,80);
-    if (ai.footer)   gfxSpec.footer   = String(ai.footer).slice(0,90);
+    // Footer stays a fixed, factual brand line (no AI-invented calls-to-action)
     gfxFillFields(); gfxRender();
     hint.textContent = 'Copy written for you — edit anything below, then download or save.';
   } else {
@@ -7126,7 +7136,7 @@ async function gfxAI(spec, userPrompt, data) {
     const system = 'You write short, punchy copy for JG Foods, a friendly Lancashire mobile butcher (quality fresh meat, delivered). British English, warm, no emojis. Return ONLY a JSON object.';
     const prompt = `Graphic type: ${spec.template}. Owner request: "${userPrompt || spec.template}".\n`
       + `Delivery days: ${data.days.join(', ') || 'n/a'}. Products: ${data.products.slice(0,12).map(p=>p.name+' £'+Number(p.price).toFixed(2)).join('; ') || 'n/a'}.\n`
-      + `Return ONLY JSON with keys: headline (max 5 words), subhead (max 8 words), footer (max 10 words, include a prompt to order). No other keys, no markdown.`;
+      + `Return ONLY JSON with keys: headline (max 5 words), subhead (max 8 words). Keep it factual — do not promise delivery times or availability. No other keys, no markdown.`;
     const resp = await fetch('/.netlify/functions/ai', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ system, prompt, max_tokens: 300 }) });
     if (!resp.ok) return null;
     const out = await resp.json();
@@ -7143,6 +7153,11 @@ function gfxFillFields() {
   document.getElementById('gfxFooter').value   = gfxSpec.footer || '';
   document.getElementById('gfxItems').value    = (gfxSpec.items || []).map(i => i.price ? `${i.name} | ${i.price}` : i.name).join('\n');
   document.getElementById('gfxItemsWrap').style.display = (gfxSpec.template === 'availability') ? 'block' : 'none';
+  // Photo toggle — only offered when this graphic has a product image and isn't the delivery template
+  const photoRow = document.getElementById('gfxPhotoRow');
+  const canPhoto = !!gfxSpec.image && gfxSpec.template !== 'delivery';
+  photoRow.style.display = canPhoto ? 'block' : 'none';
+  document.getElementById('gfxUsePhoto').checked = !!gfxSpec.usePhoto;
 }
 
 function gfxSyncFromFields() {
@@ -7153,6 +7168,8 @@ function gfxSyncFromFields() {
   gfxSpec.items = (document.getElementById('gfxItems').value || '').split('\n').filter(l => l.trim()).map(l => {
     const parts = l.split('|'); return { name: (parts[0]||'').trim(), price: (parts[1]||'').trim() };
   });
+  const cb = document.getElementById('gfxUsePhoto');
+  if (cb) gfxSpec.usePhoto = cb.checked;
   gfxRender();
 }
 
@@ -7177,21 +7194,28 @@ function gfxRender() {
         <span style="font-family:Georgia,serif;font-size:33px;color:#ffffff">${gfxEsc(it.name)}</span>
         <span style="font-family:Georgia,serif;font-size:33px;color:#E0BD72;font-weight:bold;white-space:nowrap;padding-left:18px">${gfxEsc(it.price)}</span>
       </div>`).join('');
+    const availImg = (s.usePhoto && s.image)
+      ? `<img src="${s.image}" crossorigin="anonymous" style="width:300px;height:300px;object-fit:cover;border-radius:18px;border:3px solid #C2954A;margin:24px auto 4px;display:block">` : '';
     body = `
       <div style="position:absolute;top:226px;left:84px;right:84px;bottom:118px;display:flex;flex-direction:column">
         <div style="font-family:Georgia,serif;font-size:58px;font-weight:bold;color:#fff;text-align:center;line-height:1.05">${gfxEsc(s.headline)}</div>
         <div style="font-family:Arial,sans-serif;font-size:25px;color:#E3D6B8;text-align:center;margin-top:10px">${gfxEsc(s.subhead)}</div>
-        <div style="margin-top:30px;flex:1;display:flex;flex-direction:column;gap:15px;justify-content:center">${rows}</div>
+        ${availImg}
+        <div style="margin-top:24px;flex:1;display:flex;flex-direction:column;gap:15px;justify-content:center">${rows}</div>
       </div>`;
   } else if (s.template === 'offer') {
     const blurb = (s.items && s.items[0]) ? s.items[0] : { name:'', price:'' };
-    const badge = blurb.price ? `<div style="display:inline-block;margin-top:34px;background:#E0BD72;color:#16273F;font-family:Georgia,serif;font-weight:bold;font-size:64px;padding:18px 44px;border-radius:18px">${gfxEsc(blurb.price)}</div>` : '';
+    const badge = blurb.price ? `<div style="display:inline-block;margin-top:30px;background:#E0BD72;color:#16273F;font-family:Georgia,serif;font-weight:bold;font-size:60px;padding:16px 42px;border-radius:18px">${gfxEsc(blurb.price)}</div>` : '';
+    const offerImg = (s.usePhoto && s.image)
+      ? `<img src="${s.image}" crossorigin="anonymous" style="width:360px;height:360px;object-fit:cover;border-radius:20px;border:3px solid #C2954A;margin:0 auto 26px;display:block">` : '';
+    const offerTop = (s.usePhoto && s.image) ? 175 : 300;
     body = `
-      <div style="position:absolute;top:300px;left:80px;right:80px;text-align:center">
+      <div style="position:absolute;top:${offerTop}px;left:80px;right:80px;text-align:center">
+        ${offerImg}
         <div style="font-family:Arial,sans-serif;font-size:23px;letter-spacing:6px;color:#E3D6B8">${gfxEsc(s.subhead)}</div>
-        <div style="font-family:Georgia,serif;font-size:82px;font-weight:bold;color:#fff;line-height:1.05;margin-top:16px">${gfxEsc(s.headline)}</div>
+        <div style="font-family:Georgia,serif;font-size:76px;font-weight:bold;color:#fff;line-height:1.05;margin-top:14px">${gfxEsc(s.headline)}</div>
         ${badge}
-        <div style="font-family:Georgia,serif;font-size:30px;color:#E3D6B8;margin-top:30px">${gfxEsc(blurb.name)}</div>
+        <div style="font-family:Georgia,serif;font-size:28px;color:#E3D6B8;margin-top:26px">${gfxEsc(blurb.name)}</div>
       </div>`;
   } else { // delivery
     body = `
