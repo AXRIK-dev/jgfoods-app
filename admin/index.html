@@ -998,7 +998,32 @@
     </div>
     <div class="btn-row">
       <button class="btn-add" onclick="showAddCustomerModal()">+ Add customer</button>
+      <button class="btn-navy" style="font-size:12px" onclick="toggleCustImport()">⬆ Import from spreadsheet</button>
     </div>
+  </div>
+
+  <!-- ============ CUSTOMER IMPORT (drag & drop) ============ -->
+  <div id="custImportPanel" style="display:none;background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:18px;max-width:760px">
+    <h3 style="font-family:var(--display);font-size:16px;margin:0 0 4px">Import your customers</h3>
+    <p style="font-size:12.5px;color:var(--ink-soft);line-height:1.55;margin:0 0 14px">
+      Load all your customers in one go. <b>Step 1:</b> download the template and fill in a row per customer in Excel.
+      <b>Step 2:</b> drag the saved file onto the box below (or tap to choose it). You'll see a preview to check before anything is saved.
+      Only <b>Name</b> is required — leave anything you don't have blank.
+    </p>
+
+    <button class="btn-gold" style="font-size:12px;margin-bottom:14px" onclick="downloadCustomerTemplate()">⬇ Download template (.xlsx)</button>
+
+    <div id="custDropzone"
+         onclick="document.getElementById('custFileInput').click()"
+         ondragover="custDragOver(event)" ondragleave="custDragLeave(event)" ondrop="custDrop(event)"
+         style="border:2px dashed var(--line);border-radius:11px;padding:30px 18px;text-align:center;cursor:pointer;background:var(--cream);transition:all .15s">
+      <div style="font-size:30px;line-height:1;margin-bottom:8px">📄</div>
+      <div style="font-size:13px;font-weight:700;color:var(--ink)">Drag your filled-in spreadsheet here</div>
+      <div style="font-size:11.5px;color:var(--ink-soft);margin-top:3px">or tap to choose a file — .xlsx or .csv</div>
+      <input type="file" id="custFileInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="custImportHandleFile(this.files[0])">
+    </div>
+
+    <div id="custImportPreview" style="display:none;margin-top:16px"></div>
   </div>
 
   <div id="gdprBanner" class="gdpr-banner" style="display:none;max-width:680px">
@@ -3571,6 +3596,223 @@ async function saveCustomer() {
   }
 }
 
+// ============ CUSTOMER IMPORT (spreadsheet drag & drop) ============
+let custImportRows = [];   // validated rows awaiting confirm
+
+function toggleCustImport() {
+  const p = document.getElementById('custImportPanel');
+  const open = p.style.display !== 'none';
+  p.style.display = open ? 'none' : 'block';
+  if (!open) p.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// Build + download a clean .xlsx template for Jon to fill in
+function downloadCustomerTemplate() {
+  if (!window.XLSX) { alert('Spreadsheet tool is still loading — try again in a second.'); return; }
+  const headers = ['Name','Type (Domestic or Trade)','Business name (trade only)','Phone','Email','Address line 1','Address line 2','Town / City','Postcode','Notes'];
+  const example = ['Jane Smith','Domestic','','07700 900123','jane@example.com','12 Mill Lane','','Ormskirk','L39 2AB','Leave the bag in the porch'];
+  const example2 = ['The Red Lion','Trade','The Red Lion Pub','01695 555123','orders@redlion.co.uk','High Street','','Ormskirk','L39 3AA','Deliver before 11am'];
+  const ws = XLSX.utils.aoa_to_sheet([headers, example, example2]);
+  ws['!cols'] = headers.map(h => ({ wch: Math.max(14, h.length + 2) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Customers');
+  XLSX.writeFile(wb, 'JG-Foods-customer-import-template.xlsx');
+}
+
+function custDragOver(e) { e.preventDefault(); document.getElementById('custDropzone').style.borderColor = 'var(--gold)'; document.getElementById('custDropzone').style.background = '#fff8ec'; }
+function custDragLeave(e) { e.preventDefault(); document.getElementById('custDropzone').style.borderColor = 'var(--line)'; document.getElementById('custDropzone').style.background = 'var(--cream)'; }
+function custDrop(e) {
+  e.preventDefault(); custDragLeave(e);
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file) custImportHandleFile(file);
+}
+
+// Forgiving header matcher — ignores case, spaces, punctuation
+function custMatchHeader(raw) {
+  const k = String(raw || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (k.startsWith('name') && !k.includes('business') && !k.includes('company')) return 'name';
+  if (k.includes('type') || k.includes('accounttype')) return 'type';
+  if (k.includes('business') || k.includes('company')) return 'business_name';
+  if (k.includes('phone') || k.includes('mobile') || k.includes('tel')) return 'phone';
+  if (k.includes('email')) return 'email';
+  if (k.includes('addressline2') || k === 'address2') return 'address_line_2';
+  if (k.includes('address') || k.includes('addr')) return 'address_line_1';
+  if (k.includes('town') || k.includes('city')) return 'city';
+  if (k.includes('postcode') || k.includes('postal') || k.includes('zip')) return 'postcode';
+  if (k.includes('note')) return 'notes';
+  return null;
+}
+
+function custIsTrade(v) {
+  const s = String(v || '').toLowerCase();
+  return s.includes('trade') || s.includes('commercial') || s.includes('business') || s.includes('wholesale');
+}
+
+async function custImportHandleFile(file) {
+  if (!file) return;
+  if (!window.XLSX) { alert('Spreadsheet reader is still loading — try again in a second.'); return; }
+  const preview = document.getElementById('custImportPreview');
+  preview.style.display = 'block';
+  preview.innerHTML = `<p style="font-size:12.5px;color:var(--ink-soft)">Reading ${file.name}…</p>`;
+  try {
+    const buf = await file.arrayBuffer();
+    const wb  = XLSX.read(buf, { type: 'array' });
+    const ws  = wb.Sheets[wb.SheetNames[0]];
+    const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });   // array-of-arrays
+    if (!raw.length) { preview.innerHTML = `<p style="color:#c0392b;font-size:12.5px">That file looks empty.</p>`; return; }
+
+    // Map the header row to known fields
+    const headerRow = raw[0].map(custMatchHeader);
+    if (!headerRow.includes('name')) {
+      preview.innerHTML = `<p style="color:#c0392b;font-size:12.5px">Couldn't find a <b>Name</b> column. Please use the template — download it above, fill it in, and try again.</p>`;
+      return;
+    }
+
+    const existingNames = new Set(sampleCustomers.map(c => (c.name||'').trim().toLowerCase()));
+    const seenInFile = new Set();
+    const rows = [];
+    for (let i = 1; i < raw.length; i++) {
+      const r = raw[i];
+      if (!r || r.every(v => String(v).trim() === '')) continue;   // blank line
+      const rec = {};
+      headerRow.forEach((field, idx) => { if (field) rec[field] = String(r[idx] ?? '').trim(); });
+      const name = (rec.name || '').trim();
+      const key = (name + '|' + (rec.phone||'')).toLowerCase();
+      let status = 'ok', note = '';
+      if (!name) { status = 'skip'; note = 'No name — skipped'; }
+      else if (existingNames.has(name.toLowerCase())) { status = 'skip'; note = 'Already in your customers'; }
+      else if (seenInFile.has(key)) { status = 'skip'; note = 'Duplicate in this file'; }
+      else if (rec.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rec.email)) { note = 'Email looks odd — saved without it'; rec.email = ''; }
+      seenInFile.add(key);
+      rows.push({ ...rec, name, _trade: custIsTrade(rec.type), _status: status, _note: note });
+    }
+    custImportRows = rows.filter(r => r._status === 'ok');
+    custImportRender(rows);
+  } catch (err) {
+    console.error('Customer import read error:', err);
+    preview.innerHTML = `<p style="color:#c0392b;font-size:12.5px">Couldn't read that file. Make sure it's the filled-in template (.xlsx or .csv).</p>`;
+  }
+}
+
+function custImportRender(rows) {
+  const preview = document.getElementById('custImportPreview');
+  const okCount = rows.filter(r => r._status === 'ok').length;
+  const skipCount = rows.length - okCount;
+  const esc = s => String(s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const body = rows.map(r => {
+    const bg = r._status === 'skip' ? '#fff5f5' : '#fff';
+    const badge = r._trade
+      ? '<span class="badge badge-trade">Trade</span>'
+      : '<span class="badge badge-home">Domestic</span>';
+    const right = r._status === 'skip'
+      ? `<span style="color:#c0392b;font-size:11px;font-weight:700">${esc(r._note)}</span>`
+      : (r._note ? `<span style="color:#b06000;font-size:11px">${esc(r._note)}</span>` : '<span style="color:var(--green);font-size:11px;font-weight:700">Ready</span>');
+    return `<tr style="background:${bg}">
+      <td style="padding:7px 9px;border-bottom:1px solid var(--line-soft)">${esc(r.name)||'<i style=\"color:#c0392b\">missing</i>'} ${badge}</td>
+      <td style="padding:7px 9px;border-bottom:1px solid var(--line-soft);font-size:12px;color:var(--ink-soft)">${esc(r.phone)}</td>
+      <td style="padding:7px 9px;border-bottom:1px solid var(--line-soft);font-size:12px;color:var(--ink-soft)">${esc([r.address_line_1, r.city, r.postcode].filter(Boolean).join(', '))}</td>
+      <td style="padding:7px 9px;border-bottom:1px solid var(--line-soft);text-align:right">${right}</td>
+    </tr>`;
+  }).join('');
+
+  preview.innerHTML = `
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">
+      ${okCount} customer${okCount!==1?'s':''} ready to import${skipCount ? ` · <span style="color:#c0392b">${skipCount} skipped</span>` : ''}
+    </div>
+    <div style="max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:9px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--cream);position:sticky;top:0">
+          <th style="text-align:left;padding:8px 9px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft)">Name</th>
+          <th style="text-align:left;padding:8px 9px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft)">Phone</th>
+          <th style="text-align:left;padding:8px 9px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft)">Address</th>
+          <th style="text-align:right;padding:8px 9px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft)">Status</th>
+        </tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;align-items:center">
+      <button class="btn-add" id="custImportConfirmBtn" ${okCount ? '' : 'disabled style="opacity:.5;cursor:not-allowed"'} onclick="custImportCommit()">
+        Import ${okCount} customer${okCount!==1?'s':''}
+      </button>
+      <button class="btn-navy" style="font-size:12px" onclick="custImportCancel()">Cancel</button>
+    </div>`;
+}
+
+function custImportCancel() {
+  custImportRows = [];
+  document.getElementById('custImportPreview').style.display = 'none';
+  document.getElementById('custImportPreview').innerHTML = '';
+  document.getElementById('custFileInput').value = '';
+}
+
+async function custImportCommit() {
+  if (!custImportRows.length) return;
+  const btn = document.getElementById('custImportConfirmBtn');
+  if (btn) { btn.textContent = 'Importing…'; btn.disabled = true; }
+
+  // Map to DB rows
+  const dbRows = custImportRows.map(r => ({
+    name:           r.name,
+    customer_type:  r._trade ? 'commercial' : 'domestic',
+    price_tier:     r._trade ? 'trade' : 'standard',
+    business_name:  r._trade ? (r.business_name || null) : null,
+    phone:          r.phone          || null,
+    email:          r.email          || null,
+    address_line_1: r.address_line_1 || null,
+    address_line_2: r.address_line_2 || null,
+    city:           r.city           || null,
+    postcode:       r.postcode       || null,
+    notes:          r.notes          || null,
+    is_active:      true,
+  }));
+
+  try {
+    if (supabase) {
+      // Insert in chunks so a large list never trips a payload limit
+      const inserted = [];
+      for (let i = 0; i < dbRows.length; i += 200) {
+        const chunk = dbRows.slice(i, i + 200);
+        const { data, error } = await supabase.from('customers').insert(chunk)
+          .select('id, name, customer_type, phone, email, address_line_1, notes');
+        if (error) throw error;
+        inserted.push(...(data || []));
+      }
+      // Reflect into the in-memory list so the page updates without a reload
+      inserted.forEach(c => sampleCustomers.push({
+        id: c.id, name: c.name,
+        type: c.customer_type === 'commercial' ? 'trade' : 'domestic',
+        phone: c.phone || '', email: c.email || '', address: c.address_line_1 || '',
+        notes: c.notes || '', cashTab: false, tabSettleDay: '',
+        orders: 0, total: 0, lastOrder: '', exempt: false,
+      }));
+    } else {
+      // Demo mode (no Supabase) — just add locally
+      custImportRows.forEach(r => sampleCustomers.push({
+        id: 'c' + Date.now() + Math.random().toString(36).slice(2,6),
+        name: r.name, type: r._trade ? 'trade' : 'domestic',
+        phone: r.phone || '', email: r.email || '', address: r.address_line_1 || '',
+        notes: r.notes || '', cashTab: false, tabSettleDay: '',
+        orders: 0, total: 0, lastOrder: '', exempt: false,
+      }));
+    }
+
+    const n = custImportRows.length;
+    custImportRows = [];
+    renderCustomers();
+    if (typeof rebuildInvoiceCustomers === 'function') rebuildInvoiceCustomers();
+    if (typeof renderDashboard === 'function') renderDashboard();
+
+    const preview = document.getElementById('custImportPreview');
+    preview.innerHTML = `<div style="background:var(--green-soft);color:var(--green);border-radius:9px;padding:14px;font-size:13px;font-weight:700">✓ ${n} customer${n!==1?'s':''} imported. They're in your list below.</div>`;
+    document.getElementById('custFileInput').value = '';
+    setTimeout(() => { document.getElementById('custImportPanel').style.display = 'none'; preview.style.display = 'none'; }, 2600);
+  } catch (err) {
+    console.error('Customer import failed:', err);
+    if (btn) { btn.textContent = 'Import failed — try again'; btn.disabled = false; }
+    alert('Import failed: ' + (err.message || err));
+  }
+}
+
 // ============ INVOICES ============
 function invPaidTotal(inv) {
   return (inv.payments||[]).reduce((s,p) => s+p.amount, 0);
@@ -4347,7 +4589,7 @@ const SCHEDULE_HORIZON_DAYS = 21;
 let SCHEDULE = {
   usualDays: ['Monday','Wednesday','Thursday'],
   capacity:  50,
-  cutoff:    { days_before: 1, hour: 23, minute: 59 },
+  cutoff:    { days_before: 1, hour: 17, minute: 0 },
   slots:     [],
 };
 
@@ -4362,7 +4604,7 @@ function prettyDate(dateStr) {
 function cutoffISOFor(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
   d.setDate(d.getDate() - (SCHEDULE.cutoff.days_before ?? 1));
-  d.setHours(SCHEDULE.cutoff.hour ?? 23, SCHEDULE.cutoff.minute ?? 59, 0, 0);
+  d.setHours(SCHEDULE.cutoff.hour ?? 17, SCHEDULE.cutoff.minute ?? 0, 0, 0);
   return d.toISOString();
 }
 
@@ -6389,6 +6631,7 @@ const HELP_PAGES = {
       { icon:'🎁', title:'Referral reward', body:'When a new customer was recommended by an existing one, put the existing customer\'s name in the <strong>Referred by</strong> field. It\'s flagged so you remember to thank the person who referred them with a free pack of sausages or bacon on their next delivery.' },
       { icon:'🏢', title:'Trade accounts', body:'Trade customers have a <strong>Trade</strong> badge. You can set their individual pricing, credit terms, and invoice details from their profile.' },
       { icon:'➕', title:'Adding a new customer', body:'Press <strong>+ Add customer</strong>. Fill in their name, address, and type. You can add notes too — e.g. access instructions or preferred contact method.' },
+      { icon:'⬆️', title:'Import lots of customers at once', body:'Got a list of customers in a spreadsheet? Press <strong>⬆ Import from spreadsheet</strong>. First press <strong>Download template</strong> and fill in one row per customer in Excel — only the <strong>Name</strong> is required, leave anything you don\'t have blank. In the <strong>Type</strong> column put "Domestic" or "Trade". Save the file, then drag it onto the box (or tap to choose it). You\'ll see a preview so you can check everything before saving — anyone already on your list, or with no name, is skipped automatically. Press <strong>Import</strong> and they\'re all added in one go.' },
     ]
   },
   finance: {

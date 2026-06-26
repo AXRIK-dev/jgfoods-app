@@ -210,6 +210,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 18. `018_cutoff_5pm.sql`
+**What it does:** Moves the delivery cut-off from 23:59 to **5pm the day before** each delivery. Migration 008 seeded the cut-off as 23:59, and that stored setting overrides the app's code default — so this update is required for the change to take effect. It updates the `default_cutoff` setting (used for newly-opened days) and shifts every existing future delivery slot to 5pm the day before.
+
+**When to run:** After 008. Safe on the live database — idempotent.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

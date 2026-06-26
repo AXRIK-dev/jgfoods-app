@@ -1177,10 +1177,19 @@ async function loadDeliveryBanner() {
     return;
   }
 
-  const days = data.map(s =>
-    new Date(s.delivery_date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
-  ).join(' · ');
-  el.innerHTML = `<b>Home delivery this week:</b> ${days} · order early to secure your slot. &nbsp;${TRADE_NOTE}`;
+  // Distinct weekday names, in the order they next occur (e.g. Monday, Thursday).
+  // Follows whatever days Jon has open — add or remove a day and this updates.
+  const seen = new Set();
+  const dayNames = [];
+  data.forEach(s => {
+    const name = new Date(s.delivery_date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long' });
+    if (!seen.has(name)) { seen.add(name); dayNames.push(name); }
+  });
+  // Format as "Monday", "Monday and Thursday", or "Monday, Thursday and Friday"
+  const list = dayNames.length <= 1
+    ? (dayNames[0] || '')
+    : dayNames.slice(0, -1).join(', ') + ' and ' + dayNames[dayNames.length - 1];
+  el.innerHTML = `<b>Home delivery on ${list}</b> — order early to secure your slot. &nbsp;${TRADE_NOTE}`;
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1343,7 +1352,13 @@ async function loadSlots() {
     const d = new Date(s.delivery_date + 'T00:00:00');
     const dateStr = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
     const cutoff = s.cutoff_at
-      ? `Order by ${new Date(s.cutoff_at).toLocaleDateString('en-GB', { weekday: 'long' })}`
+      ? (() => {
+          const c = new Date(s.cutoff_at);
+          const day = c.toLocaleDateString('en-GB', { weekday: 'long' });
+          let t = c.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true })
+                   .replace(':00', '').replace(/\s/g, '').toLowerCase(); // 17:00 -> 5pm, 17:30 -> 5:30pm
+          return `Order by ${t} ${day}`;
+        })()
       : 'Order early to secure your slot';
     return `
       <div class="slot-card${idx === 0 ? ' selected' : ''}" id="slot-${s.id}" onclick="selectSlot('${s.id}')">
