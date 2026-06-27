@@ -1245,7 +1245,7 @@
 
         <div style="background:var(--cream);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:16px">
           <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:12.5px;font-weight:700;color:var(--ink-soft)">Carried forward</span><input type="number" id="wk-carried" class="fin-input" style="width:100px;text-align:right" placeholder="0.00"></div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:12.5px;font-weight:700;color:var(--ink-soft)">Sales this week</span><input type="number" id="wk-sales" class="fin-input" style="width:100px;text-align:right" placeholder="0.00" oninput="calcWeekly()"></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:12.5px;font-weight:700;color:var(--ink-soft)">Sales this week <span style="font-weight:600;color:var(--green)">· auto</span></span><input type="number" id="wk-sales" class="fin-input" style="width:100px;text-align:right" placeholder="0.00" readonly></div>
           <div style="display:flex;justify-content:space-between"><span style="font-size:12.5px;font-weight:700;color:var(--ink-soft)">VAT reclaim</span><input type="number" id="wk-vat" class="fin-input" style="width:100px;text-align:right" placeholder="0.00" oninput="calcWeekly()"></div>
         </div>
 
@@ -2526,8 +2526,11 @@ function showPage(id) {
 function switchTab(page, tab) {
   document.querySelectorAll(`#page-${page} .tab`).forEach(t => t.classList.remove('active'));
   document.querySelectorAll(`#page-${page} .tab-panel`).forEach(p => p.classList.remove('active'));
-  event.target.classList.add('active');
+  if (typeof event !== 'undefined' && event.target) event.target.classList.add('active');
   document.getElementById(`${page}-${tab}`).classList.add('active');
+  // Finance sales figures fill themselves from Daily Sales
+  if (page === 'finance' && tab === 'weekly'  && typeof autoFillWeeklySales === 'function') autoFillWeeklySales();
+  if (page === 'finance' && tab === 'monthly' && typeof renderMonthlySheet === 'function') renderMonthlySheet();
 }
 
 // ============ ORDERS (per delivery day) ============
@@ -6741,12 +6744,29 @@ function flagBankHoliday() {
   if (date) addDailySalesRow(date,'','',true);
 }
 
-function exportDailyToWeekly() {
-  const total = dailySalesRows.reduce((s,r) => s+(parseFloat(r.bank)||0)+(parseFloat(r.cash)||0), 0);
-  const wkSales = document.getElementById('wk-sales');
-  if (wkSales) { wkSales.value = total.toFixed(2); calcWeekly(); }
-  switchTab('finance','weekly');
+// Sum THIS WEEK's Daily Sales (auto order takings + any manual extras) into the
+// weekly Sales figure — so Jon never types the sales total.
+function autoFillWeeklySales() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const monOffset = (today.getDay() + 6) % 7;           // days back to Monday
+  const mon = new Date(today); mon.setDate(today.getDate() - monOffset);
+  const sun = new Date(mon);  sun.setDate(mon.getDate() + 6);
+  const iso = d => d.toISOString().slice(0, 10);
+  const lo = iso(mon), hi = iso(sun);
+  const total = (dailySalesRows || [])
+    .filter(r => r.date >= lo && r.date <= hi)
+    .reduce((s, r) => s + (r.ordBank||0) + (r.ordCash||0) + (parseFloat(r.bank)||0) + (parseFloat(r.cash)||0), 0);
+  const el = document.getElementById('wk-sales');
+  if (el) {
+    el.value = total ? total.toFixed(2) : '';
+    el.readOnly = true;
+    el.style.background = 'var(--cream)';
+    el.title = "Fills in automatically from this week's Daily Sales";
+  }
+  calcWeekly();
 }
+
+function exportDailyToWeekly() { switchTab('finance', 'weekly'); }   // kept for the button; auto-fills on open
 
 // ============ WEEKLY RECONCILIATION ============
 const SUPPLIERS = [
@@ -6982,22 +7002,41 @@ async function fetchMonthlyWeeks() {
   }
 }
 
-// Turn the saved weeks into the Income / Expenditure breakdown the
-// accountant expects: one sales row per week, purchases grouped by
-// supplier, other costs grouped by expense label.
-function buildMonthlySheet(weeks) {
-  const fmtWeek = (iso) => {
-    const d = new Date(iso + 'T00:00:00');
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  };
-  const incomeRows = weeks.map(w => ({
-    label: `Sales (w/e ${fmtWeek(w.week_ending)})`,
-    sales: w.sales_total || 0,
-    vat: 0,
-  }));
+// Income comes straight from Daily Sales (which fills itself from paid orders),
+// so the accountant figures are always current with zero typing from Jon.
+async function fetchMonthlyDailySales() {
+  const { start, end } = getSelectedMonthRange();
+  if (!window.supabase) return [];
+  try {
+    const { data, error } = await window.supabase
+      .from('daily_sales')
+      .select('sale_date, bank, cash, orders_bank, orders_cash')
+      .gte('sale_date', start).lte('sale_date', end)
+      .order('sale_date');
+    if (error) throw error;
+    return data || [];
+  } catch (e) { console.error('monthly daily sales', e); return []; }
+}
 
+// One sales row per week (w/e Friday), summed from that week's Daily Sales.
+function weeklyIncomeFromDaily(rows) {
+  const fmtWeek = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const map = {};
+  (rows || []).forEach(r => {
+    const d = new Date(r.sale_date + 'T00:00:00');
+    const monOffset = (d.getDay() + 6) % 7;
+    const fri = new Date(d); fri.setDate(d.getDate() - monOffset + 4);   // Friday of that week
+    const key = fri.toISOString().slice(0, 10);
+    const amt = (parseFloat(r.orders_bank)||0) + (parseFloat(r.orders_cash)||0) + (parseFloat(r.bank)||0) + (parseFloat(r.cash)||0);
+    map[key] = (map[key] || 0) + amt;
+  });
+  return Object.keys(map).sort().map(k => ({ label: `Sales (w/e ${fmtWeek(k)})`, sales: map[k], vat: 0 }));
+}
+
+// Expenditure (purchases + other costs) still comes from the manual weekly sheets.
+function buildMonthlyExpenses(weeks) {
   const purchMap = {}, otherMap = {};
-  weeks.forEach(w => {
+  (weeks || []).forEach(w => {
     (w.purchases || []).forEach(p => {
       const amt = p.total != null ? p.total : ((p.cash || 0) + (p.bank || 0));
       if (amt) purchMap[p.supplier] = (purchMap[p.supplier] || 0) + amt;
@@ -7011,13 +7050,7 @@ function buildMonthlySheet(weeks) {
     ...Object.keys(purchMap).map(k => ({ label: k, purch: purchMap[k], other: 0 })),
     ...Object.keys(otherMap).map(k => ({ label: k, purch: 0, other: otherMap[k] })),
   ];
-
-  return {
-    incomeRows, expRows,
-    iTot: incomeRows.reduce((s, r) => s + r.sales, 0),
-    eTot: expRows.reduce((s, r) => s + r.purch, 0),
-    eOth: expRows.reduce((s, r) => s + r.other, 0),
-  };
+  return { expRows, eTot: expRows.reduce((s, r) => s + r.purch, 0), eOth: expRows.reduce((s, r) => s + r.other, 0) };
 }
 
 async function renderMonthlySheet() {
@@ -7026,34 +7059,32 @@ async function renderMonthlySheet() {
   if (!ib || !eb) return;
 
   const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = '£' + v.toFixed(2); };
-  const weeks = await fetchMonthlyWeeks();
+  const [dailyRows, weeks] = await Promise.all([fetchMonthlyDailySales(), fetchMonthlyWeeks()]);
+  const incomeRows = weeklyIncomeFromDaily(dailyRows);
+  const { expRows, eTot, eOth } = buildMonthlyExpenses(weeks);
+  const iTot = incomeRows.reduce((s, r) => s + r.sales, 0);
 
-  if (!weeks.length) {
-    ib.innerHTML = `<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--ink-soft);font-size:13px">No weekly sheets saved for this month yet. Save each week on the Weekly tab and the figures will appear here automatically.</td></tr>`;
-    eb.innerHTML = `<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--ink-soft);font-size:13px">—</td></tr>`;
-    ['mi-total', 'mi-vat', 'me-total', 'me-other'].forEach(id => setEl(id, 0));
-    return;
-  }
-
-  const { incomeRows, expRows, iTot, eTot, eOth } = buildMonthlySheet(weeks);
-  ib.innerHTML = incomeRows.map(r => `<tr><td>${r.label}</td><td class="right">£${r.sales.toFixed(2)}</td><td class="right">£${r.vat.toFixed(2)}</td></tr>`).join('');
+  ib.innerHTML = incomeRows.length
+    ? incomeRows.map(r => `<tr><td>${r.label}</td><td class="right">£${r.sales.toFixed(2)}</td><td class="right">£${r.vat.toFixed(2)}</td></tr>`).join('')
+    : `<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--ink-soft);font-size:13px">No sales yet this month — they appear here automatically from your paid orders.</td></tr>`;
   eb.innerHTML = expRows.length
     ? expRows.map(r => `<tr><td>${r.label}</td><td class="right">£${r.purch.toFixed(2)}</td><td class="right">£${r.other.toFixed(2)}</td></tr>`).join('')
-    : `<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--ink-soft);font-size:13px">No purchases or expenses recorded this month</td></tr>`;
+    : `<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--ink-soft);font-size:13px">No purchases or expenses entered this month yet — add them on the Weekly tab.</td></tr>`;
   setEl('mi-total', iTot); setEl('mi-vat', 0);
   setEl('me-total', eTot); setEl('me-other', eOth);
 }
 
 async function exportMonthly() {
   const { label, year, monthIdx } = getSelectedMonthRange();
-  const weeks = await fetchMonthlyWeeks();
+  const [dailyRows, weeks] = await Promise.all([fetchMonthlyDailySales(), fetchMonthlyWeeks()]);
+  const incomeRows = weeklyIncomeFromDaily(dailyRows);
+  const { expRows, eTot, eOth } = buildMonthlyExpenses(weeks);
+  const iTot = incomeRows.reduce((s, r) => s + r.sales, 0);
 
-  if (!weeks.length) {
-    alert(`No weekly sheets saved for ${label} yet. Save each week on the Weekly tab first, then export.`);
+  if (!incomeRows.length && !expRows.length) {
+    alert(`Nothing to export for ${label} yet — no sales or expenses recorded.`);
     return;
   }
-
-  const { incomeRows, expRows, iTot, eTot, eOth } = buildMonthlySheet(weeks);
   const lines = [
     `"JG Foods — Monthly summary — ${label}"`,
     '',
@@ -7325,9 +7356,9 @@ const HELP_PAGES = {
       { icon:'📅', title:'Daily Sales tab', body:'This fills itself in. Each day\'s takings come <strong>automatically from your paid orders</strong> — the green figure is the money from orders marked Cash or Bank on the delivery run. You only type in the <strong>+ extra</strong> box if you took money that wasn\'t logged as an order. Totals update live, and it all stays in step if you edit or delete an order.' },
       { icon:'📥', title:'Import past takings', body:'Already got your figures in a spreadsheet? On the Daily Sales tab, drag your Excel or CSV file onto the <strong>Import past takings</strong> box (or tap Choose file). As long as it has <strong>Date</strong>, <strong>Bank</strong> and <strong>Cash</strong> columns, it reads them straight in — so you\'re not starting from scratch. Days you already have are updated, not duplicated.' },
       { icon:'💰', title:'Cash tabs', body:'Some customers pay their full week\'s cash in one go on a set day. These are tracked in the <strong>Cash Tabs</strong> section at the bottom of the Daily tab — separate from your daily cash total. Use <strong>+ Add tab order</strong> to log each delivery against their tab. On payment day, press <strong>Settle tab</strong> and the total moves into that day\'s cash automatically.' },
-      { icon:'📊', title:'Weekly Sheet tab', body:'Your weekly reconciliation. Enter supplier payments and expenses, and the sheet works out what should be in the bank. Export it as a spreadsheet to match your existing format.' },
+      { icon:'📊', title:'Weekly Sheet tab', body:'Your weekly reconciliation. The <strong>Sales this week</strong> figure fills in <strong>automatically</strong> from your Daily Sales (marked "auto") — you don\'t touch it. You just enter the <strong>supplier payments and expenses</strong>, and the sheet works out what should be in the bank. Export it as a spreadsheet to match your existing format.' },
       { icon:'🏦', title:'Bank Payments tab', body:'Records all payments out to suppliers and any other bank transactions. Keeps a running total so you can check it against your statement.' },
-      { icon:'📤', title:'Monthly Export tab', body:'Generates the monthly summary your accountant needs. Press <strong>Export</strong> to download it as a spreadsheet in the format they expect.' },
+      { icon:'📤', title:'Monthly Export tab', body:'Generates the monthly summary your accountant needs. The <strong>income (sales)</strong> rolls up <strong>automatically</strong> from your orders/Daily Sales, so it\'s always up to date — purchases and expenses come from your Weekly sheets. Pick the month and press <strong>Export</strong> to download it in the format your accountant expects.' },
     ]
   },
   vip: {
