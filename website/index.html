@@ -397,6 +397,7 @@
       <a class="nav-link" href="#how">How it works</a>
       <a class="nav-link" href="#trade">Trade accounts</a>
       <a class="nav-link" href="#about">About</a>
+      <a class="nav-link" href="#reviews">Reviews</a>
       <a class="nav-link" href="#contact">Contact</a>
     </div>
     <div style="display:flex;align-items:center;gap:9px">
@@ -421,6 +422,7 @@
     <a class="nav-link" href="#shop" onclick="closeMobileMenu()">Shop</a>
     <a class="nav-link" href="#how" onclick="closeMobileMenu()">How it works</a>
     <a class="nav-link" href="#trade" onclick="closeMobileMenu()">Trade accounts</a>
+    <a class="nav-link" href="#reviews" onclick="closeMobileMenu()">Reviews</a>
     <a class="nav-link" href="#contact" onclick="closeMobileMenu()">Contact</a>
     <button class="nav-link" style="text-align:left" onclick="openSignInPanel('signin');closeMobileMenu()">Sign in / Register</button>
     <button class="nav-cta" onclick="openOrderPanel();closeMobileMenu()">Order now</button>
@@ -728,6 +730,56 @@
     </div>
   </div>
 </section>
+
+<!-- ============ REVIEWS ============ -->
+<section class="section section-alt" id="reviews">
+  <div class="section-inner">
+    <div class="sec-head" style="text-align:center">
+      <div class="eyebrow">What our customers say</div>
+      <h2>Recommended by local families</h2>
+      <div class="sec-rule" style="margin:14px auto 0"></div>
+    </div>
+    <div style="display:flex;justify-content:center;margin:18px 0 28px">
+      <a href="https://www.facebook.com/JGFoodsLiverpool/reviews" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line-soft);border-radius:30px;padding:10px 20px;text-decoration:none">
+        <span style="color:#C2954A;font-size:18px;letter-spacing:2px">★★★★★</span>
+        <span style="font-size:13px;color:var(--ink);font-weight:800">5.0 · 14 reviews on Facebook</span>
+      </a>
+    </div>
+    <div id="reviewsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px;align-items:start"></div>
+  </div>
+</section>
+<script>
+(function(){
+  var REVIEWS = [
+    { name:"Vicky Kenny",        date:"4 January 2026",   text:"2nd year getting our Christmas hamper, excellent service — will be ordering again next Christmas 👌" },
+    { name:"Rachael Patricia",   date:"3 January 2026",   text:"Thank you Jonathan for our Christmas delivery. Perfect as always and always going above and beyond! Wouldn't go anywhere else." },
+    { name:"David Kavanagh",     date:"3 January 2026",   text:"I started buying meat supplies from John during the Covid lockdowns, and have continued to do so ever since! Great quality meat and produce delivered directly to my door as and when I need it. Quality beats the supermarkets hands down! Support your local businesses and buy direct from John — you won't regret it. Ps. JG has THE best sausages in the UK! 😋" },
+    { name:"Leanne Planche",     date:"3 January 2026",   text:"We have been purchasing from JG Foods for over 12 months now, not just at Christmas and Easter, in between also. The meat is always fresh, great quality, amazing value and the fact they deliver makes it even better when you have enough to juggle already. Great, friendly service — looking forward to continuing ordering in 2026!" },
+    { name:"Katie Halligan",     date:"3 January 2026",   text:"Great Christmas hamper. Turkey and lamb amazing. Always get the hampers from Jon every year. Great quality meat and great price. Will also be getting some BBQ hampers in the summer. Highly recommend." },
+    { name:"Katy Ormesher",      date:"2 January 2026",   text:"Been using Jon for over 2 years now, lovely guy, always on time with our deliveries and the quality of the meat is brilliant — the best there is. Thanks Jon!" },
+    { name:"Liz Nicholson",      date:"2 January 2026",   text:"We first started using Jon during COVID and have always ordered our Christmas meats since then. Wouldn't use anyone else. Quality of meat is excellent. Friendly service. Always delivers on time and keeps you up to date with any changes. Would 💯 recommend 🙂" },
+    { name:"Michelle Farrington",date:"2 January 2026",   text:"Use JG Foods every year for our Xmas hampers. Excellent service and fantastic quality. Fresh food." },
+    { name:"Andy Sutcliffe",     date:"2 January 2026",   text:"Started using Jon during lockdown, deliveries are always on time, and more importantly the quality of the meat is excellent. We recently bought the Christmas hamper pack from him and for £110 it was an absolute bargain. We'll be placing our next order very soon, once we've finished off all the hamper meat." },
+    { name:"Shelly Louise",      date:"2 January 2026",   text:"Third year running now we have ordered our Xmas hamper off Jon — the quality of the meat is second to none! You get so much for your money and it was thoroughly enjoyed by all our family. We will continue to order off Jon throughout the year, he has such a great selection on offer plus the convenience of home delivery. I would never go back to water-injected supermarket meat!" },
+    { name:"Claire Lamen",       date:"2 January 2026",   text:"I had a cooked turkey from Jon for Christmas. I get it every year, always delivered on time and tastes great. I will definitely be ordering my meats from him throughout the year too. Thanks Jon." },
+    { name:"Joanne Carey-Clark", date:"2 January 2026",   text:"Meat is great quality and value for money — will be using Jon for my Christmas meat hampers." },
+    { name:"Kate Gostelow",      date:"8 March 2022",     text:"Meat was great, super fast delivery and a great selection of choice!" },
+    { name:"Louise Wright",      date:"23 November 2020", text:"Sweet chilli and lime chicken is delish, absolutely recommend — although everything we have had I would recommend." }
+  ];
+  var grid = document.getElementById('reviewsGrid');
+  if (!grid) return;
+  var esc = function(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+  grid.innerHTML = REVIEWS.map(function(r){
+    return '<div style="background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:20px;display:flex;flex-direction:column">'
+      + '<div style="color:#C2954A;font-size:15px;letter-spacing:2px;margin-bottom:9px">★★★★★</div>'
+      + '<p style="font-size:13.5px;color:var(--ink-soft);line-height:1.65;flex:1;margin:0">' + esc(r.text) + '</p>'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--line-soft)">'
+        + '<div><b style="font-size:13px;color:var(--ink);display:block">' + esc(r.name) + '</b><span style="font-size:11px;color:var(--ink-soft)">' + esc(r.date) + '</span></div>'
+        + '<span style="font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#1877F2">Facebook</span>'
+      + '</div></div>';
+  }).join('');
+})();
+</script>
 
 <!-- ============ CONTACT ============ -->
 <section class="section" id="contact">
