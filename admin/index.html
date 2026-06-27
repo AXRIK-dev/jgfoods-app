@@ -2156,7 +2156,7 @@ async function loadAppData() {
 
       supabase
         .from('invoices')
-        .select('id, invoice_number, total_amount, status, created_at, customers (name)')
+        .select('id, invoice_number, total_amount, status, created_at, customers (name), invoice_payments (method, amount)')
         .order('created_at', { ascending: false })
         .limit(200),
 
@@ -2250,7 +2250,7 @@ async function loadAppData() {
         created:  inv.created_at,
         amount:   parseFloat(inv.total_amount),
         status:   inv.status,
-        payments: [],
+        payments: (inv.invoice_payments || []).map(p => ({ method: p.method, amount: parseFloat(p.amount) || 0 })),
       }));
     }
 
