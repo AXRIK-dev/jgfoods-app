@@ -2699,8 +2699,8 @@ async function deleteCurrentOrder() {
   const idx = sampleOrders.findIndex(x => x.id === currentOrderId);
   if (idx !== -1) sampleOrders.splice(idx, 1);
   closeModal('orderModal');
-  renderOrders();
-  renderDashboard();
+  if (typeof loadAppData === 'function') await loadAppData();   // refresh run, Finance + dashboard
+  else { renderOrders(); renderDashboard(); }
 }
 
 async function openOrderModal(id) {
@@ -2908,8 +2908,8 @@ async function orderSaveItems(btn) {
     const o = sampleOrders.find(x => x.id === oid);
     if (o) { o.items = items.map(i=>`${i.name} ×${i.qty}`).join(', '); o.total = total; }
     orderEditMode = false;
+    if (typeof loadAppData === 'function') await loadAppData();   // refresh Finance/dashboard/run
     await openOrderModal(oid);
-    if (typeof renderOrders === 'function') renderOrders();
   } catch (e) {
     console.error('Save order items failed:', e);
     if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
@@ -2960,6 +2960,7 @@ async function orderMarkPaid(method) {
     if (res.error) throw res.error;
     await supabase.from('invoices').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', f.inv.id);
     await supabase.from('orders').update({ payment_method: method }).eq('id', f.ord.id);
+    if (typeof loadAppData === 'function') await loadAppData();   // refresh Finance/dashboard
     await openOrderModal(f.ord.id);
   } catch (e) {
     console.error('Mark paid failed:', e);
@@ -3010,7 +3011,7 @@ async function confirmCleanup(years, btn) {
     if (error) throw error;
     const d = data || {};
     document.getElementById('retentionResult').innerHTML = `<div style="background:var(--green-soft);color:var(--green);border-radius:9px;padding:13px;font-size:13px;font-weight:700">✓ Done. Removed ${d.invoices||0} invoices, ${d.orders||0} orders, ${d.temps||0} temperature logs and ${d.customers||0} customers.</div>`;
-    if (typeof loadAllData === 'function') loadAllData();
+    if (typeof loadAppData === 'function') await loadAppData();
   } catch (e) {
     console.error('Cleanup failed:', e);
     if (btn) { btn.disabled = false; btn.textContent = '🗑 Permanently delete these'; }
@@ -3060,7 +3061,7 @@ async function retentionDoDelete(btn) {
       `✓ Cleared. Removed ${d.invoices||0} invoices, ${d.orders||0} orders, ${d.temps||0} temperature logs and ${d.customers||0} customer records.`;
     setTimeout(() => { banner.style.display = 'none'; }, 4000);
     try { localStorage.removeItem('jg_retention_snooze'); } catch (e) {}
-    if (typeof loadAllData === 'function') loadAllData();
+    if (typeof loadAppData === 'function') await loadAppData();
   } catch (e) {
     console.error('Retention delete failed:', e);
     if (btn) { btn.disabled = false; btn.textContent = '✓ Delete them'; }
