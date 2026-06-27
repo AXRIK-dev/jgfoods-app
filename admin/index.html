@@ -1887,6 +1887,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/heic2any/0.0.4/heic2any.min.js"></script>
 <script>
 // ============ SUPABASE CLIENT ============
 // For now the admin runs on demo data — no network dependency.
@@ -3167,21 +3168,64 @@ const isProductUUID = id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0
 // Upload a product photo to Storage and persist its public URL on the product.
 // Reusable so it can run both on immediate upload (saved products) and after
 // a brand-new product has been saved and assigned a real id.
+// Turn ANY uploaded photo into a tidy, web-friendly JPEG:
+//  - iPhone HEIC/HEIF → JPEG (browsers can't display HEIC)
+//  - resizes big photos down (faster pages, smaller storage)
+//  - flattens transparency, re-encodes as JPEG
+// Falls back to the original file if anything can't be processed.
+async function normalizeProductImage(file) {
+  let src = file;
+  const isHeic = /heic|heif/i.test(file.type || '') || /\.(heic|heif)$/i.test(file.name || '');
+  if (isHeic && window.heic2any) {
+    try {
+      const out = await window.heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 });
+      src = Array.isArray(out) ? out[0] : out;
+    } catch (e) { console.warn('HEIC convert failed:', e); }
+  }
+  try {
+    const blob = await new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(src);
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 1000;
+        let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+        const scale = Math.min(1, maxDim / Math.max(w, h));
+        w = Math.max(1, Math.round(w * scale)); h = Math.max(1, Math.round(h * scale));
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h);   // flatten transparency
+        ctx.drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        c.toBlob(b => b ? resolve(b) : reject(new Error('encode failed')), 'image/jpeg', 0.85);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode failed')); };
+      img.src = url;
+    });
+    return { blob, ext: 'jpg', contentType: 'image/jpeg' };
+  } catch (e) {
+    console.warn('Image normalise failed — uploading original:', e);
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    return { blob: file, ext, contentType: file.type || 'image/jpeg' };
+  }
+}
+
 async function uploadProductImage(id, file) {
-  const ext  = (file.name.split('.').pop() || 'jpg').toLowerCase();
-  const path = `products/${id}.${ext}`;
+  const norm = await normalizeProductImage(file);
+  const path = `products/${id}.${norm.ext}`;
   const { error: upErr } = await supabase.storage
     .from('product-images')
-    .upload(path, file, { upsert: true, contentType: file.type });
+    .upload(path, norm.blob, { upsert: true, contentType: norm.contentType });
   if (upErr) throw upErr;
 
   const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
   const publicUrl = urlData?.publicUrl;
   if (!publicUrl) throw new Error('No public URL returned for uploaded image');
 
-  const { error: dbErr } = await supabase.from('products').update({ img_url: publicUrl }).eq('id', id);
+  // Cache-bust so a replaced photo shows immediately instead of the old cached one
+  const finalUrl = publicUrl + '?v=' + Date.now();
+  const { error: dbErr } = await supabase.from('products').update({ img_url: finalUrl }).eq('id', id);
   if (dbErr) throw dbErr;
-  return publicUrl;
+  return finalUrl;
 }
 
 async function handleImgUpload(event, id) {
