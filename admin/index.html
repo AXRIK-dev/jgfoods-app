@@ -2652,13 +2652,21 @@ function orderCard(o) {
 }
 
 let currentOrderId = null;
+let currentOrderFull = null;   // { ord, inv } loaded from Supabase
+let orderEditMode = false;
+function isOrderUUID(id){ return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id); }
+function ordEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 async function deleteCurrentOrder() {
   if (!currentOrderId) return;
   const o = sampleOrders.find(x => x.id === currentOrderId);
   const name = o ? o.name : 'this order';
-  if (!confirm(`Delete ${name}'s order? This cannot be undone.`)) return;
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentOrderId)) {
+  if (!confirm(`Permanently delete ${name}'s order?\n\nThis removes the order, its items and its invoice for good. It cannot be undone.`)) return;
+  if (isOrderUUID(currentOrderId)) {
+    // Remove the linked invoice first (cascades its items + payments); the order
+    // cascades its own order_items.
+    const { error: invErr } = await window.supabase.from('invoices').delete().eq('order_id', currentOrderId);
+    if (invErr) { alert('Failed to delete the invoice: ' + invErr.message); return; }
     const { error } = await window.supabase.from('orders').delete().eq('id', currentOrderId);
     if (error) { alert('Failed to delete: ' + error.message); return; }
   }
@@ -2669,21 +2677,268 @@ async function deleteCurrentOrder() {
   renderDashboard();
 }
 
-function openOrderModal(id) {
-  const o = sampleOrders.find(x => x.id === id);
-  if (!o) return;
+async function openOrderModal(id) {
   currentOrderId = id;
-  document.getElementById('modalOrderName').textContent = o.name;
-  const slotLabel = o.date ? runDayLabel(o.date) : (o.dayLabel || '');
-  document.getElementById('modalOrderRef').textContent = `Ref: ORD-${id.toUpperCase()}${slotLabel ? ' · ' + slotLabel + ' delivery' : ''}`;
-  document.getElementById('modalOrderBody').innerHTML = `
-    <div class="modal-detail-row"><span>Items</span><b style="max-width:280px;text-align:right">${o.items}</b></div>
-    <div class="modal-detail-row"><span>Address</span><b>${o.address}</b></div>
-    <div class="modal-detail-row"><span>Channel</span><b>${o.channel}</b></div>
-    <div class="modal-detail-row"><span>Payment</span><b>Cash on delivery</b></div>
-    <div class="modal-detail-row"><span>Total</span><b style="font-family:var(--display);font-size:18px;color:var(--navy)">£${o.total.toFixed(2)}</b></div>
-  `;
+  orderEditMode = false;
+  currentOrderFull = null;
+  const o = sampleOrders.find(x => x.id === id);
+  document.getElementById('modalOrderName').textContent = o ? o.name : 'Order';
+  const slotLabel = o ? (o.date ? runDayLabel(o.date) : (o.dayLabel || '')) : '';
+  document.getElementById('modalOrderRef').textContent = `Ref: ORD-${String(id).slice(0,8).toUpperCase()}${slotLabel ? ' · ' + slotLabel + ' delivery' : ''}`;
+  document.getElementById('modalOrderBody').innerHTML = '<p style="font-size:12.5px;color:var(--ink-soft);padding:8px 0">Loading…</p>';
   document.getElementById('orderModal').classList.add('show');
+
+  if (supabase && isOrderUUID(id)) {
+    try {
+      const { data: ord } = await supabase.from('orders')
+        .select('id, total_amount, channel, notes, status, payment_method, customer_id, customers(name,email,phone,address_line_1,postcode,customer_type), order_items(id, product_id, product_name, unit_price, quantity)')
+        .eq('id', id).single();
+      const invRes = await supabase.from('invoices')
+        .select('id, invoice_number, total_amount, status, invoice_type, invoice_payments(method, amount)')
+        .eq('order_id', id).maybeSingle();
+      currentOrderFull = { ord, inv: invRes.data || null };
+    } catch (e) { console.error('Order load failed:', e); }
+  }
+  renderOrderModalBody();
+}
+
+function orderItemsArray() {
+  const f = currentOrderFull;
+  if (f && f.ord && f.ord.order_items) {
+    return f.ord.order_items.map(i => ({ id:i.id, product_id:i.product_id, name:i.product_name, price:parseFloat(i.unit_price)||0, qty:i.quantity }));
+  }
+  return null;
+}
+
+function renderOrderModalBody() {
+  const body = document.getElementById('modalOrderBody');
+  const f = currentOrderFull;
+  const o = sampleOrders.find(x => x.id === currentOrderId);
+
+  if (!f || !f.ord) {
+    body.innerHTML = `
+      <div class="modal-detail-row"><span>Items</span><b style="max-width:280px;text-align:right">${o ? ordEsc(o.items) : ''}</b></div>
+      <div class="modal-detail-row"><span>Address</span><b>${o ? ordEsc(o.address) : ''}</b></div>
+      <div class="modal-detail-row"><span>Channel</span><b>${o ? ordEsc(o.channel) : ''}</b></div>
+      <div class="modal-detail-row"><span>Payment</span><b>Payment on delivery</b></div>
+      <div class="modal-detail-row"><span>Total</span><b style="font-family:var(--display);font-size:18px;color:var(--navy)">£${o ? o.total.toFixed(2) : '0.00'}</b></div>
+      <p style="font-size:11.5px;color:var(--ink-soft);margin-top:10px">Invoice, payment and editing are available once connected to the live database.</p>`;
+    return;
+  }
+
+  const ord = f.ord, inv = f.inv, cust = ord.customers || {};
+  const items = orderItemsArray() || [];
+  const total = items.length ? items.reduce((s,i)=>s+i.qty*i.price,0) : (parseFloat(ord.total_amount)||0);
+
+  if (orderEditMode) { body.innerHTML = renderOrderEditUI(items); setTimeout(orderRecalcEdit, 0); return; }
+
+  const paidTotal = (inv && inv.invoice_payments || []).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+  const invTotal  = inv ? (parseFloat(inv.total_amount)||total) : total;
+  const isPaid    = inv && paidTotal > 0 && paidTotal >= invTotal;
+  const methods   = (inv && inv.invoice_payments || []).map(p=>p.method);
+  const methodLabel = methods.includes('cash') && methods.includes('bacs') ? 'cash + bank'
+                    : methods.includes('cash') ? 'cash' : methods.includes('bacs') ? 'bank transfer' : '';
+
+  const itemRows = items.length
+    ? items.map(i => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>${ordEsc(i.name)} ×${i.qty}</span><span style="color:var(--ink-soft)">£${(i.qty*i.price).toFixed(2)}</span></div>`).join('')
+    : '<span style="color:var(--ink-soft);font-size:12.5px">No items</span>';
+
+  body.innerHTML = `
+    <div style="background:var(--cream);border-radius:9px;padding:10px 12px;margin-bottom:10px">${itemRows}
+      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--line);margin-top:6px;padding-top:6px;font-weight:800;font-size:14px"><span>Total</span><span>£${total.toFixed(2)}</span></div>
+    </div>
+    <div class="modal-detail-row"><span>Address</span><b>${ordEsc([cust.address_line_1, cust.postcode].filter(Boolean).join(', ') || (o ? o.address : ''))}</b></div>
+    <div class="modal-detail-row"><span>Channel</span><b>${ordEsc(ord.channel || '')}</b></div>
+    <div class="modal-detail-row"><span>Payment</span><b style="color:${isPaid?'#1a6640':'var(--oxblood)'}">${isPaid ? '✓ Paid ('+methodLabel+')' : 'Awaiting payment'}</b></div>
+
+    <button class="btn-add" style="width:100%;margin-top:14px;font-size:13.5px;font-weight:800;padding:12px" onclick="orderQuickAdd()">➕ Add an item (at the door)</button>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn-navy" style="font-size:12px;padding:9px 13px" onclick="orderStartEdit()">✏️ Edit items</button>
+      <button class="btn-navy" style="font-size:12px;padding:9px 13px" onclick="orderPrintInvoice()">🖨 Print invoice</button>
+      <button class="btn-navy" style="font-size:12px;padding:9px 13px" onclick="orderEmailInvoice()">✉️ Email invoice</button>
+    </div>
+    ${isPaid ? '' : `
+    <div style="margin-top:12px">
+      <p style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Mark as paid</p>
+      <div style="display:flex;gap:7px">
+        <button class="btn-add" style="font-size:12px;padding:9px 14px" onclick="orderMarkPaid('cash')">💷 Cash</button>
+        <button class="btn-add" style="font-size:12px;padding:9px 14px" onclick="orderMarkPaid('bacs')">🏦 Bank transfer</button>
+      </div>
+    </div>`}
+  `;
+}
+
+function renderOrderEditUI(items) {
+  const opts = '<option value="">— add a product —</option>' + (sampleProducts||[]).filter(p=>p.live!==false)
+    .map(p=>`<option value="${p.id}" data-name="${ordEsc(p.name)}" data-price="${p.price}">${ordEsc(p.name)} — £${Number(p.price).toFixed(2)}</option>`).join('');
+  const rows = items.map(orderEditRow).join('');
+  return `
+    <div id="orderEditRows">${rows}</div>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <select id="orderAddProduct" class="gfx-in" style="flex:1">${opts}</select>
+      <input id="orderAddQty" type="number" min="1" value="1" class="gfx-in" style="width:60px" aria-label="Quantity">
+      <button class="btn-navy" style="font-size:12px;padding:8px 12px" onclick="orderAddItemRow()">Add</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:6px;align-items:center">
+      <input id="orderCustomName" class="gfx-in" placeholder="Or a one-off item…" style="flex:1">
+      <input id="orderCustomPrice" type="number" min="0" step="0.50" class="gfx-in" placeholder="£" style="width:60px" aria-label="Price">
+      <input id="orderCustomQty" type="number" min="1" value="1" class="gfx-in" style="width:52px" aria-label="Quantity">
+      <button class="btn-navy" style="font-size:12px;padding:8px 12px" onclick="orderAddCustomItem()">Add</button>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-weight:800;font-size:14px;margin-top:12px;padding-top:8px;border-top:1px solid var(--line)"><span>New total</span><span id="orderEditTotal">£0.00</span></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn-add" style="font-size:12.5px;padding:10px 16px" onclick="orderSaveItems(this)">Save changes</button>
+      <button class="btn-navy" style="font-size:12.5px;padding:10px 16px" onclick="orderCancelEdit()">Cancel</button>
+    </div>
+    <p style="font-size:11px;color:var(--ink-soft);margin-top:8px">Saving updates the order, the invoice and the financials.</p>`;
+}
+
+function orderEditRow(i) {
+  return `<div class="order-edit-row" data-pid="${i.product_id||''}" data-name="${ordEsc(i.name)}" data-price="${i.price}" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line-soft)">
+    <span style="flex:1;font-size:13px">${ordEsc(i.name)}</span>
+    <span style="font-size:12px;color:var(--ink-soft);white-space:nowrap">£${i.price.toFixed(2)}</span>
+    <input type="number" min="1" value="${i.qty}" class="oe-qty gfx-in" style="width:56px" oninput="orderRecalcEdit()">
+    <button title="Remove" onclick="this.parentNode.remove();orderRecalcEdit()" style="background:#fff0f0;border:1px solid #fcc;color:#c0392b;border-radius:7px;width:28px;height:28px;cursor:pointer;flex-shrink:0">✕</button>
+  </div>`;
+}
+
+function orderStartEdit() { orderEditMode = true; renderOrderModalBody(); }
+function orderCancelEdit() { orderEditMode = false; renderOrderModalBody(); }
+
+// Jump straight into edit mode ready to add — for adding a pack at the doorstep
+function orderQuickAdd() {
+  orderEditMode = true;
+  renderOrderModalBody();
+  setTimeout(() => { const s = document.getElementById('orderAddProduct'); if (s) s.focus(); }, 60);
+}
+
+// Add a one-off item that isn't in the saved product list (van extras)
+function orderAddCustomItem() {
+  const name  = (document.getElementById('orderCustomName').value || '').trim();
+  const price = parseFloat(document.getElementById('orderCustomPrice').value);
+  const qty   = Math.max(1, parseInt(document.getElementById('orderCustomQty').value,10)||1);
+  if (!name)  { alert('Give the item a name.'); return; }
+  if (!(price >= 0)) { alert('Enter a price for the item.'); return; }
+  document.getElementById('orderEditRows').insertAdjacentHTML('beforeend', orderEditRow({ product_id:'', name, price, qty }));
+  document.getElementById('orderCustomName').value = '';
+  document.getElementById('orderCustomPrice').value = '';
+  document.getElementById('orderCustomQty').value = '1';
+  orderRecalcEdit();
+}
+
+function orderAddItemRow() {
+  const sel = document.getElementById('orderAddProduct');
+  const opt = sel.options[sel.selectedIndex];
+  if (!sel.value || !opt) return;
+  const qty = Math.max(1, parseInt(document.getElementById('orderAddQty').value,10)||1);
+  const item = { product_id: sel.value, name: opt.dataset.name, price: parseFloat(opt.dataset.price)||0, qty };
+  document.getElementById('orderEditRows').insertAdjacentHTML('beforeend', orderEditRow(item));
+  sel.value = ''; document.getElementById('orderAddQty').value = '1';
+  orderRecalcEdit();
+}
+
+function orderRecalcEdit() {
+  let total = 0;
+  document.querySelectorAll('#orderEditRows .order-edit-row').forEach(r => {
+    const price = parseFloat(r.dataset.price)||0;
+    const qty = Math.max(0, parseInt(r.querySelector('.oe-qty').value,10)||0);
+    total += price*qty;
+  });
+  const el = document.getElementById('orderEditTotal');
+  if (el) el.textContent = '£' + total.toFixed(2);
+}
+
+async function orderSaveItems(btn) {
+  const f = currentOrderFull; if (!f || !f.ord) return;
+  const rows = Array.from(document.querySelectorAll('#orderEditRows .order-edit-row'));
+  const items = rows.map(r => ({
+    product_id: r.dataset.pid || null,
+    name: r.dataset.name,
+    price: parseFloat(r.dataset.price)||0,
+    qty: Math.max(1, parseInt(r.querySelector('.oe-qty').value,10)||1),
+  })).filter(i => i.name);
+  if (!items.length) { alert('Add at least one item — or use Delete if you want to remove the whole order.'); return; }
+  const total = items.reduce((s,i)=>s+i.qty*i.price,0);
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const oid = f.ord.id;
+    // Replace the order's items
+    let res = await supabase.from('order_items').delete().eq('order_id', oid);
+    if (res.error) throw res.error;
+    res = await supabase.from('order_items').insert(items.map(i => ({
+      order_id: oid, product_id: i.product_id || null, product_name: i.name, unit_price: i.price, quantity: i.qty, unit: 'pack'
+    })));
+    if (res.error) throw res.error;
+    await supabase.from('orders').update({ total_amount: total }).eq('id', oid);
+    // Keep the linked invoice + financials in step
+    if (f.inv && f.inv.id) {
+      await supabase.from('invoice_items').delete().eq('invoice_id', f.inv.id);
+      await supabase.from('invoice_items').insert(items.map(i => ({
+        invoice_id: f.inv.id, description: i.name, unit_price: i.price, quantity: i.qty
+      })));
+      await supabase.from('invoices').update({ total_amount: total }).eq('id', f.inv.id);
+    }
+    // Reflect in the delivery-run card without a full reload
+    const o = sampleOrders.find(x => x.id === oid);
+    if (o) { o.items = items.map(i=>`${i.name} ×${i.qty}`).join(', '); o.total = total; }
+    orderEditMode = false;
+    await openOrderModal(oid);
+    if (typeof renderOrders === 'function') renderOrders();
+  } catch (e) {
+    console.error('Save order items failed:', e);
+    if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
+    alert('Could not save changes: ' + (e.message || e));
+  }
+}
+
+function orderPrintInvoice() {
+  const f = currentOrderFull;
+  const items = orderItemsArray();
+  if (!f || !f.ord || !items || !items.length) { alert('No items to put on an invoice.'); return; }
+  const cust = f.ord.customers || {};
+  const o = sampleOrders.find(x => x.id === f.ord.id);
+  const isTrade = cust.customer_type === 'commercial';
+  const doc = buildInvoiceDoc({
+    ref: (f.inv && f.inv.invoice_number) || ('ORD-' + String(f.ord.id).slice(0,8).toUpperCase()),
+    type: isTrade ? 'invoice' : 'receipt',
+    custName: cust.name || (o ? o.name : 'Customer'),
+    custAddress: [cust.address_line_1, cust.postcode].filter(Boolean).join(', '),
+    dateFmt: new Date().toLocaleDateString('en-GB'),
+    items: items.map(i => ({ desc:i.name, qty:i.qty, price:i.price })),
+    total: items.reduce((s,i)=>s+i.qty*i.price,0),
+  });
+  if (!doc) { alert('PDF builder is still loading — try again in a second.'); return; }
+  try { doc.autoPrint(); } catch (e) {}
+  window.open(doc.output('bloburl'), '_blank');
+}
+
+function orderEmailInvoice() {
+  const f = currentOrderFull;
+  if (!f || !f.ord) return;
+  const cust = f.ord.customers || {};
+  if (!cust.email) { alert((cust.name || 'This customer') + " doesn't have an email saved. Add one on their customer record, or use Print invoice instead."); return; }
+  if (!f.inv || !f.inv.id) { alert('No invoice is linked to this order yet. If it was just placed, give it a moment and reopen.'); return; }
+  closeModal('orderModal');
+  openSendModal('email', cust.name, f.inv.invoice_number, f.inv.total_amount, f.inv.id);
+}
+
+async function orderMarkPaid(method) {
+  const f = currentOrderFull; if (!f || !f.ord) return;
+  if (!f.inv || !f.inv.id) { alert('No invoice is linked to this order yet. If it was just placed, give it a moment and reopen.'); return; }
+  const already = (f.inv.invoice_payments || []).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+  const total = parseFloat(f.inv.total_amount) || parseFloat(f.ord.total_amount) || 0;
+  const balance = Math.max(0, total - already);
+  if (balance <= 0) { alert('This order is already marked paid.'); return; }
+  try {
+    let res = await supabase.from('invoice_payments').insert({ invoice_id: f.inv.id, method, amount: balance });
+    if (res.error) throw res.error;
+    await supabase.from('invoices').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', f.inv.id);
+    await supabase.from('orders').update({ payment_method: method }).eq('id', f.ord.id);
+    await openOrderModal(f.ord.id);
+  } catch (e) {
+    console.error('Mark paid failed:', e);
+    alert('Could not record the payment: ' + (e.message || e));
+  }
 }
 
 async function updateOrderStatus(status) {
@@ -6813,6 +7068,11 @@ const HELP_PAGES = {
       { icon:'📋', title:'Order cards', body:'Each card shows the customer\'s name, whether they\'re domestic or trade, the order status, and how the order came in (website, phone, social media). Tap a card to open the full order details.' },
       { icon:'📍', title:'Route planner', body:'Press <strong>Plan route</strong> to see that day\'s stops as a tidy run, then <strong>Open in Google Maps</strong> for live, turn-by-turn directions and drive times — straight to your phone, free. You can also copy the route link to share it.' },
       { icon:'✅', title:'Marking as delivered', body:'Open an order card and change the status to <strong>Delivered</strong> once you\'ve dropped it off. This keeps your records up to date.' },
+      { icon:'🧾', title:'Invoice — print or email', body:'Open an order and tap <strong>Print invoice</strong> to print a paper copy (before you set off, or at the door), or <strong>Email invoice</strong> to send it straight to the customer if they\'re on the system. Going paperless? Ask the customer at the door whether they\'d like paper or email.' },
+      { icon:'💷', title:'Recording payment', body:'When a customer pays, open their order and press <strong>Cash</strong> or <strong>Bank transfer</strong> under "Mark as paid". The order shows ✓ Paid and it feeds straight into your finances.' },
+      { icon:'✏️', title:'Changing an order', body:'Customer wants to add or drop something? Open the order, tap <strong>Edit items</strong>, change the quantities or add/remove products, then <strong>Save changes</strong>. The total, the invoice and your financials all update — print a fresh invoice afterwards.' },
+      { icon:'➕', title:'Selling extras at the door', body:'Got spare eggs, sausage or bacon in the van and the customer wants some? Open their order and tap the big <strong>➕ Add an item</strong> button, pick the product (or type a <strong>one-off item</strong> with its own price if it\'s not on your list), set the quantity and <strong>Save</strong>. The order, invoice and takings all update — then print/email the new invoice and take the payment.' },
+      { icon:'🗑️', title:'Deleting an order', body:'<strong>Delete this order</strong> removes the order and its invoice for good — use it for mistakes or test orders. It can\'t be undone.' },
       { icon:'💬', title:'Quick temps', body:'The 🌡️ button lets you log delivery temperatures on the go without leaving this page — useful when you\'re out on the road.' },
     ]
   },
