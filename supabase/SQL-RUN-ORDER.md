@@ -240,6 +240,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 22. `022_daily_sales_from_orders.sql`
+**What it does:** Makes the **Daily Sales** tab fill itself from paid orders. Adds `orders_bank` / `orders_cash` columns to `daily_sales` and a `recompute_daily_sales(date)` function that sums each delivery day's paid orders (cash vs bank). The admin app calls it whenever an order is paid, edited or deleted, so the takings stay in step. Additive — Jon's manual entries are never overwritten.
+
+**When to run:** After 016 (and 004/006). Safe on the live database — idempotent.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

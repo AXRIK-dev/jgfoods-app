@@ -1182,7 +1182,7 @@
   <!-- DAILY SALES -->
   <div class="tab-panel active" id="finance-daily">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-      <p style="font-size:13px;color:var(--ink-soft)">Log each delivery day's takings — bank transfer and cash separately.</p>
+      <p style="font-size:13px;color:var(--ink-soft)">Each day's takings fill in automatically from your paid orders (shown in green). Only add to the <b>+ extra</b> box if you took money that wasn't logged as an order.</p>
       <button class="btn-navy" style="font-size:12px" onclick="addDailySalesRow()">+ Add day</button>
     </div>
     <div id="dsDropZone" ondragover="event.preventDefault();this.style.borderColor='var(--gold)'" ondragleave="this.style.borderColor='var(--line)'" ondrop="dsHandleDrop(event)" style="border:1.5px dashed var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--paper)">
@@ -2699,6 +2699,8 @@ async function deleteCurrentOrder() {
   const idx = sampleOrders.findIndex(x => x.id === currentOrderId);
   if (idx !== -1) sampleOrders.splice(idx, 1);
   closeModal('orderModal');
+  // Re-sync that day's takings now the order (and its payments) are gone
+  if (o && o.date && supabase) { try { await supabase.rpc('recompute_daily_sales', { p_date: o.date }); } catch (e) { console.error('Daily sales sync failed:', e); } }
   if (typeof loadAppData === 'function') await loadAppData();   // refresh run, Finance + dashboard
   else { renderOrders(); renderDashboard(); }
 }
@@ -2907,6 +2909,7 @@ async function orderSaveItems(btn) {
     // Reflect in the delivery-run card without a full reload
     const o = sampleOrders.find(x => x.id === oid);
     if (o) { o.items = items.map(i=>`${i.name} ×${i.qty}`).join(', '); o.total = total; }
+    await syncDailySalesForOrder(oid);                            // keep Daily Sales in step
     orderEditMode = false;
     if (typeof loadAppData === 'function') await loadAppData();   // refresh Finance/dashboard/run
     await openOrderModal(oid);
@@ -2948,6 +2951,15 @@ function orderEmailInvoice() {
   openSendModal('email', cust.name, f.inv.invoice_number, f.inv.total_amount, f.inv.id);
 }
 
+// Recompute that order's delivery-day takings in Daily Sales (auto-fill from paid orders)
+async function syncDailySalesForOrder(orderId) {
+  if (!supabase) return;
+  const o = sampleOrders.find(x => x.id === orderId);
+  if (!o || !o.date) return;
+  try { await supabase.rpc('recompute_daily_sales', { p_date: o.date }); }
+  catch (e) { console.error('Daily sales sync failed:', e); }
+}
+
 async function orderMarkPaid(method) {
   const f = currentOrderFull; if (!f || !f.ord) return;
   if (!f.inv || !f.inv.id) { alert('No invoice is linked to this order yet. If it was just placed, give it a moment and reopen.'); return; }
@@ -2960,6 +2972,7 @@ async function orderMarkPaid(method) {
     if (res.error) throw res.error;
     await supabase.from('invoices').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', f.inv.id);
     await supabase.from('orders').update({ payment_method: method }).eq('id', f.ord.id);
+    await syncDailySalesForOrder(f.ord.id);                       // auto-fill Daily Sales
     if (typeof loadAppData === 'function') await loadAppData();   // refresh Finance/dashboard
     await openOrderModal(f.ord.id);
   } catch (e) {
@@ -6479,12 +6492,14 @@ async function loadDailySales() {
   try {
     const { data, error } = await window.supabase
       .from('daily_sales')
-      .select('id, sale_date, bank, cash, is_holiday')
+      .select('id, sale_date, bank, cash, orders_bank, orders_cash, is_holiday')
       .order('sale_date', { ascending: true });
     if (error) { console.error('loadDailySales', error); return; }
     dailySalesRows = (data || []).map(r => ({
       id: ++dailyRowSeq, date: r.sale_date,
-      bank: parseFloat(r.bank) || 0, cash: parseFloat(r.cash) || 0, holiday: !!r.is_holiday,
+      bank: parseFloat(r.bank) || 0, cash: parseFloat(r.cash) || 0,
+      ordBank: parseFloat(r.orders_bank) || 0, ordCash: parseFloat(r.orders_cash) || 0,
+      holiday: !!r.is_holiday,
     }));
     if (!dailySalesRows.length) addDailySalesRow();   // one blank row to start
     else renderDailySales();
@@ -6574,15 +6589,19 @@ async function importDailySalesFile(file) {
 function renderDailySales() {
   const tbody = document.getElementById('dailySalesBody');
   if (!tbody) return;
-  tbody.innerHTML = dailySalesRows.map(row => `
+  tbody.innerHTML = dailySalesRows.map(row => {
+    const ordBank = row.ordBank || 0, ordCash = row.ordCash || 0;
+    const rowTotal = ordBank + (parseFloat(row.bank)||0) + ordCash + (parseFloat(row.cash)||0);
+    const auto = v => v > 0 ? `<div style="font-size:11px;color:#1a6640;font-weight:700" title="From paid orders">£${v.toFixed(2)} <span style="font-weight:600;color:var(--ink-soft)">orders</span></div>` : '';
+    return `
     <tr ${row.holiday ? 'style="opacity:.5"' : ''}>
       <td><input type="date" class="fin-input" style="padding:6px 8px;font-size:12px" value="${row.date}" onchange="updateDailyRow(${row.id},'date',this.value)"></td>
-      <td class="right"><input type="number" step="0.01" value="${row.bank || ''}" placeholder="0.00" oninput="updateDailyRow(${row.id},'bank',this.value)" style="font-size:13px;font-family:var(--display);font-weight:600;width:90px;border:none;background:transparent;text-align:right;color:var(--navy)"></td>
-      <td class="right"><input type="number" step="0.01" value="${row.cash || ''}" placeholder="0.00" oninput="updateDailyRow(${row.id},'cash',this.value)" style="font-size:13px;font-family:var(--display);font-weight:600;width:90px;border:none;background:transparent;text-align:right;color:var(--navy)"></td>
-      <td class="right" style="font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy)">£${((parseFloat(row.bank)||0)+(parseFloat(row.cash)||0)).toFixed(2)}${row.holiday ? ' 🏖' : ''}</td>
+      <td class="right">${auto(ordBank)}<input type="number" step="0.01" value="${row.bank || ''}" placeholder="+ extra" title="Add anything not captured as an order" oninput="updateDailyRow(${row.id},'bank',this.value)" style="font-size:12px;width:84px;border:none;background:transparent;text-align:right;color:var(--ink-soft)"></td>
+      <td class="right">${auto(ordCash)}<input type="number" step="0.01" value="${row.cash || ''}" placeholder="+ extra" title="Add anything not captured as an order" oninput="updateDailyRow(${row.id},'cash',this.value)" style="font-size:12px;width:84px;border:none;background:transparent;text-align:right;color:var(--ink-soft)"></td>
+      <td class="right" style="font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy)">£${rowTotal.toFixed(2)}${row.holiday ? ' 🏖' : ''}</td>
       <td><button onclick="removeDailyRow(${row.id})" style="color:var(--ink-soft);font-size:14px;padding:4px 6px;border-radius:5px;background:var(--cream);border:1px solid var(--line)">×</button></td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
   updateDailyTotals();
 }
 
@@ -6608,8 +6627,8 @@ async function removeDailyRow(id) {
 }
 
 function updateDailyTotals() {
-  const bankT = dailySalesRows.reduce((s,r) => s+(parseFloat(r.bank)||0), 0);
-  const cashT = dailySalesRows.reduce((s,r) => s+(parseFloat(r.cash)||0), 0);
+  const bankT = dailySalesRows.reduce((s,r) => s+(r.ordBank||0)+(parseFloat(r.bank)||0), 0);
+  const cashT = dailySalesRows.reduce((s,r) => s+(r.ordCash||0)+(parseFloat(r.cash)||0), 0);
   const tot   = bankT + cashT;
   const bEl = document.getElementById('dsBankTotal');
   const cEl = document.getElementById('dsCashTotal');
@@ -7303,7 +7322,7 @@ const HELP_PAGES = {
     label: 'Finance',
     sections: [
       { icon:'💰', title:'What is this page?', body:'Finance has four tabs that match your actual bookkeeping process: Daily Sales, Weekly Sheet, Bank Payments, and Monthly Export.' },
-      { icon:'📅', title:'Daily Sales tab', body:'Enter each day\'s takings — split between bank (card) and cash. Totals calculate automatically and everything saves as you type. Use <strong>+ Add day</strong> for a new day.' },
+      { icon:'📅', title:'Daily Sales tab', body:'This fills itself in. Each day\'s takings come <strong>automatically from your paid orders</strong> — the green figure is the money from orders marked Cash or Bank on the delivery run. You only type in the <strong>+ extra</strong> box if you took money that wasn\'t logged as an order. Totals update live, and it all stays in step if you edit or delete an order.' },
       { icon:'📥', title:'Import past takings', body:'Already got your figures in a spreadsheet? On the Daily Sales tab, drag your Excel or CSV file onto the <strong>Import past takings</strong> box (or tap Choose file). As long as it has <strong>Date</strong>, <strong>Bank</strong> and <strong>Cash</strong> columns, it reads them straight in — so you\'re not starting from scratch. Days you already have are updated, not duplicated.' },
       { icon:'💰', title:'Cash tabs', body:'Some customers pay their full week\'s cash in one go on a set day. These are tracked in the <strong>Cash Tabs</strong> section at the bottom of the Daily tab — separate from your daily cash total. Use <strong>+ Add tab order</strong> to log each delivery against their tab. On payment day, press <strong>Settle tab</strong> and the total moves into that day\'s cash automatically.' },
       { icon:'📊', title:'Weekly Sheet tab', body:'Your weekly reconciliation. Enter supplier payments and expenses, and the sheet works out what should be in the bank. Export it as a spreadsheet to match your existing format.' },
