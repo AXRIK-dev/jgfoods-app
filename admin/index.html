@@ -572,6 +572,21 @@
     </div>
   </div>
 
+  <!-- Records-retention reminder (auto, plain English, one-tap clear) -->
+  <div id="retentionBanner" style="display:none;background:#fff;border:1px solid var(--gold);border-radius:12px;padding:16px 18px;margin-bottom:18px">
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      <span style="font-size:22px;flex-shrink:0;line-height:1">🗂️</span>
+      <div style="flex:1">
+        <b style="font-size:14px;color:var(--navy)">Old records ready to clear</b>
+        <p id="retentionBannerText" style="font-size:12.5px;color:var(--ink-soft);line-height:1.55;margin-top:3px"></p>
+        <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
+          <button class="btn-add" style="font-size:12px;padding:9px 14px" onclick="retentionDoDelete(this)">✓ Delete them</button>
+          <button class="btn-navy" style="font-size:12px;padding:9px 14px" onclick="retentionSnooze()">Remind me next month</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="stats-row">
     <div class="stat-card green">
       <div class="sc-label" id="dashRunLabel">Next run</div>
@@ -1584,6 +1599,13 @@
         <p style="font-size:12.5px;color:var(--ink-soft)">Loading…</p>
       </div>
     </div>
+
+    <div class="dash-card" style="max-width:680px;margin-top:18px">
+      <h3>Records cleanup</h3>
+      <p style="font-size:12px;color:var(--ink-soft);margin:4px 0 12px">By law you must keep invoices and financial records for <b>6 years</b> — you don't need to track this yourself. When anything becomes older than 6 years, a reminder appears on your <b>Dashboard</b> and you just press one button to clear it. You can also check here any time. <b>Nothing is deleted until you press confirm</b>, and if you're ever unsure, check with your accountant first.</p>
+      <button class="btn-navy" style="font-size:12.5px;padding:10px 16px" onclick="checkOldRecords(this)">Check for old records now</button>
+      <div id="retentionResult" style="margin-top:14px"></div>
+    </div>
   </div>
 </div>
 
@@ -2375,6 +2397,9 @@ function renderDashboard() {
     set('stockCutoffBanner', `Changes apply to this week's orders`);
   }
 
+  // ── Records-retention reminder (auto, checked once per session) ──
+  if (!retentionChecked) { retentionChecked = true; checkRetentionBanner(); }
+
   // ── Stat cards ──
   const runCount = run ? sampleOrders.filter(o => o.date === run.delivery_date && o.status !== 'cancelled').length : 0;
   set('dashRunLabel', 'Next run');
@@ -2939,6 +2964,113 @@ async function orderMarkPaid(method) {
     console.error('Mark paid failed:', e);
     alert('Could not record the payment: ' + (e.message || e));
   }
+}
+
+// ============ RECORDS RETENTION CLEANUP ============
+const RETENTION_YEARS = 6;   // legal minimum for VAT records — fixed, not user-set
+
+async function checkOldRecords(btn) {
+  if (!supabase) { alert('This needs the live database.'); return; }
+  const years = RETENTION_YEARS;
+  const box = document.getElementById('retentionResult');
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+  try {
+    const { data, error } = await supabase.rpc('records_due_for_cleanup', { p_years: years });
+    if (error) throw error;
+    const d = data || {};
+    const cutoff = d.cutoff ? new Date(d.cutoff).toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' }) : '';
+    if (!d.invoices && !d.orders && !d.temps && !d.customers) {
+      box.innerHTML = `<div style="background:var(--green-soft);color:var(--green);border-radius:9px;padding:12px;font-size:13px;font-weight:700">✓ Nothing to clear — no records are older than ${years} years.</div>`;
+    } else {
+      box.innerHTML = `
+        <div style="background:var(--cream);border:1px solid var(--line);border-radius:10px;padding:14px">
+          <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px">Older than <b>${cutoff}</b>:</p>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
+            <div style="display:flex;justify-content:space-between"><span>Invoices &amp; receipts</span><b>${d.invoices||0}</b></div>
+            <div style="display:flex;justify-content:space-between"><span>Orders</span><b>${d.orders||0}</b></div>
+            <div style="display:flex;justify-content:space-between"><span>Temperature logs</span><b>${d.temps||0}</b></div>
+            <div style="display:flex;justify-content:space-between"><span>Inactive customers</span><b>${d.customers||0}</b></div>
+          </div>
+          <button class="btn-add" style="margin-top:14px;font-size:12.5px;padding:11px 16px;background:#c0392b" onclick="confirmCleanup(${years}, this)">🗑 Permanently delete these</button>
+        </div>`;
+    }
+  } catch (e) {
+    console.error('Retention check failed:', e);
+    box.innerHTML = `<p style="color:#c0392b;font-size:12.5px">Could not check: ${e.message || e}</p>`;
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Check for old records'; }
+}
+
+async function confirmCleanup(years, btn) {
+  if (!confirm(`Permanently delete ALL records older than ${years} years?\n\nThis removes those invoices, orders, temperature logs and inactive customers for good. Make sure you've kept anything you still need — check with your accountant if unsure. This cannot be undone.`)) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
+  try {
+    const { data, error } = await supabase.rpc('cleanup_old_records', { p_years: years });
+    if (error) throw error;
+    const d = data || {};
+    document.getElementById('retentionResult').innerHTML = `<div style="background:var(--green-soft);color:var(--green);border-radius:9px;padding:13px;font-size:13px;font-weight:700">✓ Done. Removed ${d.invoices||0} invoices, ${d.orders||0} orders, ${d.temps||0} temperature logs and ${d.customers||0} customers.</div>`;
+    if (typeof loadAllData === 'function') loadAllData();
+  } catch (e) {
+    console.error('Cleanup failed:', e);
+    if (btn) { btn.disabled = false; btn.textContent = '🗑 Permanently delete these'; }
+    alert('Cleanup failed: ' + (e.message || e));
+  }
+}
+
+// ── Dashboard reminder: auto-surfaces records past the 6-year mark ──
+let retentionChecked = false;
+async function checkRetentionBanner() {
+  const banner = document.getElementById('retentionBanner');
+  if (!banner || !supabase) return;
+  // Only nudge ONCE A MONTH (first login of the calendar month) — tidier, less naggy
+  const monthKey = new Date().toISOString().slice(0, 7);   // "YYYY-MM"
+  try {
+    if (localStorage.getItem('jg_retention_shown') === monthKey) { banner.style.display = 'none'; return; }
+  } catch (e) {}
+  try {
+    const { data, error } = await supabase.rpc('records_due_for_cleanup', { p_years: RETENTION_YEARS });
+    if (error) throw error;
+    const d = data || {};
+    const total = (d.invoices||0) + (d.orders||0) + (d.temps||0) + (d.customers||0);
+    if (total <= 0) { banner.style.display = 'none'; return; }
+    const bits = [];
+    if (d.invoices)  bits.push(`${d.invoices} invoice${d.invoices!==1?'s':''}`);
+    if (d.orders)    bits.push(`${d.orders} order${d.orders!==1?'s':''}`);
+    if (d.temps)     bits.push(`${d.temps} temperature log${d.temps!==1?'s':''}`);
+    if (d.customers) bits.push(`${d.customers} old customer record${d.customers!==1?'s':''}`);
+    const list = bits.length > 1 ? bits.slice(0,-1).join(', ') + ' and ' + bits[bits.length-1] : (bits[0] || 'some records');
+    document.getElementById('retentionBannerText').innerHTML =
+      `You have ${list} that are now <b>over 6 years old</b>. The law (HMRC's 6-year rule for VAT records) only requires you to keep them for 6 years, so they can be safely deleted. Press <b>Delete them</b> to clear them, or <b>Remind me next month</b> to leave it for now.`;
+    banner.style.display = 'block';
+    try { localStorage.setItem('jg_retention_shown', monthKey); } catch (e) {}   // shown for this month
+  } catch (e) { console.error('Retention banner check failed:', e); banner.style.display = 'none'; }
+}
+
+async function retentionDoDelete(btn) {
+  if (!confirm("Permanently delete all records that are over 6 years old?\n\nThis clears those invoices, orders, temperature logs and old customer records for good. It can't be undone.")) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
+  try {
+    const { data, error } = await supabase.rpc('cleanup_old_records', { p_years: RETENTION_YEARS });
+    if (error) throw error;
+    const d = data || {};
+    const banner = document.getElementById('retentionBanner');
+    banner.querySelectorAll('button').forEach(b => b.remove());
+    document.getElementById('retentionBannerText').innerHTML =
+      `✓ Cleared. Removed ${d.invoices||0} invoices, ${d.orders||0} orders, ${d.temps||0} temperature logs and ${d.customers||0} customer records.`;
+    setTimeout(() => { banner.style.display = 'none'; }, 4000);
+    try { localStorage.removeItem('jg_retention_snooze'); } catch (e) {}
+    if (typeof loadAllData === 'function') loadAllData();
+  } catch (e) {
+    console.error('Retention delete failed:', e);
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Delete them'; }
+    alert('Could not clear the records: ' + (e.message || e));
+  }
+}
+
+function retentionSnooze() {
+  // The "shown this month" flag is already set, so it won't nudge again until next month
+  const banner = document.getElementById('retentionBanner');
+  if (banner) banner.style.display = 'none';
 }
 
 async function updateOrderStatus(status) {
@@ -7174,6 +7306,7 @@ const HELP_PAGES = {
       { icon:'🔑', title:'Change your password', body:'Type a new password twice under <strong>My password</strong> and press <strong>Update my password</strong>. That\'s it — use the new one next time you sign in.' },
       { icon:'➕', title:'Add someone (e.g. your driver)', body:'Under <strong>Add a login</strong>, enter their email and a password and pick a role: <strong>Driver</strong> (deliveries, runs and customers only — no money) or <strong>Admin</strong> (everything). Press <strong>Create login</strong> and tell them the email and password — they sign in here.' },
       { icon:'🛟', title:'Reset or remove access', body:'Under <strong>People with access</strong> you can switch someone between Driver and Admin, <strong>Reset password</strong> if they\'re locked out, or <strong>Remove</strong> their login entirely. You can\'t remove your own login.' },
+      { icon:'🗂️', title:'Records cleanup', body:'You must keep invoices and financial records for <strong>6 years</strong> (the VAT rule) — but you don\'t have to track this yourself. When anything becomes older than 6 years, a reminder appears automatically on your <strong>Dashboard</strong> telling you what can be cleared; you just press <strong>Delete them</strong> (or <strong>Remind me next month</strong>). You can also check any time here under <strong>Records cleanup</strong>. Nothing is ever deleted until you confirm, and it can\'t be undone — if in doubt, check with your accountant first.' },
     ]
   }
 };

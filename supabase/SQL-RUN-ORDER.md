@@ -233,6 +233,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 21. `021_records_retention.sql`
+**What it does:** Adds the **Records cleanup** tool (Account & access page). Two admin-only functions: `records_due_for_cleanup(years)` counts invoices, orders, temperature logs and inactive customers older than the retention period (default **6 years**, the VAT requirement) so Jon can review; `cleanup_old_records(years)` permanently deletes them in one foreign-key-safe transaction. Nothing deletes without Jon confirming in the app.
+
+**When to run:** After 012 and 015. Safe on the live database — idempotent.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app
