@@ -1148,6 +1148,8 @@ let CAT_SLUG = {
 };
 // Mix & match offers: slug -> { qty, price, perUnit, name } for offer categories
 let CAT_DEAL = {};
+let OFFER_ITEMS = {};   // slug -> [{id,name,price}] for mix & match offers (kept out of the grid)
+let offerSel = {};      // slug -> Set of selected product ids (the customer's current pick)
 
 // Ordered list of active categories (name + slug), drives the filter chips.
 let categoryList = [
@@ -1168,19 +1170,20 @@ async function loadCategories() {
   try {
     const { data, error } = await window.sbClient
       .from('categories')
-      .select('name, slug, sort_order, is_active, deal_qty, deal_price')
+      .select('name, slug, sort_order, is_active, deal_qty, deal_price, image_url')
       .order('sort_order', { ascending: true });
     if (error || !data || !data.length) return;   // keep defaults
     categoryList = data
       .filter(c => c.is_active !== false)
       .map(c => ({ name:c.name, slug:c.slug || slugifyCat(c.name),
                    dealQty: c.deal_qty || null,
-                   dealPrice: c.deal_price != null ? parseFloat(c.deal_price) : null }));
+                   dealPrice: c.deal_price != null ? parseFloat(c.deal_price) : null,
+                   image: c.image_url || '' }));
     CAT_SLUG = {}; CAT_DEAL = {};
     categoryList.forEach(c => {
       CAT_SLUG[c.name] = c.slug;
       if (c.dealQty && c.dealPrice) {
-        CAT_DEAL[c.slug] = { qty: c.dealQty, price: c.dealPrice, perUnit: c.dealPrice / c.dealQty, name: c.name };
+        CAT_DEAL[c.slug] = { qty: c.dealQty, price: c.dealPrice, perUnit: c.dealPrice / c.dealQty, name: c.name, image: c.image };
       }
     });
   } catch (e) { /* keep defaults */ }
@@ -1229,14 +1232,24 @@ async function loadProducts() {
 
   if (loading) loading.remove();
 
+  OFFER_ITEMS = {};
+
   data.forEach(p => {
     const cat = CAT_SLUG[p.category] || 'other';
     const label = p.category || 'Product';
+    const deal = CAT_DEAL[cat];
+
+    // Mix & match offer items don't go in the main grid — they live inside the
+    // offer tile's tick-list so the 20–30 of them don't bury the core products.
+    if (deal) {
+      (OFFER_ITEMS[cat] = OFFER_ITEMS[cat] || []).push({ id: p.id, name: p.name, price: deal.perUnit });
+      return;
+    }
+
     const imgHtml = p.img_url
       ? `<img class="prod-photo" src="${p.img_url}" alt="${p.name}" loading="lazy" onerror="this.removeAttribute('src');this.alt=''">`
       : `<div class="prod-img ${cat}"><span>${label}</span></div>`;
-    const deal = CAT_DEAL[cat];
-    const effPrice = deal ? deal.perUnit : parseFloat(p.price);
+    const effPrice = parseFloat(p.price);
     const card = document.createElement('div');
     card.className = 'prod-card';
     card.dataset.id    = p.id;
@@ -1272,47 +1285,114 @@ async function loadProducts() {
 
   // Build the filter controls from the categories that have products
   renderCategoryFilters();
-  renderOfferBanners();
+  renderOfferTiles();
 }
 
-// A prominent "pick any N for £X" banner above the items for each offer
-// category that has products, with a live count of what's been chosen.
-function renderOfferBanners() {
+// One self-contained tile per mix & match offer: a picture, the "3 for £15"
+// headline, and a tick-list of the items. The customer ticks any 3 (or 6, 9…)
+// and adds that set to the basket. Keeps the 20–30 items out of the main grid.
+function renderOfferTiles() {
   const wrap = document.getElementById('offerBanners');
   if (!wrap) return;
-  const present = new Set([...document.querySelectorAll('.prod-card')].map(c => c.dataset.cat));
-  const offers = Object.keys(CAT_DEAL).filter(s => present.has(s));
+  const offers = Object.keys(CAT_DEAL).filter(s => (OFFER_ITEMS[s] || []).length);
   if (!offers.length) { wrap.innerHTML = ''; return; }
+
   wrap.innerHTML = offers.map(slug => {
     const d = CAT_DEAL[slug];
+    const items = OFFER_ITEMS[slug] || [];
+    const sel = offerSel[slug] || (offerSel[slug] = new Set());
+    const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const imgHtml = d.image
+      ? `<img src="${d.image}" alt="${esc(d.name)}" style="width:100%;height:100%;object-fit:cover" loading="lazy">`
+      : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:30px">🏷</div>`;
+    const list = items.map(it => {
+      const on = sel.has(it.id);
+      return `
+        <label style="display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid ${on?'var(--gold)':'var(--line-soft,#e6ded0)'};border-radius:9px;background:${on?'#fff8ec':'#fff'};cursor:pointer;font-size:13.5px;color:var(--ink)">
+          <input type="checkbox" ${on?'checked':''} onchange="toggleOfferPick('${slug}','${it.id}')" style="width:17px;height:17px;accent-color:var(--gold);flex-shrink:0">
+          <span>${esc(it.name)}</span>
+        </label>`;
+    }).join('');
+
     return `
-    <div class="offer-banner" data-cat="${slug}" style="background:linear-gradient(135deg,var(--navy),var(--navy-2));border-radius:14px;padding:15px 18px;margin-bottom:14px;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.08)">
-      <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
-        <span style="font-size:26px;line-height:1">🏷</span>
-        <div style="flex:1;min-width:170px">
-          <div style="font-family:var(--display);font-size:18px;font-weight:700">${d.name} — pick any ${d.qty} for £${d.price.toFixed(2)}</div>
-          <div style="font-size:12px;color:rgba(255,255,255,.78);margin-top:2px">Mix &amp; match any of the items below (£${d.perUnit.toFixed(2)} each). Tap <b>Add</b> on the ${d.qty} you want — choose in lots of ${d.qty}.</div>
+    <div class="offer-tile" style="background:linear-gradient(160deg,var(--navy),var(--navy-2));border-radius:16px;overflow:hidden;margin-bottom:18px;box-shadow:0 6px 18px rgba(0,0,0,.1)">
+      <div style="display:flex;gap:0;flex-wrap:wrap">
+        <div style="width:160px;height:160px;flex-shrink:0;background:#0d1828">${imgHtml}</div>
+        <div style="flex:1;min-width:200px;padding:16px 18px;color:#fff;display:flex;flex-direction:column;justify-content:center">
+          <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold-bright,#e0b766);font-weight:800;margin-bottom:3px">Mix &amp; Match Offer</div>
+          <div style="font-family:var(--display);font-size:24px;font-weight:700;line-height:1.1">${esc(d.name)}</div>
+          <div style="font-family:var(--display);font-size:20px;color:var(--gold-bright,#e0b766);font-weight:700">Pick any ${d.qty} for £${d.price.toFixed(2)}</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.75);margin-top:4px">Tick the ${d.qty} packs you want from the list below, then add them to your basket. You can add more than one set.</div>
         </div>
-        <div id="offprog-${slug}" style="font-size:12.5px;font-weight:800;background:rgba(255,255,255,.16);border-radius:9px;padding:8px 13px;white-space:nowrap"></div>
+      </div>
+      <div style="background:#fff;padding:14px 16px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px">${list}</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:13px">
+          <div id="offstatus-${slug}" style="flex:1;min-width:150px;font-size:13px;font-weight:700;color:var(--ink)"></div>
+          <button id="offadd-${slug}" onclick="addOfferSet('${slug}')" class="add-btn" style="padding:11px 20px;font-size:14px;font-weight:800;border-radius:10px;background:var(--gold);color:#fff;border:none;cursor:pointer">Add to basket</button>
+        </div>
       </div>
     </div>`;
   }).join('');
-  updateOfferProgress();
+
+  offers.forEach(updateOfferTileStatus);
 }
 
-// Update each offer banner's live progress chip from the basket.
-function updateOfferProgress() {
-  Object.keys(CAT_DEAL).forEach(slug => {
-    const el = document.getElementById('offprog-' + slug);
-    if (!el) return;
-    const d = CAT_DEAL[slug];
-    const count = Object.values(basket).filter(b => b.deal === slug).reduce((s, b) => s + b.qty, 0);
-    const rem = count % d.qty;
-    if (count === 0)      el.textContent = `Pick any ${d.qty}`;
-    else if (rem === 0)   el.textContent = `✓ ${count} chosen`;
-    else                  el.textContent = `${count} chosen · add ${d.qty - rem} more`;
-    el.style.background = (count > 0 && rem === 0) ? 'rgba(120,200,120,.32)' : 'rgba(255,255,255,.16)';
+function toggleOfferPick(slug, id) {
+  const sel = offerSel[slug] || (offerSel[slug] = new Set());
+  if (sel.has(id)) sel.delete(id); else sel.add(id);
+  // reflect the tick visually without a full re-render
+  const cb = document.querySelector(`#offerBanners input[onchange*="'${slug}','${id}'"]`);
+  if (cb) {
+    const label = cb.closest('label');
+    if (label) {
+      const on = sel.has(id);
+      label.style.borderColor = on ? 'var(--gold)' : 'var(--line-soft,#e6ded0)';
+      label.style.background  = on ? '#fff8ec' : '#fff';
+    }
+  }
+  updateOfferTileStatus(slug);
+}
+
+function updateOfferTileStatus(slug) {
+  const d = CAT_DEAL[slug]; if (!d) return;
+  const sel = offerSel[slug] || new Set();
+  const n = sel.size, rem = n % d.qty;
+  const statusEl = document.getElementById('offstatus-' + slug);
+  const btn = document.getElementById('offadd-' + slug);
+  const ready = n > 0 && rem === 0;
+  if (statusEl) {
+    if (n === 0)      statusEl.textContent = `Tick any ${d.qty} packs`;
+    else if (rem !== 0) statusEl.textContent = `${n} ticked · tick ${d.qty - rem} more to complete a set`;
+    else              statusEl.textContent = `${n} ticked · ${n / d.qty} × £${d.price.toFixed(2)} = £${(d.price * n / d.qty).toFixed(2)}`;
+    statusEl.style.color = ready ? 'var(--green,#2e7d32)' : 'var(--ink)';
+  }
+  if (btn) {
+    btn.disabled = !ready;
+    btn.style.opacity = ready ? '1' : '.45';
+    btn.style.cursor = ready ? 'pointer' : 'not-allowed';
+    btn.textContent = ready ? `Add ${n} for £${(d.price * n / d.qty).toFixed(2)}` : 'Add to basket';
+  }
+}
+
+// Add the ticked items to the basket as a complete set (or sets), at the deal rate.
+function addOfferSet(slug) {
+  const d = CAT_DEAL[slug]; if (!d) return;
+  const sel = offerSel[slug] || new Set();
+  if (sel.size === 0 || sel.size % d.qty !== 0) return;
+  const byId = {};
+  (OFFER_ITEMS[slug] || []).forEach(it => { byId[it.id] = it; });
+  sel.forEach(id => {
+    const it = byId[id]; if (!it) return;
+    if (basket[id]) basket[id].qty += 1;
+    else basket[id] = { id, name: it.name, price: d.perUnit, cls: slug, unit: 'pack', qty: 1, img: d.image || '', deal: slug };
   });
+  offerSel[slug] = new Set();
+  renderOfferTiles();
+  updateBasketUI();
+  // open the basket so they can see it landed
+  const panel = document.getElementById('basketPanel');
+  if (panel && !panel.classList.contains('open')) { /* leave closed; the bar shows the count */ }
 }
 
 // ── Delivery banner: live home-delivery days for the coming week ──
@@ -1525,8 +1605,6 @@ function updateBasketUI() {
   }
   if (pbt) pbt.textContent = editing ? 'Save changes' : 'Place order';
 
-  updateOfferProgress();
-
   // Mix & match offer nudge — prompt to complete each set
   const dn = document.getElementById('dealNudge');
   if (dn) {
@@ -1677,14 +1755,23 @@ async function loadMyPendingOrder() {
 }
 
 // Load that order into the basket so the basket itself becomes the editor
+// Which offer (slug) does a product belong to, if any? Offer items aren't in
+// the grid, so we look them up in OFFER_ITEMS rather than off a card.
+function offerSlugForProduct(id) {
+  return Object.keys(OFFER_ITEMS).find(slug => (OFFER_ITEMS[slug] || []).some(it => it.id === id)) || '';
+}
+
 function enterOrderEditMode() {
   if (!editingOrder) return;
   Object.keys(basket).forEach(k => delete basket[k]);
   editingOrder.items.forEach(it => {
     const cardEl = document.querySelector(`[data-id="${it.product_id}"]`);
+    const offerSlug = offerSlugForProduct(it.product_id);
     basket[it.product_id] = {
       id: it.product_id, name: it.name, price: it.price, qty: it.qty, unit: 'pack',
-      cls: cardEl?.dataset.cls || '', img: cardEl?.dataset.img || '', deal: cardEl?.dataset.deal || '',
+      cls: cardEl?.dataset.cls || offerSlug || '',
+      img: cardEl?.dataset.img || (offerSlug ? (CAT_DEAL[offerSlug]?.image || '') : ''),
+      deal: cardEl?.dataset.deal || offerSlug || '',
     };
   });
   selectedSlotId = editingOrder.slotId;
@@ -1863,11 +1950,7 @@ function filterCategory(el, cat) {
   document.querySelectorAll('.prod-card').forEach(card => {
     card.classList.toggle('hidden', cat !== 'all' && card.dataset.cat !== cat);
   });
-
-  // Show an offer banner only when its items are on screen (its own filter or "All")
-  document.querySelectorAll('#offerBanners .offer-banner').forEach(b => {
-    b.style.display = (cat === 'all' || b.dataset.cat === cat) ? '' : 'none';
-  });
+  // Offer tiles always stay visible above the grid (they aren't in the filter list).
 }
 
 // ============ TRADE ENQUIRY ============

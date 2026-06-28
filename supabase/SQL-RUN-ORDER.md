@@ -261,6 +261,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 25. `025_category_image.sql`
+**What it does:** Adds an optional `image_url` to categories so a mix & match offer can carry **one picture** (shown on the website offer tile), uploaded by Jon in the admin. NULL = no image.
+
+**When to run:** After 017 (categories) and 024 (offers). Safe on the live database — idempotent.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

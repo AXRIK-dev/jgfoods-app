@@ -2169,7 +2169,7 @@ async function loadAppData() {
 
       supabase
         .from('categories')
-        .select('id, name, slug, sort_order, is_active, deal_qty, deal_price')
+        .select('id, name, slug, sort_order, is_active, deal_qty, deal_price, image_url')
         .order('sort_order').order('name'),
     ]);
 
@@ -3168,6 +3168,7 @@ function renderOfferPanel(c) {
           <button onclick="removeOfferItem('${p.id}')" title="Remove" style="font-size:11px;font-weight:700;padding:4px 9px;border-radius:6px;background:#fff0f0;border:1px solid #fcc;color:#c0392b;cursor:pointer">Remove</button>
         </div>`).join('')
     : `<p style="font-size:12.5px;color:var(--ink-soft);grid-column:1/-1;margin:0">No items yet — add the packs customers can choose from below.</p>`;
+  const img = c.image_url || '';
   return `
     <div class="stock-row" style="flex-direction:column;align-items:stretch;gap:12px;padding:15px 16px;border:2px solid var(--gold,#b8924a);background:var(--gold-soft,#f7efdd)">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -3177,6 +3178,16 @@ function renderOfferPanel(c) {
           <p style="font-size:12px;color:var(--ink-soft);margin:2px 0 0">Mix &amp; match offer · ${items.length} item${items.length===1?'':'s'} · customers pick any ${qty} for £${price.toFixed(2)} (£${each.toFixed(2)} each)</p>
         </div>
         <span class="cat-tag" style="background:var(--navy);color:#fff">MIX &amp; MATCH</span>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:9px;padding:10px 12px">
+        <div class="sr-img" title="Add offer photo" style="position:relative;width:64px;height:64px;flex-shrink:0">
+          ${img ? `<img src="${img}" alt="${esc(c.name)}" id="offimg-${c.id}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">` : `<span class="img-placeholder">📷</span><img src="" id="offimg-${c.id}" style="display:none">`}
+          <input type="file" accept="image/*" onchange="handleOfferImgUpload(event,'${c.id}')" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%" aria-label="Upload offer photo">
+        </div>
+        <div style="font-size:12px;color:var(--ink-soft)">
+          <b style="color:var(--ink)">Offer photo</b> — one picture for the whole offer (like your flyer). Tap to ${img ? 'change' : 'add'} it. Shows on the website offer tile.
+        </div>
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">
@@ -3345,6 +3356,41 @@ async function uploadProductImage(id, file) {
   const { error: dbErr } = await supabase.from('products').update({ img_url: finalUrl }).eq('id', id);
   if (dbErr) throw dbErr;
   return finalUrl;
+}
+
+// Upload one photo for a mix & match offer (stored on the category).
+async function handleOfferImgUpload(event, catId) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const c = categories.find(x => x.id === catId);
+
+  // Instant preview
+  const reader = new FileReader();
+  reader.onload = e => {
+    const imgEl = document.getElementById('offimg-' + catId);
+    if (imgEl) { imgEl.src = e.target.result; imgEl.style.display = 'block';
+      const ph = imgEl.previousElementSibling; if (ph?.classList.contains('img-placeholder')) ph.style.display = 'none'; }
+    if (c) c.image_url = e.target.result;
+  };
+  reader.readAsDataURL(file);
+
+  if (!supabase) return;
+  if (!isProductUUID(catId)) { alert('Please save this category first, then add the photo.'); return; }
+  try {
+    const norm = await normalizeProductImage(file);
+    const path = `offers/${catId}.${norm.ext}`;
+    const { error: upErr } = await supabase.storage.from('product-images')
+      .upload(path, norm.blob, { upsert: true, contentType: norm.contentType });
+    if (upErr) throw upErr;
+    const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
+    const finalUrl = (urlData?.publicUrl || '') + '?v=' + Date.now();
+    const { error: dbErr } = await supabase.from('categories').update({ image_url: finalUrl }).eq('id', catId);
+    if (dbErr) throw dbErr;
+    if (c) c.image_url = finalUrl;
+  } catch (err) {
+    console.error('Offer image upload error:', err);
+    alert('Offer photo upload failed: ' + (err.message || err));
+  }
 }
 
 async function handleImgUpload(event, id) {
@@ -3845,7 +3891,14 @@ async function addCategory() {
       .insert({ name, slug, sort_order, is_active:true })
       .select('id').single();
     if (error) { console.error('Add category error:', error); alert('Could not save category: ' + error.message); }
-    else if (data) { cat.id = data.id; }
+    else if (data) {
+      cat.id = data.id;
+      // Re-render so the new row's controls (incl. the offer inputs) use the
+      // real database id — otherwise the first 'pick 3 for £15' save targets
+      // the temporary id and silently misses.
+      renderCategoryManager();
+      renderCategoryOptions();
+    }
   }
 }
 
@@ -7539,7 +7592,7 @@ const HELP_PAGES = {
       { icon:'💷', title:'Changing prices', body:'Click the price on any product to edit it. Changes take effect immediately on the website once the database is connected.' },
       { icon:'➕', title:'Adding a new product', body:'Press <strong>+ Add product</strong> at the top right. Fill in the name, pick a category, set the price, then save. The product goes live on the website straight away.' },
       { icon:'🏷️', title:'Managing categories', body:'Press <strong>Manage categories</strong> to add, rename, reorder or hide the sections customers browse by on the website (Chicken, Steak & Beef, and so on). Add a new one any time — type the name and press <strong>Add</strong>. Rename one and every product in it updates automatically. Hide a category to take it off the website without losing it, or delete it (its products move to "Other"). The order you set here is the order customers see.' },
-      { icon:'🏷️', title:'Mix & match offers (e.g. 3 for £15)', body:'Two quick steps. <strong>1) Set the offer:</strong> in <strong>Manage categories</strong>, create a category (e.g. "Mix &amp; Match") and on its <strong>Mix &amp; match offer</strong> line set <strong>pick __ for £__</strong> (e.g. pick 3 for £15), then close. <strong>2) Add the items:</strong> a gold offer panel now sits at the top of the <strong>Availability</strong> page. Type each pack in its <strong>Add item</strong> box (press Enter to keep going), or press <strong>📋 Paste a list</strong> and paste your whole flyer — one item per line — then <strong>Add all items</strong> to load 20–30 in one go. No prices needed on these; the offer sets them. On the website the customer sees a "pick any 3 for £15" banner and chooses any 3 packs themselves, and the exact ones they picked come through on the order so you know what to deliver. <strong>Remove</strong> takes an item out. Leave the offer boxes blank for a normal category.' },
+      { icon:'🏷️', title:'Mix & match offers (e.g. 3 for £15)', body:'Two quick steps. <strong>1) Set the offer:</strong> in <strong>Manage categories</strong>, create a category (e.g. "Mix &amp; Match") and on its <strong>Mix &amp; match offer</strong> line set <strong>pick __ for £__</strong> (e.g. pick 3 for £15), then close. <strong>2) Add the items + a photo:</strong> a gold offer panel now sits at the top of the <strong>Availability</strong> page. Type each pack in its <strong>Add item</strong> box (press Enter to keep going), or press <strong>📋 Paste a list</strong> and paste your whole flyer — one item per line — then <strong>Add all items</strong> to load 20–30 at once. Tap the <strong>Offer photo</strong> box to add one picture for the whole offer (like your flyer). No prices needed on the items; the offer sets them. On the website the offer shows as <strong>one tile</strong> — your picture, "pick 3 for £15", and a list the customer ticks any 3 from (they can add more than one set). The exact packs they picked come through on the order so you know what to deliver. The items stay off the main shop grid so they don\'t bury your core products. <strong>Remove</strong> takes an item out. Leave the offer boxes blank for a normal category.' },
       { icon:'📷', title:'Adding a photo', body:'Tap the photo box on any product and choose a picture. You\'ll see it straight away. For a brand-new product, the photo is saved up to the website when you press <strong>Save changes</strong> — so always Save after adding a photo. For a product that\'s already saved, the photo uploads right away.' },
     ]
   },
