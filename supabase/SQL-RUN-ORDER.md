@@ -268,6 +268,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 26. `026_category_is_offer.sql`
+**What it does:** Adds an `is_offer` flag to categories so the admin can keep **normal categories** (Chicken, Steak & Beef…) and **special offers** (Mix & Match — 3 for £15) in separate places. Backfills `is_offer = true` for any category that already has a deal set.
+
+**When to run:** After 024 (offers) and 025 (category image). Safe on the live database — idempotent.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

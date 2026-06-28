@@ -1195,7 +1195,8 @@ async function loadCategories() {
 function renderCategoryFilters() {
   const present = new Set();
   document.querySelectorAll('.prod-card').forEach(c => present.add(c.dataset.cat));
-  const cats = categoryList.filter(c => present.has(c.slug));
+  // Offers aren't browse-by categories — they show as their own cards.
+  const cats = categoryList.filter(c => present.has(c.slug) && !CAT_DEAL[c.slug]);
 
   const chips = document.getElementById('mobileChips');
   if (chips) {
@@ -1285,62 +1286,89 @@ async function loadProducts() {
 
   // Build the filter controls from the categories that have products
   renderCategoryFilters();
-  renderOfferTiles();
+  renderOfferCards();
 }
 
-// One self-contained tile per mix & match offer: a picture, the "3 for £15"
-// headline, and the items each with a little quantity stepper. The customer
-// dials up any combination (incl. 2 of one + 1 of another) totalling a multiple
-// of the deal size, then adds it. Keeps the 20–30 items out of the main grid.
-function renderOfferTiles() {
-  const wrap = document.getElementById('offerBanners');
-  if (!wrap) return;
+// Each offer shows as one compact card in the grid (same size as a product).
+// Clicking it opens the picker overlay — the 20–30 items live in there.
+function renderOfferCards() {
+  const grid = document.getElementById('prodGrid');
+  const banners = document.getElementById('offerBanners');
+  if (banners) banners.innerHTML = '';   // (legacy container — offers are cards now)
+  if (!grid) return;
+  // clear any previously-rendered offer cards
+  grid.querySelectorAll('.offer-card').forEach(c => c.remove());
   const offers = Object.keys(CAT_DEAL).filter(s => (OFFER_ITEMS[s] || []).length);
-  if (!offers.length) { wrap.innerHTML = ''; return; }
-
-  wrap.innerHTML = offers.map(slug => {
+  // insert newest-first at the very top of the grid
+  offers.reverse().forEach(slug => {
     const d = CAT_DEAL[slug];
-    const items = OFFER_ITEMS[slug] || [];
-    const sel = offerSel[slug] || (offerSel[slug] = {});
     const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
     const imgHtml = d.image
-      ? `<img src="${d.image}" alt="${esc(d.name)}" style="width:100%;height:100%;object-fit:cover" loading="lazy">`
-      : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:30px">🏷</div>`;
-    const list = items.map(it => {
-      const q = sel[it.id] || 0;
-      return `
-        <div id="offrow-${slug}-${it.id}" style="display:flex;align-items:center;gap:9px;padding:8px 11px;border:1px solid ${q?'var(--gold)':'var(--line-soft,#e6ded0)'};border-radius:9px;background:${q?'#fff8ec':'#fff'};font-size:13.5px;color:var(--ink)">
-          <span style="flex:1;min-width:0">${esc(it.name)}</span>
-          <div class="card-stepper" style="flex-shrink:0">
-            <button type="button" aria-label="Fewer ${esc(it.name)}" onclick="bumpOfferPick('${slug}','${it.id}',-1)">−</button>
-            <span id="offqty-${slug}-${it.id}">${q}</span>
-            <button type="button" aria-label="More ${esc(it.name)}" onclick="bumpOfferPick('${slug}','${it.id}',1)">+</button>
-          </div>
-        </div>`;
-    }).join('');
+      ? `<img class="prod-photo" src="${d.image}" alt="${esc(d.name)}" loading="lazy" onerror="this.removeAttribute('src')">`
+      : `<div class="prod-img" style="background:linear-gradient(160deg,var(--navy),var(--navy-2));color:#fff;display:flex;align-items:center;justify-content:center;font-size:34px">🏷</div>`;
+    const card = document.createElement('div');
+    card.className = 'prod-card offer-card';
+    card.dataset.cat = slug;
+    card.innerHTML = `
+      <div style="position:relative">
+        ${imgHtml}
+        <span style="position:absolute;top:8px;left:8px;background:var(--gold);color:#fff;font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:3px 8px;border-radius:6px">Offer</span>
+      </div>
+      <div class="prod-body">
+        <h4>${esc(d.name)}</h4>
+        <div class="prod-desc">Mix &amp; match — choose any ${d.qty} packs</div>
+        <div class="prod-foot">
+          <span class="price">${d.qty} for £${d.price.toFixed(2)}</span>
+          <button class="add-btn" onclick="openOfferPicker('${slug}')">Choose packs</button>
+        </div>
+      </div>`;
+    grid.insertBefore(card, grid.firstChild);
+  });
+}
 
+function openOfferPicker(slug) {
+  const d = CAT_DEAL[slug]; if (!d) return;
+  offerSel[slug] = offerSel[slug] || {};
+  const items = OFFER_ITEMS[slug] || [];
+  const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const sel = offerSel[slug];
+  const list = items.map(it => {
+    const q = sel[it.id] || 0;
     return `
-    <div class="offer-tile" style="background:linear-gradient(160deg,var(--navy),var(--navy-2));border-radius:16px;overflow:hidden;margin-bottom:18px;box-shadow:0 6px 18px rgba(0,0,0,.1)">
-      <div style="display:flex;gap:0;flex-wrap:wrap">
-        <div style="width:160px;height:160px;flex-shrink:0;background:#0d1828">${imgHtml}</div>
-        <div style="flex:1;min-width:200px;padding:16px 18px;color:#fff;display:flex;flex-direction:column;justify-content:center">
-          <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold-bright,#e0b766);font-weight:800;margin-bottom:3px">Mix &amp; Match Offer</div>
-          <div style="font-family:var(--display);font-size:24px;font-weight:700;line-height:1.1">${esc(d.name)}</div>
-          <div style="font-family:var(--display);font-size:20px;color:var(--gold-bright,#e0b766);font-weight:700">Pick any ${d.qty} for £${d.price.toFixed(2)}</div>
-          <div style="font-size:12px;color:rgba(255,255,255,.75);margin-top:4px">Use the + and − to choose your packs — any mix, including more than one of the same. Pick in lots of ${d.qty}, then add to your basket.</div>
+      <div id="offrow-${slug}-${it.id}" style="display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid ${q?'var(--gold)':'var(--line-soft,#e6ded0)'};border-radius:9px;background:${q?'#fff8ec':'#fff'};font-size:14px;color:var(--ink)">
+        <span style="flex:1;min-width:0">${esc(it.name)}</span>
+        <div class="card-stepper" style="flex-shrink:0">
+          <button type="button" aria-label="Fewer" onclick="bumpOfferPick('${slug}','${it.id}',-1)">−</button>
+          <span id="offqty-${slug}-${it.id}">${q}</span>
+          <button type="button" aria-label="More" onclick="bumpOfferPick('${slug}','${it.id}',1)">+</button>
         </div>
-      </div>
-      <div style="background:#fff;padding:14px 16px">
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">${list}</div>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:13px">
-          <div id="offstatus-${slug}" style="flex:1;min-width:150px;font-size:13px;font-weight:700;color:var(--ink)"></div>
-          <button id="offadd-${slug}" onclick="addOfferSet('${slug}')" class="add-btn" style="padding:11px 20px;font-size:14px;font-weight:800;border-radius:10px;background:var(--gold);color:#fff;border:none;cursor:pointer">Add to basket</button>
-        </div>
-      </div>
-    </div>`;
+      </div>`;
   }).join('');
+  const body = document.getElementById('offerPickerBody');
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
+      ${d.image ? `<img src="${d.image}" alt="" style="width:54px;height:54px;border-radius:10px;object-fit:cover;flex-shrink:0">` : ''}
+      <div>
+        <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800">Mix &amp; Match Offer</div>
+        <h3 style="font-family:var(--display);font-size:22px;color:var(--navy);margin:0">${esc(d.name)} — pick any ${d.qty} for £${d.price.toFixed(2)}</h3>
+      </div>
+    </div>
+    <p style="font-size:13px;color:var(--ink-soft);margin:0 0 12px">Use + and − to choose your packs — any mix, including more than one of the same. Pick in lots of ${d.qty}.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;max-height:46vh;overflow:auto;padding-right:2px">${list}</div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;border-top:1px solid var(--line-soft,#e6ded0);padding-top:13px">
+      <div id="offstatus-${slug}" style="flex:1;min-width:150px;font-size:14px;font-weight:700;color:var(--ink)"></div>
+      <button id="offadd-${slug}" onclick="addOfferSet('${slug}')" class="add-btn" style="padding:12px 22px;font-size:15px;font-weight:800;border-radius:10px;background:var(--gold);color:#fff;border:none;cursor:pointer">Add to basket</button>
+    </div>`;
+  updateOfferTileStatus(slug);
+  const ov = document.getElementById('offerPickerOverlay');
+  ov.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
 
-  offers.forEach(updateOfferTileStatus);
+function closeOfferPicker() {
+  const ov = document.getElementById('offerPickerOverlay');
+  if (ov) ov.style.display = 'none';
+  document.body.style.overflow = '';
 }
 
 function offerSelTotal(slug) {
@@ -1398,7 +1426,7 @@ function addOfferSet(slug) {
     else basket[id] = { id, name: it.name, price: d.perUnit, cls: slug, unit: 'pack', qty: add, img: d.image || '', deal: slug };
   });
   offerSel[slug] = {};
-  renderOfferTiles();
+  closeOfferPicker();
   updateBasketUI();
 }
 
@@ -2469,5 +2497,15 @@ function reorderUsual() {
   prefillOrderForm();
 }
 </script>
+
+<!-- ============ MIX & MATCH PICKER OVERLAY ============ -->
+<div id="offerPickerOverlay" onclick="if(event.target===this)closeOfferPicker()"
+     style="display:none;position:fixed;inset:0;background:rgba(13,24,40,.55);z-index:1000;align-items:center;justify-content:center;padding:18px">
+  <div style="background:#fff;border-radius:18px;max-width:680px;width:100%;max-height:88vh;overflow:auto;padding:20px 22px;box-shadow:0 24px 60px rgba(0,0,0,.3);position:relative">
+    <button onclick="closeOfferPicker()" aria-label="Close" style="position:absolute;top:12px;right:14px;width:34px;height:34px;border-radius:9px;border:1px solid var(--line-soft,#e6ded0);background:#fff;font-size:17px;cursor:pointer;color:var(--ink-soft)">✕</button>
+    <div id="offerPickerBody"></div>
+  </div>
+</div>
+
 </body>
 </html>

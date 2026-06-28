@@ -904,6 +904,7 @@
       <p>Toggle items on/off and set prices. Changes go live on the website immediately.</p>
     </div>
     <div class="btn-row">
+      <button class="btn-gold" onclick="openOffersManager()">🏷 Special offers</button>
       <button class="btn-gold" onclick="openCategoryManager()">Manage categories</button>
       <button class="btn-navy" onclick="addNewProduct()">+ Add product</button>
       <button class="btn-add" id="savePricesBtn" onclick="savePrices()">Save changes</button>
@@ -1793,6 +1794,34 @@
   </div>
 </div>
 
+<!-- ============ SPECIAL OFFERS MODAL ============ -->
+<div class="modal-overlay" id="offersModal">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-head">
+      <div>
+        <h3>🏷 Special offers</h3>
+        <p style="font-size:12px;color:var(--ink-soft);margin-top:3px">Deals like “Mix &amp; Match — 3 for £15”. Each offer has its own picture and its own list of packs the customer chooses from. Kept separate from your everyday product categories.</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('offersModal')">✕</button>
+    </div>
+
+    <div id="offersList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"><!-- populated by renderOffersManager() --></div>
+
+    <div class="field" style="border-top:1px solid var(--line);padding-top:14px;margin-bottom:6px">
+      <label>Create a special offer</label>
+      <div style="display:flex;gap:8px">
+        <input id="newOfferName" type="text" placeholder="e.g. Mix &amp; Match, Summer Deal" onkeydown="if(event.key==='Enter'){event.preventDefault();createOffer();}" style="flex:1">
+        <button class="btn-navy" style="padding:10px 16px" onclick="createOffer()">Create</button>
+      </div>
+      <p style="font-size:11.5px;color:var(--ink-soft);margin-top:6px">After creating, set the “pick __ for £__” price, add a photo, and add the packs.</p>
+    </div>
+
+    <div style="margin-top:10px">
+      <button class="btn-add" style="width:100%;justify-content:center;padding:13px" onclick="closeModal('offersModal')">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ EDIT CUSTOMER MODAL ============ -->
 <div class="modal-overlay" id="editCustomerModal">
   <div class="modal">
@@ -2169,7 +2198,7 @@ async function loadAppData() {
 
       supabase
         .from('categories')
-        .select('id, name, slug, sort_order, is_active, deal_qty, deal_price, image_url')
+        .select('id, name, slug, sort_order, is_active, deal_qty, deal_price, image_url, is_offer')
         .order('sort_order').order('name'),
     ]);
 
@@ -3111,15 +3140,18 @@ async function updateOrderStatus(status) {
 }
 
 // ============ STOCK ============
+// Names of categories that are special offers — their products are managed
+// under "Special offers", not in this everyday product list.
+function offerCategoryNames() {
+  return new Set((categories || []).filter(c => c.is_offer).map(c => c.name));
+}
+
 function renderStock() {
   const list = document.getElementById('stockList');
-  const offerCats = (categories || [])
-    .filter(c => c.deal_qty && c.deal_price)
-    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  const offerNames = new Set(offerCats.map(c => c.name));
+  const offerNames = offerCategoryNames();
   const normal = sampleProducts.filter(p => !offerNames.has(p.cat));
 
-  if (sampleProducts.length === 0 && offerCats.length === 0) {
+  if (normal.length === 0) {
     list.innerHTML = `<div style="text-align:center;padding:40px 20px;color:var(--ink-soft);">
       <p style="font-size:15px;margin:0 0 6px">No products yet</p>
       <p style="font-size:13px;margin:0">Click <strong>+ Add Product</strong> above to get started.</p>
@@ -3128,9 +3160,7 @@ function renderStock() {
     return;
   }
 
-  const offerPanels = offerCats.map(c => renderOfferPanel(c)).join('');
-  const rows = normal.map(p => productRowHtml(p)).join('');
-  list.innerHTML = offerPanels + rows;
+  list.innerHTML = normal.map(p => productRowHtml(p)).join('');
   updateLiveCount();
 }
 
@@ -3154,30 +3184,77 @@ function productRowHtml(p) {
     </div>`;
 }
 
-// A whole mix & match offer shown as one grouped panel, right in the
-// availability list: its items + a quick-add box + bulk "paste a list".
-function renderOfferPanel(c) {
-  const qty = Math.round(c.deal_qty), price = Number(c.deal_price);
-  const each = price / qty;
-  const items = sampleProducts.filter(p => p.cat === c.name);
+// ============ SPECIAL OFFERS MANAGER ============
+let openOfferId = null;   // which offer's editor is expanded
+
+function openOffersManager() {
+  renderOffersManager();
+  document.getElementById('offersModal').classList.add('show');
+}
+
+function renderOffersManager() {
+  const wrap = document.getElementById('offersList');
+  if (!wrap) return;
+  const offers = (categories || []).filter(c => c.is_offer)
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  if (!offers.length) {
+    wrap.innerHTML = `<p style="font-size:13px;color:var(--ink-soft);text-align:center;padding:14px">No offers yet — create one below (e.g. “Mix &amp; Match”, then set 3 for £15).</p>`;
+    return;
+  }
+  wrap.innerHTML = offers.map(c => openOfferId === c.id ? offerEditorHtml(c) : offerSummaryHtml(c)).join('');
+}
+
+// Collapsed one-row summary of an offer.
+function offerSummaryHtml(c) {
   const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const count = sampleProducts.filter(p => p.cat === c.name).length;
+  const img = c.image_url || '';
+  const priced = c.deal_qty && c.deal_price;
+  const dealTxt = priced ? `${Math.round(c.deal_qty)} for £${Number(c.deal_price).toFixed(2)}` : 'price not set';
+  return `
+    <div class="stock-row" style="padding:11px 13px;align-items:center;gap:11px">
+      <div class="sr-img" style="width:48px;height:48px;flex-shrink:0">
+        ${img ? `<img src="${img}" alt="${esc(c.name)}" style="width:100%;height:100%;object-fit:cover;border-radius:7px">` : `<span class="img-placeholder">🏷</span>`}
+      </div>
+      <div class="sr-main" style="flex:1">
+        <h4>${esc(c.name)}</h4>
+        <span class="cat-tag" style="background:${priced?'var(--gold-soft,#f0e2c2)':'#fde2e2'};color:${priced?'var(--navy)':'#c0392b'}">🏷 ${dealTxt}</span>
+        <span class="cat-tag">${count} pack${count===1?'':'s'}</span>
+      </div>
+      <button onclick="toggleOfferEditor('${c.id}')" class="btn-navy" style="font-size:11.5px;font-weight:800;padding:6px 13px;border-radius:7px;flex-shrink:0">Manage</button>
+      <button onclick="deleteOffer('${c.id}')" style="font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;background:#fff0f0;border:1px solid #fcc;color:#c0392b;cursor:pointer;flex-shrink:0">Delete</button>
+    </div>`;
+}
+
+// Expanded editor for one offer: name, price rule, photo, items, paste.
+function offerEditorHtml(c) {
+  const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const items = sampleProducts.filter(p => p.cat === c.name);
+  const img = c.image_url || '';
+  const priced = c.deal_qty && c.deal_price;
+  const each = priced ? (Number(c.deal_price) / Math.round(c.deal_qty)) : 0;
   const itemRows = items.length
     ? items.map(p => `
-        <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:#fff;border:1px solid var(--line);border-radius:8px">
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#fff;border:1px solid var(--line);border-radius:8px">
           <span style="flex:1;font-size:13px;color:var(--ink)">${esc(p.name)}</span>
           <button onclick="removeOfferItem('${p.id}')" title="Remove" style="font-size:11px;font-weight:700;padding:4px 9px;border-radius:6px;background:#fff0f0;border:1px solid #fcc;color:#c0392b;cursor:pointer">Remove</button>
         </div>`).join('')
-    : `<p style="font-size:12.5px;color:var(--ink-soft);grid-column:1/-1;margin:0">No items yet — add the packs customers can choose from below.</p>`;
-  const img = c.image_url || '';
+    : `<p style="font-size:12.5px;color:var(--ink-soft);grid-column:1/-1;margin:0">No packs yet — add them below.</p>`;
   return `
     <div class="stock-row" style="flex-direction:column;align-items:stretch;gap:12px;padding:15px 16px;border:2px solid var(--gold,#b8924a);background:var(--gold-soft,#f7efdd)">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <span style="font-size:22px">🏷</span>
-        <div style="flex:1;min-width:160px">
-          <h4 style="font-family:var(--display);font-size:17px;color:var(--navy);margin:0">${esc(c.name)} — pick ${qty} for £${price.toFixed(2)}</h4>
-          <p style="font-size:12px;color:var(--ink-soft);margin:2px 0 0">Mix &amp; match offer · ${items.length} item${items.length===1?'':'s'} · customers pick any ${qty} for £${price.toFixed(2)} (£${each.toFixed(2)} each)</p>
-        </div>
-        <span class="cat-tag" style="background:var(--navy);color:#fff">MIX &amp; MATCH</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input value="${esc(c.name)}" onchange="renameCategory('${c.id}',this.value)" aria-label="Offer name"
+          style="flex:1;font-family:var(--display);font-size:17px;font-weight:700;color:var(--navy);border:1px solid transparent;background:transparent;border-radius:7px;padding:5px 7px"
+          onfocus="this.style.borderColor='var(--line)';this.style.background='#fff'" onblur="this.style.borderColor='transparent';this.style.background='transparent'">
+        <button onclick="toggleOfferEditor('${c.id}')" style="font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;background:#fff;border:1px solid var(--line);color:var(--navy);cursor:pointer;flex-shrink:0">Close</button>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink)">
+        <span style="font-weight:700">Customers pick</span>
+        <input type="number" min="2" step="1" value="${c.deal_qty||''}" placeholder="3" onchange="setCategoryDeal('${c.id}','qty',this.value)" style="width:52px;border:1px solid var(--line);border-radius:6px;padding:5px 6px;font-size:13px;text-align:center">
+        <span style="font-weight:700">for £</span>
+        <input type="number" min="0" step="0.50" value="${c.deal_price!=null?Number(c.deal_price):''}" placeholder="15.00" onchange="setCategoryDeal('${c.id}','price',this.value)" style="width:70px;border:1px solid var(--line);border-radius:6px;padding:5px 6px;font-size:13px;text-align:right">
+        ${priced ? `<span style="color:var(--ink-soft);font-size:12px">= £${each.toFixed(2)} each</span>` : ''}
       </div>
 
       <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:9px;padding:10px 12px">
@@ -3185,31 +3262,83 @@ function renderOfferPanel(c) {
           ${img ? `<img src="${img}" alt="${esc(c.name)}" id="offimg-${c.id}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">` : `<span class="img-placeholder">📷</span><img src="" id="offimg-${c.id}" style="display:none">`}
           <input type="file" accept="image/*" onchange="handleOfferImgUpload(event,'${c.id}')" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%" aria-label="Upload offer photo">
         </div>
-        <div style="font-size:12px;color:var(--ink-soft)">
-          <b style="color:var(--ink)">Offer photo</b> — one picture for the whole offer (like your flyer). Tap to ${img ? 'change' : 'add'} it. Shows on the website offer tile.
-        </div>
+        <div style="font-size:12px;color:var(--ink-soft)"><b style="color:var(--ink)">Offer photo</b> — one picture for the whole offer (like your flyer). Tap to ${img ? 'change' : 'add'} it.</div>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">
-        ${itemRows}
+      <div>
+        <div style="font-size:11.5px;font-weight:800;color:var(--navy);margin-bottom:6px">Packs customers can choose from (${items.length})</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:7px">${itemRows}</div>
       </div>
 
       <div style="display:flex;gap:7px;flex-wrap:wrap">
-        <input id="offer-add-${c.id}" type="text" placeholder="Add one item — e.g. Homemade Beef Burgers" onkeydown="if(event.key==='Enter'){event.preventDefault();addOfferItem('${c.id}')}" style="flex:1;min-width:200px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13px" aria-label="New offer item">
-        <button onclick="addOfferItem('${c.id}')" class="btn-navy" style="padding:10px 16px;font-size:13px;font-weight:800;border-radius:8px;white-space:nowrap">+ Add item</button>
+        <input id="offer-add-${c.id}" type="text" placeholder="Add one pack — e.g. Homemade Beef Burgers" onkeydown="if(event.key==='Enter'){event.preventDefault();addOfferItem('${c.id}')}" style="flex:1;min-width:200px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13px" aria-label="New offer item">
+        <button onclick="addOfferItem('${c.id}')" class="btn-navy" style="padding:10px 16px;font-size:13px;font-weight:800;border-radius:8px;white-space:nowrap">+ Add</button>
         <button onclick="toggleBulkPaste('${c.id}')" style="padding:10px 14px;font-size:12.5px;font-weight:700;border-radius:8px;background:#fff;border:1px solid var(--line);color:var(--navy);cursor:pointer;white-space:nowrap">📋 Paste a list</button>
       </div>
 
       <div id="bulk-${c.id}" style="display:none">
-        <textarea id="bulk-text-${c.id}" placeholder="Paste your whole list — one item per line:&#10;Homemade Beef Burgers&#10;Chicken Thighs&#10;Lamb Kofta's&#10;…" style="width:100%;min-height:120px;border:1px solid var(--line);border-radius:8px;padding:11px 12px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
+        <textarea id="bulk-text-${c.id}" placeholder="Paste your whole list — one pack per line:&#10;Homemade Beef Burgers&#10;Chicken Thighs&#10;Lamb Kofta's&#10;…" style="width:100%;min-height:120px;border:1px solid var(--line);border-radius:8px;padding:11px 12px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
         <div style="display:flex;gap:7px;margin-top:7px">
-          <button onclick="addOfferItemsBulk('${c.id}')" class="btn-navy" style="padding:9px 16px;font-size:13px;font-weight:800;border-radius:8px">Add all items</button>
+          <button onclick="addOfferItemsBulk('${c.id}')" class="btn-navy" style="padding:9px 16px;font-size:13px;font-weight:800;border-radius:8px">Add all</button>
           <button onclick="toggleBulkPaste('${c.id}')" style="padding:9px 14px;font-size:12.5px;font-weight:700;border-radius:8px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer">Cancel</button>
         </div>
       </div>
-
-      <p style="font-size:11.5px;color:var(--ink-soft);margin:0">To change the “${qty} for £${price.toFixed(2)}” price, use <b>Manage categories</b>. No need to price items individually — the offer sets it.</p>
     </div>`;
+}
+
+function toggleOfferEditor(id) {
+  openOfferId = (openOfferId === id) ? null : id;
+  renderOffersManager();
+}
+
+async function createOffer() {
+  const input = document.getElementById('newOfferName');
+  const name = (input?.value || '').trim();
+  if (!name) { input?.focus(); return; }
+  if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) { alert('A category or offer already uses that name.'); return; }
+  const slug = slugify(name);
+  const sort_order = (categories.reduce((m, c) => Math.max(m, c.sort_order || 0), 0)) + 1;
+  const cat = { id: 'tc' + Date.now(), name, slug, sort_order, is_active: true, is_offer: true, deal_qty: null, deal_price: null, image_url: null };
+  categories.push(cat);
+  if (input) input.value = '';
+  openOfferId = cat.id;
+  renderOffersManager();
+  if (supabase) {
+    const { data, error } = await supabase.from('categories')
+      .insert({ name, slug, sort_order, is_active: true, is_offer: true })
+      .select('id').single();
+    if (error) { console.error('Create offer error:', error); alert('Could not save the offer: ' + error.message); }
+    else if (data) {
+      cat.id = data.id; openOfferId = data.id;
+      // If Jon already typed the price before the save landed, persist it now.
+      if (cat.deal_qty || cat.deal_price) {
+        await supabase.from('categories').update({ deal_qty: cat.deal_qty, deal_price: cat.deal_price }).eq('id', data.id);
+      }
+      renderOffersManager();
+    }
+  }
+}
+
+async function deleteOffer(id) {
+  const c = categories.find(x => x.id === id);
+  if (!c) return;
+  const count = sampleProducts.filter(p => p.cat === c.name).length;
+  if (!confirm(`Delete the “${c.name}” offer${count ? ` and its ${count} pack${count===1?'':'s'}` : ''}? This cannot be undone.`)) return;
+  // delete its products first
+  const its = sampleProducts.filter(p => p.cat === c.name);
+  const isUUID = x => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
+  if (supabase) {
+    for (const p of its) { if (isUUID(p.id)) await supabase.from('products').delete().eq('id', p.id); }
+    if (isUUID(id)) {
+      const { error } = await supabase.from('categories').delete().eq('id', id);
+      if (error) { console.error('Delete offer error:', error); alert('Could not delete the offer: ' + error.message); return; }
+    }
+  }
+  its.forEach(p => { const i = sampleProducts.findIndex(x => x.id === p.id); if (i !== -1) sampleProducts.splice(i, 1); });
+  const ci = categories.findIndex(x => x.id === id); if (ci !== -1) categories.splice(ci, 1);
+  if (openOfferId === id) openOfferId = null;
+  renderOffersManager();
+  renderStock();
 }
 
 function toggleBulkPaste(catId) {
@@ -3241,8 +3370,7 @@ async function addOfferItemsBulk(catId) {
   }
   if (ta) ta.value = '';
   toggleBulkPaste(catId);
-  renderStock();
-  renderCategoryManager();
+  renderOffersManager();
   if (supabase && toInsert.length) {
     const { data, error } = await supabase.from('products')
       .insert(toInsert.map(l => ({ name: l.name, category: c.name, price, description: null, is_available: true })))
@@ -3770,6 +3898,7 @@ function renderCategoryOptions(current) {
   const sel = document.getElementById('ep-cat');
   if (!sel) return;
   const names = categories
+    .filter(c => !c.is_offer)   // offers aren't pickable for single products
     .filter(c => c.is_active !== false || c.name === current)
     .sort((a,b) => (a.sort_order||0) - (b.sort_order||0))
     .map(c => c.name);
@@ -3787,7 +3916,8 @@ function openCategoryManager() {
 function renderCategoryManager() {
   const wrap = document.getElementById('catList');
   if (!wrap) return;
-  const sorted = [...categories].sort((a,b) => (a.sort_order||0) - (b.sort_order||0));
+  // Only everyday categories here — special offers live in their own manager.
+  const sorted = [...categories].filter(c => !c.is_offer).sort((a,b) => (a.sort_order||0) - (b.sort_order||0));
   if (!sorted.length) {
     wrap.innerHTML = `<p style="font-size:13px;color:var(--ink-soft);text-align:center;padding:14px">No categories yet — add one below.</p>`;
     return;
@@ -3795,34 +3925,22 @@ function renderCategoryManager() {
   wrap.innerHTML = sorted.map((c, i) => {
     const count = sampleProducts.filter(p => p.cat === c.name).length;
     const off = c.is_active === false;
-    const isDeal = c.deal_qty && c.deal_price;
     return `
-    <div class="stock-row${off ? ' off' : ''}" style="flex-direction:column;align-items:stretch;padding:10px 12px;gap:8px">
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="display:flex;flex-direction:column;gap:2px">
-          <button onclick="moveCategory('${c.id}',-1)" ${i===0?'disabled':''} style="border:1px solid var(--line);background:var(--cream);border-radius:6px;width:26px;height:20px;cursor:pointer;font-size:11px;line-height:1;opacity:${i===0?'.4':'1'}">▲</button>
-          <button onclick="moveCategory('${c.id}',1)" ${i===sorted.length-1?'disabled':''} style="border:1px solid var(--line);background:var(--cream);border-radius:6px;width:26px;height:20px;cursor:pointer;font-size:11px;line-height:1;opacity:${i===sorted.length-1?'.4':'1'}">▼</button>
-        </div>
-        <div class="sr-main" style="flex:1">
-          <input value="${(c.name||'').replace(/"/g,'&quot;')}" onchange="renameCategory('${c.id}',this.value)" aria-label="Category name"
-            style="font-size:13.5px;font-weight:800;color:var(--ink);border:1px solid transparent;background:transparent;border-radius:6px;padding:4px 6px;width:100%"
-            onfocus="this.style.borderColor='var(--line)';this.style.background='#fff'"
-            onblur="this.style.borderColor='transparent';this.style.background='transparent'">
-          <span class="cat-tag" style="margin-left:6px">${count} product${count===1?'':'s'}</span>
-          ${isDeal ? `<span class="cat-tag" style="margin-left:4px;background:var(--gold-soft,#f0e2c2);color:var(--navy)">🏷 ${c.deal_qty} for £${Number(c.deal_price).toFixed(2)}</span>` : ''}
-        </div>
-        <span class="sr-state ${off ? 'hidden' : 'live'}">${off ? 'Hidden' : 'Shown'}</span>
-        <div class="toggle${off ? '' : ' on'}" onclick="toggleCategoryActive('${c.id}')" role="switch" aria-checked="${!off}" title="Show on website"></div>
-        <button onclick="deleteCategory('${c.id}')" style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:7px;background:#fff0f0;border:1px solid #fcc;color:#c0392b;cursor:pointer;flex-shrink:0">Delete</button>
+    <div class="stock-row${off ? ' off' : ''}" style="align-items:center;padding:10px 12px;gap:10px">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <button onclick="moveCategory('${c.id}',-1)" ${i===0?'disabled':''} style="border:1px solid var(--line);background:var(--cream);border-radius:6px;width:26px;height:20px;cursor:pointer;font-size:11px;line-height:1;opacity:${i===0?'.4':'1'}">▲</button>
+        <button onclick="moveCategory('${c.id}',1)" ${i===sorted.length-1?'disabled':''} style="border:1px solid var(--line);background:var(--cream);border-radius:6px;width:26px;height:20px;cursor:pointer;font-size:11px;line-height:1;opacity:${i===sorted.length-1?'.4':'1'}">▼</button>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-soft);padding-left:36px;flex-wrap:wrap">
-        <span>🏷 Mix &amp; match offer:</span> pick
-        <input type="number" min="2" step="1" value="${c.deal_qty||''}" placeholder="–" onchange="setCategoryDeal('${c.id}','qty',this.value)" style="width:46px;border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px;text-align:center">
-        for £
-        <input type="number" min="0" step="0.50" value="${c.deal_price!=null?Number(c.deal_price):''}" placeholder="–" onchange="setCategoryDeal('${c.id}','price',this.value)" style="width:60px;border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px;text-align:right">
-        <span style="color:var(--ink-soft)">(leave blank for a normal category)</span>
+      <div class="sr-main" style="flex:1">
+        <input value="${(c.name||'').replace(/"/g,'&quot;')}" onchange="renameCategory('${c.id}',this.value)" aria-label="Category name"
+          style="font-size:13.5px;font-weight:800;color:var(--ink);border:1px solid transparent;background:transparent;border-radius:6px;padding:4px 6px;width:100%"
+          onfocus="this.style.borderColor='var(--line)';this.style.background='#fff'"
+          onblur="this.style.borderColor='transparent';this.style.background='transparent'">
+        <span class="cat-tag" style="margin-left:6px">${count} product${count===1?'':'s'}</span>
       </div>
-      ${isDeal ? `<div style="font-size:11.5px;color:var(--navy);background:#fff;border:1px solid var(--gold,#b8924a);border-radius:8px;padding:8px 11px;margin:2px 0 0 36px;max-width:540px">✅ Offer set. Close this and add the items customers can pick on the <b>Availability</b> page — the gold <b>${(c.name||'').replace(/</g,'&lt;')}</b> panel at the top has an <b>Add item</b> box and a <b>Paste a list</b> option.</div>` : ''}
+      <span class="sr-state ${off ? 'hidden' : 'live'}">${off ? 'Hidden' : 'Shown'}</span>
+      <div class="toggle${off ? '' : ' on'}" onclick="toggleCategoryActive('${c.id}')" role="switch" aria-checked="${!off}" title="Show on website"></div>
+      <button onclick="deleteCategory('${c.id}')" style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:7px;background:#fff0f0;border:1px solid #fcc;color:#c0392b;cursor:pointer;flex-shrink:0">Delete</button>
     </div>`;
   }).join('');
 }
@@ -3843,8 +3961,7 @@ async function addOfferItem(catId) {
   const local = { id:'sp'+Date.now(), name, cat:c.name, price, desc:'', live:true, img:null };
   sampleProducts.push(local);
   if (input) input.value = '';
-  renderCategoryManager();
-  renderStock();
+  renderOffersManager();
   // keep focus flowing so Jon can rattle off items
   setTimeout(() => document.getElementById('offer-add-' + catId)?.focus(), 0);
   if (supabase) {
@@ -3862,8 +3979,7 @@ async function removeOfferItem(productId) {
   if (!confirm(`Remove "${p.name}" from this offer? It will be deleted from the website.`)) return;
   const idx = sampleProducts.findIndex(x => x.id === productId);
   if (idx !== -1) sampleProducts.splice(idx, 1);
-  renderCategoryManager();
-  renderStock();
+  renderOffersManager();
   const isUUID = x => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
   if (supabase && isUUID(productId)) {
     const { error } = await supabase.from('products').delete().eq('id', productId);
@@ -3880,7 +3996,7 @@ async function addCategory() {
   }
   const slug = slugify(name);
   const sort_order = (categories.reduce((m,c) => Math.max(m, c.sort_order||0), 0)) + 1;
-  const cat = { id:'tc'+Date.now(), name, slug, sort_order, is_active:true };
+  const cat = { id:'tc'+Date.now(), name, slug, sort_order, is_active:true, is_offer:false };
   categories.push(cat);
   input.value = '';
   renderCategoryManager();
@@ -3888,14 +4004,11 @@ async function addCategory() {
 
   if (supabase) {
     const { data, error } = await supabase.from('categories')
-      .insert({ name, slug, sort_order, is_active:true })
+      .insert({ name, slug, sort_order, is_active:true, is_offer:false })
       .select('id').single();
     if (error) { console.error('Add category error:', error); alert('Could not save category: ' + error.message); }
     else if (data) {
       cat.id = data.id;
-      // Re-render so the new row's controls (incl. the offer inputs) use the
-      // real database id — otherwise the first 'pick 3 for £15' save targets
-      // the temporary id and silently misses.
       renderCategoryManager();
       renderCategoryOptions();
     }
@@ -3917,6 +4030,7 @@ async function renameCategory(id, newName) {
   sampleProducts.forEach(p => { if (p.cat === oldName) p.cat = newName; });
   renderCategoryManager();
   renderCategoryOptions();
+  renderOffersManager();
   renderStock();
 
   if (supabase) {
@@ -3976,8 +4090,7 @@ async function setCategoryDeal(id, field, value) {
   const v = (value === '' || value == null) ? null : parseFloat(value);
   if (field === 'qty')   c.deal_qty   = (v && v >= 2) ? Math.round(v) : null;
   if (field === 'price') c.deal_price = (v != null && v >= 0) ? v : null;
-  renderCategoryManager();
-  if (typeof renderCategoryOptions === 'function') renderCategoryOptions();
+  renderOffersManager();
   if (supabase) {
     const isUUID = x => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
     if (isUUID(id)) {
@@ -7592,7 +7705,7 @@ const HELP_PAGES = {
       { icon:'💷', title:'Changing prices', body:'Click the price on any product to edit it. Changes take effect immediately on the website once the database is connected.' },
       { icon:'➕', title:'Adding a new product', body:'Press <strong>+ Add product</strong> at the top right. Fill in the name, pick a category, set the price, then save. The product goes live on the website straight away.' },
       { icon:'🏷️', title:'Managing categories', body:'Press <strong>Manage categories</strong> to add, rename, reorder or hide the sections customers browse by on the website (Chicken, Steak & Beef, and so on). Add a new one any time — type the name and press <strong>Add</strong>. Rename one and every product in it updates automatically. Hide a category to take it off the website without losing it, or delete it (its products move to "Other"). The order you set here is the order customers see.' },
-      { icon:'🏷️', title:'Mix & match offers (e.g. 3 for £15)', body:'Two quick steps. <strong>1) Set the offer:</strong> in <strong>Manage categories</strong>, create a category (e.g. "Mix &amp; Match") and on its <strong>Mix &amp; match offer</strong> line set <strong>pick __ for £__</strong> (e.g. pick 3 for £15), then close. <strong>2) Add the items + a photo:</strong> a gold offer panel now sits at the top of the <strong>Availability</strong> page. Type each pack in its <strong>Add item</strong> box (press Enter to keep going), or press <strong>📋 Paste a list</strong> and paste your whole flyer — one item per line — then <strong>Add all items</strong> to load 20–30 at once. Tap the <strong>Offer photo</strong> box to add one picture for the whole offer (like your flyer). No prices needed on the items; the offer sets them. On the website the offer shows as <strong>one tile</strong> — your picture, "pick 3 for £15", and the items each with a +/− so the customer dials up any 3 (including more than one of the same pack), and can add more than one set. The exact packs they picked come through on the order so you know what to deliver. The items stay off the main shop grid so they don\'t bury your core products. <strong>Remove</strong> takes an item out. Leave the offer boxes blank for a normal category.' },
+      { icon:'🏷️', title:'Special offers (e.g. Mix & Match — 3 for £15)', body:'Offers have their own home now — the <strong>🏷 Special offers</strong> button on the Availability page (separate from your everyday categories). <strong>1)</strong> Press it and <strong>Create a special offer</strong> — give it a name (e.g. "Mix &amp; Match"). <strong>2)</strong> In its editor set <strong>pick __ for £__</strong> (e.g. 3 for £15), tap the <strong>Offer photo</strong> box to add one picture (like your flyer), then add the packs — type each in the <strong>Add</strong> box, or press <strong>📋 Paste a list</strong> and paste your whole flyer (one per line) then <strong>Add all</strong> to load 20–30 at once. No prices on the packs — the offer sets them. Each offer collapses to a single tidy row, so your offers don\'t take over the page; press <strong>Manage</strong> to open one. On the website the offer shows as <strong>one normal-sized card</strong>; the customer clicks it, a picker opens with +/− on each pack (so they can choose any 3 — even more than one of the same), and the chosen packs drop into the basket. The exact packs come through on the order so you know what to deliver. Offers never clutter the everyday product list.' },
       { icon:'📷', title:'Adding a photo', body:'Tap the photo box on any product and choose a picture. You\'ll see it straight away. For a brand-new product, the photo is saved up to the website when you press <strong>Save changes</strong> — so always Save after adding a photo. For a product that\'s already saved, the photo uploads right away.' },
     ]
   },
