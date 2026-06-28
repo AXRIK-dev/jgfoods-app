@@ -1285,7 +1285,7 @@
   <!-- BANK PAYMENTS -->
   <div class="tab-panel" id="finance-bankpay">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-      <p style="font-size:13px;color:var(--ink-soft)">Track bank transfer payments from trade customers by delivery day.</p>
+      <p style="font-size:13px;color:var(--ink-soft)">Bank-transfer payments by customer and delivery day — filled in automatically when you mark an order paid by bank transfer. “Outstanding” is what each customer still owes.</p>
       <button class="btn-gold" onclick="exportBankPayments()">⬇ Export</button>
     </div>
     <div style="overflow-x:auto">
@@ -2186,7 +2186,7 @@ async function loadAppData() {
 
       supabase
         .from('invoices')
-        .select('id, invoice_number, total_amount, status, created_at, customers (name), invoice_payments (method, amount)')
+        .select('id, order_id, invoice_number, total_amount, status, created_at, customers (name, customer_type), invoice_payments (method, amount)')
         .order('created_at', { ascending: false })
         .limit(200),
 
@@ -2272,16 +2272,23 @@ async function loadAppData() {
     // ── Invoices ──────────────────────────────────────────
     if (!invoicesRes.error) {
       sampleInvoices.length = 0;
-      (invoicesRes.data || []).forEach(inv => sampleInvoices.push({
-        id:       inv.id,
-        ref:      inv.invoice_number || '',
-        name:     inv.customers?.name || '',
-        date:     new Date(inv.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-        created:  inv.created_at,
-        amount:   parseFloat(inv.total_amount),
-        status:   inv.status,
-        payments: (inv.invoice_payments || []).map(p => ({ method: p.method, amount: parseFloat(p.amount) || 0 })),
-      }));
+      (invoicesRes.data || []).forEach(inv => {
+        const ord = inv.order_id ? sampleOrders.find(o => o.id === inv.order_id) : null;
+        sampleInvoices.push({
+          id:       inv.id,
+          orderId:  inv.order_id || null,
+          ref:      inv.invoice_number || '',
+          name:     inv.customers?.name || '',
+          custType: inv.customers?.customer_type === 'commercial' ? 'trade' : (inv.customers?.customer_type || (ord?.type) || 'domestic'),
+          dayLabel: ord?.dayLabel || '',
+          deliveryDate: ord?.date || null,
+          date:     new Date(inv.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+          created:  inv.created_at,
+          amount:   parseFloat(inv.total_amount),
+          status:   inv.status,
+          payments: (inv.invoice_payments || []).map(p => ({ method: p.method, amount: parseFloat(p.amount) || 0 })),
+        });
+      });
     }
 
     // ── Re-render active page and always refresh dashboard stats ──
@@ -7354,47 +7361,86 @@ function exportWeekly() {
 }
 
 // ============ BANK PAYMENTS TABLE ============
+// Build the bank-transfer breakdown straight from real invoice payments
+// (method 'bacs'), grouped by customer and by the order's delivery day.
+const WEEKDAY_ORDER = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+
+function bankPaymentsModel() {
+  // Which day columns to show: every weekday that actually has a bank payment,
+  // plus the business's open delivery days — in weekday order.
+  const dayset = new Set();
+  (sampleInvoices || []).forEach(inv => {
+    const hasBank = (inv.payments || []).some(p => p.method === 'bacs' && p.amount > 0);
+    if (hasBank && inv.dayLabel) dayset.add(inv.dayLabel);
+  });
+  (runDaySlots || []).forEach(s => { if (s.is_open && s.day_label) dayset.add(s.day_label); });
+  let days = WEEKDAY_ORDER.filter(d => dayset.has(d));
+  if (!days.length) days = ['Monday','Thursday'];
+
+  // Group payments + outstanding by customer.
+  const rows = {};
+  const row = name => (rows[name] = rows[name] || { name, byDay: {}, total: 0, outstanding: 0 });
+  (sampleInvoices || []).forEach(inv => {
+    const bank = (inv.payments || []).filter(p => p.method === 'bacs').reduce((s,p)=>s+(p.amount||0),0);
+    const paid = (inv.payments || []).reduce((s,p)=>s+(p.amount||0),0);
+    const outstanding = Math.max(0, (inv.amount||0) - paid);
+    if (bank <= 0 && outstanding <= 0.001) return;
+    const r = row(inv.name || 'Unknown');
+    if (bank > 0) {
+      const d = inv.dayLabel || 'Other';
+      r.byDay[d] = (r.byDay[d] || 0) + bank;
+      r.total += bank;
+    }
+    r.outstanding += outstanding;
+  });
+  return { days, rows: Object.values(rows).sort((a,b)=>a.name.localeCompare(b.name)) };
+}
+
 function renderBankPaymentsTable() {
   const table = document.getElementById('bankPayTable');
   if (!table) return;
-  const tradeCusts = sampleCustomers.filter(c => c.type === 'trade');
+  const { days, rows } = bankPaymentsModel();
+  const gbp = n => '£' + (n||0).toFixed(2);
+  const th = (txt, align='right') => `<th style="text-align:${align};background:var(--navy);color:#fff;padding:9px 12px;font-size:11px;font-weight:700">${txt}</th>`;
+  const dayTotals = {}; days.forEach(d => dayTotals[d] = 0);
+  let grandTotal = 0, grandOut = 0;
+
+  const bodyRows = rows.length ? rows.map(r => {
+    grandTotal += r.total; grandOut += r.outstanding;
+    const cells = days.map(d => { const v = r.byDay[d] || 0; dayTotals[d] += v; return `<td style="padding:9px 12px;border-bottom:1px solid var(--line-soft);text-align:right;font-size:13px;color:var(--navy)">${v ? gbp(v) : '—'}</td>`; }).join('');
+    return `<tr>
+      <td style="padding:9px 12px;border-bottom:1px solid var(--line-soft);font-size:13px;font-weight:700;color:var(--ink)">${r.name}</td>
+      ${cells}
+      <td style="padding:9px 12px;border-bottom:1px solid var(--line-soft);text-align:right;font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy)">${gbp(r.total)}</td>
+      <td style="padding:9px 12px;border-bottom:1px solid var(--line-soft);text-align:right;font-weight:700;color:${r.outstanding>0.001?'var(--oxblood)':'var(--ink-soft)'}">${r.outstanding>0.001?gbp(r.outstanding):'—'}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="${days.length+3}" style="padding:18px 12px;text-align:center;color:var(--ink-soft);font-size:13px">No bank-transfer payments yet. When you mark an order paid by <b>bank transfer</b>, it appears here automatically.</td></tr>`;
+
   table.innerHTML = `
     <thead><tr>
-      <th style="text-align:left;background:var(--navy);color:#fff;padding:9px 12px;font-size:11px;font-weight:700">Customer</th>
-      <th style="background:var(--navy);color:#fff;padding:9px 12px;font-size:11px;font-weight:700;text-align:right">Monday</th>
-      <th style="background:var(--navy);color:#fff;padding:9px 12px;font-size:11px;font-weight:700;text-align:right">Thursday</th>
-      <th style="background:var(--navy);color:#fff;padding:9px 12px;font-size:11px;font-weight:700;text-align:right">Total</th>
-      <th style="background:var(--navy);color:#fff;padding:9px 12px;font-size:11px;font-weight:700;text-align:right">Outstanding</th>
+      ${th('Customer','left')}
+      ${days.map(d => th(d)).join('')}
+      ${th('Total')}
+      ${th('Outstanding')}
     </tr></thead>
-    <tbody>
-      ${tradeCusts.map(c => `
-        <tr>
-          <td style="padding:9px 12px;border-bottom:1px solid var(--line-soft);font-size:13px;font-weight:700;color:var(--ink)">${c.name}</td>
-          <td style="padding:9px 12px;border-bottom:1px solid var(--line-soft);text-align:right"><input type="number" step="0.01" placeholder="0.00" style="width:80px;font-size:13px;border:none;background:transparent;text-align:right;font-family:var(--body);color:var(--navy)"></td>
-          <td style="padding:9px 12px;border-bottom:1px solid var(--line-soft);text-align:right"><input type="number" step="0.01" placeholder="0.00" style="width:80px;font-size:13px;border:none;background:transparent;text-align:right;font-family:var(--body);color:var(--navy)"></td>
-          <td style="padding:9px 12px;border-bottom:1px solid var(--line-soft);text-align:right;font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy)">£0.00</td>
-          <td style="padding:9px 12px;border-bottom:1px solid var(--line-soft);text-align:right"><input type="number" step="0.01" placeholder="0.00" style="width:80px;font-size:13px;border:none;background:transparent;text-align:right;font-family:var(--body);color:var(--oxblood);font-weight:700"></td>
-        </tr>
-      `).join('')}
-    </tbody>
+    <tbody>${bodyRows}</tbody>
     <tfoot>
       <tr style="background:var(--cream)">
         <td style="padding:10px 12px;font-weight:800;font-size:13px;color:var(--ink)">Totals</td>
-        <td style="padding:10px 12px;text-align:right;font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy)">£0.00</td>
-        <td style="padding:10px 12px;text-align:right;font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy)">£0.00</td>
-        <td style="padding:10px 12px;text-align:right;font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy)">£0.00</td>
-        <td style="padding:10px 12px;text-align:right;font-family:var(--display);font-size:14px;font-weight:600;color:var(--oxblood)">£0.00</td>
+        ${days.map(d => `<td style="padding:10px 12px;text-align:right;font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy)">${gbp(dayTotals[d])}</td>`).join('')}
+        <td style="padding:10px 12px;text-align:right;font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy)">${gbp(grandTotal)}</td>
+        <td style="padding:10px 12px;text-align:right;font-family:var(--display);font-size:14px;font-weight:600;color:var(--oxblood)">${gbp(grandOut)}</td>
       </tr>
-    </tfoot>
-  `;
+    </tfoot>`;
 }
 
 function exportBankPayments() {
-  const tradeCusts = sampleCustomers.filter(c => c.type === 'trade');
-  const lines = [
-    ['Customer', 'Monday', 'Thursday', 'Total', 'Outstanding'].join(','),
-    ...tradeCusts.map(c => `"${c.name}",0.00,0.00,0.00,0.00`),
-  ];
+  const { days, rows } = bankPaymentsModel();
+  const header = ['Customer', ...days, 'Total', 'Outstanding'];
+  const lines = [header.join(',')];
+  rows.forEach(r => {
+    lines.push([`"${r.name}"`, ...days.map(d => (r.byDay[d]||0).toFixed(2)), r.total.toFixed(2), r.outstanding.toFixed(2)].join(','));
+  });
   downloadCSV(lines.join('\n'), 'JG Foods Bank Payments.csv');
 }
 
@@ -7824,7 +7870,7 @@ const HELP_PAGES = {
       { icon:'📥', title:'Import past takings', body:'Already got your figures in a spreadsheet? On the Daily Sales tab, drag your Excel or CSV file onto the <strong>Import past takings</strong> box (or tap Choose file). As long as it has <strong>Date</strong>, <strong>Bank</strong> and <strong>Cash</strong> columns, it reads them straight in — so you\'re not starting from scratch. Days you already have are updated, not duplicated.' },
       { icon:'💰', title:'Cash tabs', body:'Some customers pay their full week\'s cash in one go on a set day. These are tracked in the <strong>Cash Tabs</strong> section at the bottom of the Daily tab — separate from your daily cash total. Use <strong>+ Add tab order</strong> to log each delivery against their tab. On payment day, press <strong>Settle tab</strong> and the total moves into that day\'s cash automatically.' },
       { icon:'📊', title:'Weekly Sheet tab', body:'Your weekly reconciliation. The <strong>Sales this week</strong> figure fills in <strong>automatically</strong> from your Daily Sales (marked "auto") — you don\'t touch it. You just enter the <strong>supplier payments and expenses</strong>, and the sheet works out what should be in the bank. Export it as a spreadsheet to match your existing format.' },
-      { icon:'🏦', title:'Bank Payments tab', body:'Records all payments out to suppliers and any other bank transactions. Keeps a running total so you can check it against your statement.' },
+      { icon:'🏦', title:'Bank Payments tab', body:'Shows every <strong>bank-transfer</strong> payment, grouped by customer and by the delivery day of their order — filled in automatically whenever you mark an order paid by <strong>bank transfer</strong> in a delivery run. The <strong>Outstanding</strong> column is what each customer still owes. Export it for your records any time.' },
       { icon:'📤', title:'Monthly Export tab', body:'Generates the monthly summary your accountant needs. The <strong>income (sales)</strong> rolls up <strong>automatically</strong> from your orders/Daily Sales, so it\'s always up to date — purchases and expenses come from your Weekly sheets. Pick the month and press <strong>Export</strong> to download it in the format your accountant expects.' },
     ]
   },
