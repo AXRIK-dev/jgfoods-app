@@ -3475,39 +3475,74 @@ const isProductUUID = id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0
 //  - flattens transparency, re-encodes as JPEG
 // Falls back to the original file if anything can't be processed.
 async function normalizeProductImage(file) {
+  // ALWAYS returns a clean, web-safe sRGB JPEG (upright, resized, compressed),
+  // or THROWS a friendly Error. It never returns the original file — uploading
+  // an undisplayable HEIC or a giant photo was the cause of "photos not pulling
+  // through". Whatever Jon picks, the website gets a normal JPEG or he gets a
+  // clear message telling him what to do.
   let src = file;
+
+  // 1) iPhone HEIC/HEIF → JPEG (browsers can't display HEIC)
   const isHeic = /heic|heif/i.test(file.type || '') || /\.(heic|heif)$/i.test(file.name || '');
-  if (isHeic && window.heic2any) {
+  if (isHeic) {
+    if (!window.heic2any) {
+      throw new Error('This looks like an iPhone HEIC photo and the converter is still loading. Wait a few seconds and try again — or set your iPhone to Settings → Camera → Formats → “Most Compatible”, then re-take the photo.');
+    }
     try {
-      const out = await window.heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 });
+      const out = await window.heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
       src = Array.isArray(out) ? out[0] : out;
-    } catch (e) { console.warn('HEIC convert failed:', e); }
+    } catch (e) {
+      throw new Error('That iPhone HEIC photo couldn’t be converted. Easiest fix: open the photo, screenshot it, and upload the screenshot — or upload a JPG/PNG.');
+    }
   }
+
+  // 2) Decode — createImageBitmap is the most tolerant; fall back to <img>.
+  let drawable = null, w = 0, h = 0, bmp = null;
   try {
-    const blob = await new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(src);
-      const img = new Image();
-      img.onload = () => {
-        const maxDim = 1000;
-        let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-        const scale = Math.min(1, maxDim / Math.max(w, h));
-        w = Math.max(1, Math.round(w * scale)); h = Math.max(1, Math.round(h * scale));
-        const c = document.createElement('canvas'); c.width = w; c.height = h;
-        const ctx = c.getContext('2d');
-        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h);   // flatten transparency
-        ctx.drawImage(img, 0, 0, w, h);
-        URL.revokeObjectURL(url);
-        c.toBlob(b => b ? resolve(b) : reject(new Error('encode failed')), 'image/jpeg', 0.85);
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode failed')); };
-      img.src = url;
-    });
-    return { blob, ext: 'jpg', contentType: 'image/jpeg' };
+    bmp = await createImageBitmap(src, { imageOrientation: 'from-image' });
+    drawable = bmp; w = bmp.width; h = bmp.height;
   } catch (e) {
-    console.warn('Image normalise failed — uploading original:', e);
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-    return { blob: file, ext, contentType: file.type || 'image/jpeg' };
+    try {
+      const im = await new Promise((res, rej) => {
+        const u = URL.createObjectURL(src); const x = new Image();
+        x.onload = () => { URL.revokeObjectURL(u); res(x); };
+        x.onerror = () => { URL.revokeObjectURL(u); rej(new Error('decode')); };
+        x.src = u;
+      });
+      drawable = im; w = im.naturalWidth || im.width; h = im.naturalHeight || im.height;
+    } catch (e2) {
+      throw new Error('That image couldn’t be opened. Please try a JPG or PNG — a screenshot of the picture always works.');
+    }
   }
+  if (!w || !h) throw new Error('That image looks empty or corrupted. Please try a different photo.');
+
+  // 3) Draw to canvas (white background flattens transparency), cap the size,
+  //    and compress until it's small enough to upload quickly and load fast.
+  const maxDim = 1400;
+  let scale = Math.min(1, maxDim / Math.max(w, h));
+  const drawAt = s => {
+    const cw = Math.max(1, Math.round(w * s)), ch = Math.max(1, Math.round(h * s));
+    const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cw, ch);
+    ctx.drawImage(drawable, 0, 0, cw, ch);
+    return c;
+  };
+  const encode = (c, q) => new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('encode failed')), 'image/jpeg', q));
+
+  let quality = 0.85;
+  let canvas = drawAt(scale);
+  let blob = await encode(canvas, quality);
+  const TARGET = 1400 * 1024;   // ~1.4 MB
+  let guard = 0;
+  while (blob.size > TARGET && guard < 7) {
+    guard++;
+    if (quality > 0.5) quality -= 0.15;     // first squeeze quality
+    else { scale *= 0.8; canvas = drawAt(scale); }   // then shrink dimensions
+    blob = await encode(canvas, Math.max(0.4, quality));
+  }
+  if (bmp && bmp.close) try { bmp.close(); } catch (e) {}
+  return { blob, ext: 'jpg', contentType: 'image/jpeg' };
 }
 
 async function uploadProductImage(id, file) {
@@ -3534,19 +3569,21 @@ async function handleOfferImgUpload(event, catId) {
   const file = event.target.files[0];
   if (!file) return;
   const c = categories.find(x => x.id === catId);
+  const prevImg = c ? c.image_url : null;
+  const imgEl = document.getElementById('offimg-' + catId);
+  const ph = imgEl?.previousElementSibling;
 
-  // Instant preview
+  // Instant preview (dimmed until confirmed saved)
   const reader = new FileReader();
   reader.onload = e => {
-    const imgEl = document.getElementById('offimg-' + catId);
-    if (imgEl) { imgEl.src = e.target.result; imgEl.style.display = 'block';
-      const ph = imgEl.previousElementSibling; if (ph?.classList.contains('img-placeholder')) ph.style.display = 'none'; }
+    if (imgEl) { imgEl.src = e.target.result; imgEl.style.display = 'block'; imgEl.style.opacity = '.45';
+      if (ph?.classList.contains('img-placeholder')) ph.style.display = 'none'; }
     if (c) c.image_url = e.target.result;
   };
   reader.readAsDataURL(file);
 
-  if (!supabase) return;
-  if (!isProductUUID(catId)) { alert('Please save this category first, then add the photo.'); return; }
+  if (!supabase) { if (imgEl) imgEl.style.opacity = '1'; return; }
+  if (!isProductUUID(catId)) { alert('Please save this offer first, then add the photo.'); if (imgEl) imgEl.style.opacity = '1'; return; }
   try {
     const norm = await normalizeProductImage(file);
     const path = `offers/${catId}.${norm.ext}`;
@@ -3558,46 +3595,56 @@ async function handleOfferImgUpload(event, catId) {
     const { error: dbErr } = await supabase.from('categories').update({ image_url: finalUrl }).eq('id', catId);
     if (dbErr) throw dbErr;
     if (c) c.image_url = finalUrl;
+    if (imgEl) { imgEl.src = finalUrl; imgEl.style.opacity = '1'; }
+    renderStock();   // refresh the offer's Availability row thumbnail
   } catch (err) {
     console.error('Offer image upload error:', err);
-    alert('Offer photo upload failed: ' + (err.message || err));
+    if (c) c.image_url = prevImg;
+    if (imgEl) {
+      imgEl.style.opacity = '1';
+      if (prevImg) imgEl.src = prevImg;
+      else { imgEl.style.display = 'none'; imgEl.removeAttribute('src'); if (ph?.classList.contains('img-placeholder')) ph.style.display = ''; }
+    }
+    alert('That offer photo didn’t save.\n\n' + (err.message || err) + '\n\nNothing was changed — please try another photo.');
   }
 }
 
 async function handleImgUpload(event, id) {
   const file = event.target.files[0];
   if (!file) return;
+  const p = sampleProducts.find(x => x.id === id);
+  const prevImg = p ? p.img : null;
+  const imgEl = document.getElementById('img-' + id);
+  const placeholder = imgEl?.previousElementSibling;
 
-  // Show preview immediately via FileReader
+  // Instant preview (dimmed until we know it actually saved)
   const reader = new FileReader();
-  reader.onload = function(e) {
-    const src = e.target.result;
-    const imgEl = document.getElementById('img-' + id);
-    const placeholder = imgEl?.previousElementSibling;
-    if (imgEl) { imgEl.src = src; imgEl.style.display = 'block'; }
+  reader.onload = e => {
+    if (imgEl) { imgEl.src = e.target.result; imgEl.style.display = 'block'; imgEl.style.opacity = '.45'; }
     if (placeholder?.classList.contains('img-placeholder')) placeholder.style.display = 'none';
-    const p = sampleProducts.find(x => x.id === id);
-    if (p) p.img = src;
+    if (p) p.img = e.target.result;
   };
   reader.readAsDataURL(file);
 
-  if (!supabase) return;
-  const p = sampleProducts.find(x => x.id === id);
+  if (!supabase) { if (imgEl) imgEl.style.opacity = '1'; return; }
 
-  // Brand-new product not saved yet (temp id) — stash the file and upload it
-  // once Save assigns a real id. Previously this path silently dropped the image.
-  if (!isProductUUID(id)) {
-    if (p) p._pendingImageFile = file;
-    return;
-  }
+  // Brand-new product not saved yet (temp id) — stash and upload on Save.
+  if (!isProductUUID(id)) { if (p) p._pendingImageFile = file; if (imgEl) imgEl.style.opacity = '1'; return; }
 
-  // Saved product — upload straight away
   try {
     const publicUrl = await uploadProductImage(id, file);
     if (p) { p.img = publicUrl; p._pendingImageFile = null; }
+    if (imgEl) { imgEl.src = publicUrl; imgEl.style.opacity = '1'; }
   } catch (err) {
     console.error('Image upload error:', err);
-    alert('Image upload failed: ' + (err.message || err));
+    // Roll the preview back so it never looks saved when it isn't.
+    if (p) p.img = prevImg;
+    if (imgEl) {
+      imgEl.style.opacity = '1';
+      if (prevImg) imgEl.src = prevImg;
+      else { imgEl.style.display = 'none'; imgEl.removeAttribute('src'); if (placeholder?.classList.contains('img-placeholder')) placeholder.style.display = ''; }
+    }
+    alert('That photo didn’t save.\n\n' + (err.message || err) + '\n\nNothing was changed — please try another photo.');
   }
 }
 
