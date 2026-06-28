@@ -2168,7 +2168,7 @@ async function loadAppData() {
 
       supabase
         .from('categories')
-        .select('id, name, slug, sort_order, is_active')
+        .select('id, name, slug, sort_order, is_active, deal_qty, deal_price')
         .order('sort_order').order('name'),
     ]);
 
@@ -3645,22 +3645,33 @@ function renderCategoryManager() {
   wrap.innerHTML = sorted.map((c, i) => {
     const count = sampleProducts.filter(p => p.cat === c.name).length;
     const off = c.is_active === false;
+    const isDeal = c.deal_qty && c.deal_price;
     return `
-    <div class="stock-row${off ? ' off' : ''}" style="padding:10px 12px;gap:10px">
-      <div style="display:flex;flex-direction:column;gap:2px">
-        <button onclick="moveCategory('${c.id}',-1)" ${i===0?'disabled':''} style="border:1px solid var(--line);background:var(--cream);border-radius:6px;width:26px;height:20px;cursor:pointer;font-size:11px;line-height:1;opacity:${i===0?'.4':'1'}">▲</button>
-        <button onclick="moveCategory('${c.id}',1)" ${i===sorted.length-1?'disabled':''} style="border:1px solid var(--line);background:var(--cream);border-radius:6px;width:26px;height:20px;cursor:pointer;font-size:11px;line-height:1;opacity:${i===sorted.length-1?'.4':'1'}">▼</button>
+    <div class="stock-row${off ? ' off' : ''}" style="flex-direction:column;align-items:stretch;padding:10px 12px;gap:8px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <button onclick="moveCategory('${c.id}',-1)" ${i===0?'disabled':''} style="border:1px solid var(--line);background:var(--cream);border-radius:6px;width:26px;height:20px;cursor:pointer;font-size:11px;line-height:1;opacity:${i===0?'.4':'1'}">▲</button>
+          <button onclick="moveCategory('${c.id}',1)" ${i===sorted.length-1?'disabled':''} style="border:1px solid var(--line);background:var(--cream);border-radius:6px;width:26px;height:20px;cursor:pointer;font-size:11px;line-height:1;opacity:${i===sorted.length-1?'.4':'1'}">▼</button>
+        </div>
+        <div class="sr-main" style="flex:1">
+          <input value="${(c.name||'').replace(/"/g,'&quot;')}" onchange="renameCategory('${c.id}',this.value)" aria-label="Category name"
+            style="font-size:13.5px;font-weight:800;color:var(--ink);border:1px solid transparent;background:transparent;border-radius:6px;padding:4px 6px;width:100%"
+            onfocus="this.style.borderColor='var(--line)';this.style.background='#fff'"
+            onblur="this.style.borderColor='transparent';this.style.background='transparent'">
+          <span class="cat-tag" style="margin-left:6px">${count} product${count===1?'':'s'}</span>
+          ${isDeal ? `<span class="cat-tag" style="margin-left:4px;background:var(--gold-soft,#f0e2c2);color:var(--navy)">🏷 ${c.deal_qty} for £${Number(c.deal_price).toFixed(2)}</span>` : ''}
+        </div>
+        <span class="sr-state ${off ? 'hidden' : 'live'}">${off ? 'Hidden' : 'Shown'}</span>
+        <div class="toggle${off ? '' : ' on'}" onclick="toggleCategoryActive('${c.id}')" role="switch" aria-checked="${!off}" title="Show on website"></div>
+        <button onclick="deleteCategory('${c.id}')" style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:7px;background:#fff0f0;border:1px solid #fcc;color:#c0392b;cursor:pointer;flex-shrink:0">Delete</button>
       </div>
-      <div class="sr-main" style="flex:1">
-        <input value="${(c.name||'').replace(/"/g,'&quot;')}" onchange="renameCategory('${c.id}',this.value)" aria-label="Category name"
-          style="font-size:13.5px;font-weight:800;color:var(--ink);border:1px solid transparent;background:transparent;border-radius:6px;padding:4px 6px;width:100%"
-          onfocus="this.style.borderColor='var(--line)';this.style.background='#fff'"
-          onblur="this.style.borderColor='transparent';this.style.background='transparent'">
-        <span class="cat-tag" style="margin-left:6px">${count} product${count===1?'':'s'}</span>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-soft);padding-left:36px;flex-wrap:wrap">
+        <span>🏷 Mix &amp; match offer:</span> pick
+        <input type="number" min="2" step="1" value="${c.deal_qty||''}" placeholder="–" onchange="setCategoryDeal('${c.id}','qty',this.value)" style="width:46px;border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px;text-align:center">
+        for £
+        <input type="number" min="0" step="0.50" value="${c.deal_price!=null?Number(c.deal_price):''}" placeholder="–" onchange="setCategoryDeal('${c.id}','price',this.value)" style="width:60px;border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px;text-align:right">
+        <span style="color:var(--ink-soft)">(leave blank for a normal category)</span>
       </div>
-      <span class="sr-state ${off ? 'hidden' : 'live'}">${off ? 'Hidden' : 'Shown'}</span>
-      <div class="toggle${off ? '' : ' on'}" onclick="toggleCategoryActive('${c.id}')" role="switch" aria-checked="${!off}" title="Show on website"></div>
-      <button onclick="deleteCategory('${c.id}')" style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:7px;background:#fff0f0;border:1px solid #fcc;color:#c0392b;cursor:pointer;flex-shrink:0">Delete</button>
     </div>`;
   }).join('');
 }
@@ -3726,6 +3737,24 @@ async function toggleCategoryActive(id) {
   if (supabase) {
     const { error } = await supabase.from('categories').update({ is_active:c.is_active }).eq('id', id);
     if (error) console.error('Toggle category error:', error);
+  }
+}
+
+// Turn a category into a "pick N for £X" offer (or clear it by blanking a field)
+async function setCategoryDeal(id, field, value) {
+  const c = categories.find(x => x.id === id);
+  if (!c) return;
+  const v = (value === '' || value == null) ? null : parseFloat(value);
+  if (field === 'qty')   c.deal_qty   = (v && v >= 2) ? Math.round(v) : null;
+  if (field === 'price') c.deal_price = (v != null && v >= 0) ? v : null;
+  renderCategoryManager();
+  if (typeof renderCategoryOptions === 'function') renderCategoryOptions();
+  if (supabase) {
+    const isUUID = x => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
+    if (isUUID(id)) {
+      const { error } = await supabase.from('categories').update({ deal_qty: c.deal_qty, deal_price: c.deal_price }).eq('id', id);
+      if (error) { console.error('Set category deal error:', error); alert('Could not save the offer: ' + error.message); }
+    }
   }
 }
 
@@ -7334,6 +7363,7 @@ const HELP_PAGES = {
       { icon:'💷', title:'Changing prices', body:'Click the price on any product to edit it. Changes take effect immediately on the website once the database is connected.' },
       { icon:'➕', title:'Adding a new product', body:'Press <strong>+ Add product</strong> at the top right. Fill in the name, pick a category, set the price, then save. The product goes live on the website straight away.' },
       { icon:'🏷️', title:'Managing categories', body:'Press <strong>Manage categories</strong> to add, rename, reorder or hide the sections customers browse by on the website (Chicken, Steak & Beef, and so on). Add a new one any time — type the name and press <strong>Add</strong>. Rename one and every product in it updates automatically. Hide a category to take it off the website without losing it, or delete it (its products move to "Other"). The order you set here is the order customers see.' },
+      { icon:'🏷️', title:'Mix & match offers (e.g. 3 for £15)', body:'In <strong>Manage categories</strong>, each category has a <strong>Mix &amp; match offer</strong> line: set <strong>pick __ for £__</strong> (e.g. pick 3 for £15) and every product you put in that category becomes part of that offer. On the website customers pick those items in sets (3, 6, 9…) at the deal price. To make an offer, just create a category (e.g. "Special offers"), set the numbers, and add products to it. Leave the boxes blank for a normal category.' },
       { icon:'📷', title:'Adding a photo', body:'Tap the photo box on any product and choose a picture. You\'ll see it straight away. For a brand-new product, the photo is saved up to the website when you press <strong>Save changes</strong> — so always Save after adding a photo. For a product that\'s already saved, the photo uploads right away.' },
     ]
   },

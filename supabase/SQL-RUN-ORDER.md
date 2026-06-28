@@ -254,6 +254,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 24. `024_category_offers.sql`
+**What it does:** Adds **mix & match offers**. Gives categories a `deal_qty` / `deal_price` (e.g. "pick 3 for £15") — any product in that category becomes part of the offer, priced at the deal rate (price ÷ qty) on the website, chosen in multiples. Also updates `edit_my_order` so customer order edits price offer items at the deal rate.
+
+**When to run:** After 017 (categories) and 023 (edit_my_order). Safe on the live database — idempotent.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

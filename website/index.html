@@ -909,6 +909,7 @@ function submitContactForm(form){
     <!-- items list -->
     <div id="basketItems" style="display:none">
       <div id="editOrderBanner" style="display:none;background:#fff8ec;border:1px solid var(--gold);border-radius:11px;padding:12px 14px;margin-bottom:12px;font-size:12.5px;color:var(--ink);line-height:1.5"></div>
+      <div id="dealNudge" style="display:none;background:#fff8ec;border:1px solid var(--gold);border-radius:11px;padding:11px 14px;margin-bottom:12px;font-size:12px;color:var(--ink);line-height:1.5"></div>
       <div class="p-label">Your items</div>
       <div id="itemsList"></div>
 
@@ -1141,6 +1142,9 @@ let CAT_SLUG = {
   'Meat Packs':  'pack',
   'Other':       'other',
 };
+// Mix & match offers: slug -> { qty, price, perUnit, name } for offer categories
+let CAT_DEAL = {};
+
 // Ordered list of active categories (name + slug), drives the filter chips.
 let categoryList = [
   { name:'Chicken',      slug:'chicken' },
@@ -1160,14 +1164,21 @@ async function loadCategories() {
   try {
     const { data, error } = await window.sbClient
       .from('categories')
-      .select('name, slug, sort_order, is_active')
+      .select('name, slug, sort_order, is_active, deal_qty, deal_price')
       .order('sort_order', { ascending: true });
     if (error || !data || !data.length) return;   // keep defaults
     categoryList = data
       .filter(c => c.is_active !== false)
-      .map(c => ({ name:c.name, slug:c.slug || slugifyCat(c.name) }));
-    CAT_SLUG = {};
-    categoryList.forEach(c => { CAT_SLUG[c.name] = c.slug; });
+      .map(c => ({ name:c.name, slug:c.slug || slugifyCat(c.name),
+                   dealQty: c.deal_qty || null,
+                   dealPrice: c.deal_price != null ? parseFloat(c.deal_price) : null }));
+    CAT_SLUG = {}; CAT_DEAL = {};
+    categoryList.forEach(c => {
+      CAT_SLUG[c.name] = c.slug;
+      if (c.dealQty && c.dealPrice) {
+        CAT_DEAL[c.slug] = { qty: c.dealQty, price: c.dealPrice, perUnit: c.dealPrice / c.dealQty, name: c.name };
+      }
+    });
   } catch (e) { /* keep defaults */ }
 }
 
@@ -1220,29 +1231,35 @@ async function loadProducts() {
     const imgHtml = p.img_url
       ? `<img class="prod-photo" src="${p.img_url}" alt="${p.name}" loading="lazy" onerror="this.removeAttribute('src');this.alt=''">`
       : `<div class="prod-img ${cat}"><span>${label}</span></div>`;
+    const deal = CAT_DEAL[cat];
+    const effPrice = deal ? deal.perUnit : parseFloat(p.price);
     const card = document.createElement('div');
     card.className = 'prod-card';
     card.dataset.id    = p.id;
     card.dataset.cat   = cat;
     card.dataset.name  = p.name;
-    card.dataset.price = p.price.toFixed(2);
+    card.dataset.price = effPrice.toFixed(2);
     card.dataset.cls   = cat;
     card.dataset.unit  = p.unit || 'pack';
     card.dataset.img   = p.img_url || '';
+    card.dataset.deal  = deal ? cat : '';
+    const priceHtml = deal
+      ? `<div><span class="price" style="font-size:15px">${deal.qty} for £${deal.price.toFixed(2)}</span><div style="font-size:10.5px;color:var(--ink-soft);margin-top:1px">£${deal.perUnit.toFixed(2)} each · mix &amp; match</div></div>`
+      : `<span class="price">£${effPrice.toFixed(2)}</span>`;
     card.innerHTML = `
       ${imgHtml}
       <div class="prod-body">
         <h4>${p.name}</h4>
         <div class="prod-desc">${p.description || ''}</div>
         <div class="prod-foot">
-          <span class="price">£${parseFloat(p.price).toFixed(2)}</span>
+          ${priceHtml}
           <div style="display:flex;align-items:center;gap:7px">
             <div class="card-stepper">
               <button type="button" aria-label="Fewer" onclick="bumpCardQty('${p.id}',-1)">−</button>
               <span id="cq-${p.id}">1</span>
               <button type="button" aria-label="More" onclick="bumpCardQty('${p.id}',1)">+</button>
             </div>
-            <button class="add-btn" onclick="addFromCard('${p.id}','${p.name.replace(/'/g,"\\'")}',${parseFloat(p.price)},'${cat}','${p.unit || 'pack'}')">Add</button>
+            <button class="add-btn" onclick="addFromCard('${p.id}','${p.name.replace(/'/g,"\\'")}',${effPrice},'${cat}','${p.unit || 'pack'}')">Add</button>
           </div>
         </div>
       </div>`;
@@ -1360,10 +1377,11 @@ function addToBasket(id, name, price, cls, unit, count) {
   if (basket[id]) {
     basket[id].qty += n;
   } else {
-    // Pull the product photo (if any) straight off the card so it shows in the basket
+    // Pull the product photo + any offer info straight off the card
     const cardEl = document.querySelector(`[data-id="${id}"]`);
     const img = cardEl?.dataset.img || '';
-    basket[id] = { id, name, price, cls, unit: unit || 'pack', qty: n, img };
+    const deal = cardEl?.dataset.deal || '';
+    basket[id] = { id, name, price, cls, unit: unit || 'pack', qty: n, img, deal };
   }
   updateBasketUI();
 
@@ -1398,6 +1416,20 @@ function getBasketCount() {
 }
 
 function formatGBP(n) { return '£' + n.toFixed(2); }
+
+// Mix & match offers: each offer category's items must be chosen in multiples of its quantity
+function dealGroupsIncomplete() {
+  const groups = {};
+  Object.values(basket).forEach(it => {
+    if (it.deal && CAT_DEAL[it.deal]) groups[it.deal] = (groups[it.deal] || 0) + it.qty;
+  });
+  const issues = [];
+  Object.keys(groups).forEach(slug => {
+    const d = CAT_DEAL[slug], count = groups[slug], rem = count % d.qty;
+    if (rem !== 0) issues.push({ name: d.name, qty: d.qty, price: d.price, count, need: d.qty - rem, over: rem });
+  });
+  return issues;
+}
 
 function updateBasketUI() {
   const count = getBasketCount();
@@ -1447,6 +1479,16 @@ function updateBasketUI() {
     if (editing) eb.innerHTML = `✏️ <b>Editing your ${editingOrder.dayLabel || ''} order</b> — add or remove items, then press <b>Save changes</b>. You can change it right up to the cut-off, or until Jon marks it paid.`;
   }
   if (pbt) pbt.textContent = editing ? 'Save changes' : 'Place order';
+
+  // Mix & match offer nudge — prompt to complete each set
+  const dn = document.getElementById('dealNudge');
+  if (dn) {
+    const issues = dealGroupsIncomplete();
+    if (issues.length) {
+      dn.style.display = 'block';
+      dn.innerHTML = issues.map(i => `🏷 <b>${i.name}</b> is ${i.qty} for £${i.price.toFixed(2)} — add <b>${i.need} more</b> (or remove ${i.over}) to complete the set.`).join('<br>');
+    } else { dn.style.display = 'none'; }
+  }
 }
 
 // ============ DELIVERY SLOTS (live from Supabase) ============
@@ -1592,7 +1634,11 @@ function enterOrderEditMode() {
   if (!editingOrder) return;
   Object.keys(basket).forEach(k => delete basket[k]);
   editingOrder.items.forEach(it => {
-    basket[it.product_id] = { id: it.product_id, name: it.name, price: it.price, cls: '', unit: 'pack', qty: it.qty, img: '' };
+    const cardEl = document.querySelector(`[data-id="${it.product_id}"]`);
+    basket[it.product_id] = {
+      id: it.product_id, name: it.name, price: it.price, qty: it.qty, unit: 'pack',
+      cls: cardEl?.dataset.cls || '', img: cardEl?.dataset.img || '', deal: cardEl?.dataset.deal || '',
+    };
   });
   selectedSlotId = editingOrder.slotId;
   updateBasketUI();
@@ -1608,6 +1654,11 @@ async function saveOrderEdits() {
   const items = Object.values(basket);
   if (!items.length) {
     alert('Your order needs at least one item. To cancel the whole order, call or message Jon on 07702 852704.');
+    return;
+  }
+  const di = dealGroupsIncomplete();
+  if (di.length) {
+    alert(`Your "${di[0].name}" offer is ${di[0].qty} for £${di[0].price.toFixed(2)}. Please add ${di[0].need} more (or remove ${di[0].over}) to complete the set.`);
     return;
   }
   const btn = document.getElementById('placeBtn');
@@ -1671,6 +1722,12 @@ async function placeOrder() {
   const items = Object.values(basket);
   if (items.length === 0) {
     alert('Your basket is empty.');
+    return;
+  }
+
+  const di = dealGroupsIncomplete();
+  if (di.length) {
+    alert(`Your "${di[0].name}" offer is ${di[0].qty} for £${di[0].price.toFixed(2)}. Please add ${di[0].need} more (or remove ${di[0].over}) to complete the set.`);
     return;
   }
 
