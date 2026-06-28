@@ -1289,8 +1289,9 @@ async function loadProducts() {
 }
 
 // One self-contained tile per mix & match offer: a picture, the "3 for £15"
-// headline, and a tick-list of the items. The customer ticks any 3 (or 6, 9…)
-// and adds that set to the basket. Keeps the 20–30 items out of the main grid.
+// headline, and the items each with a little quantity stepper. The customer
+// dials up any combination (incl. 2 of one + 1 of another) totalling a multiple
+// of the deal size, then adds it. Keeps the 20–30 items out of the main grid.
 function renderOfferTiles() {
   const wrap = document.getElementById('offerBanners');
   if (!wrap) return;
@@ -1300,18 +1301,22 @@ function renderOfferTiles() {
   wrap.innerHTML = offers.map(slug => {
     const d = CAT_DEAL[slug];
     const items = OFFER_ITEMS[slug] || [];
-    const sel = offerSel[slug] || (offerSel[slug] = new Set());
+    const sel = offerSel[slug] || (offerSel[slug] = {});
     const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
     const imgHtml = d.image
       ? `<img src="${d.image}" alt="${esc(d.name)}" style="width:100%;height:100%;object-fit:cover" loading="lazy">`
       : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:30px">🏷</div>`;
     const list = items.map(it => {
-      const on = sel.has(it.id);
+      const q = sel[it.id] || 0;
       return `
-        <label style="display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid ${on?'var(--gold)':'var(--line-soft,#e6ded0)'};border-radius:9px;background:${on?'#fff8ec':'#fff'};cursor:pointer;font-size:13.5px;color:var(--ink)">
-          <input type="checkbox" ${on?'checked':''} onchange="toggleOfferPick('${slug}','${it.id}')" style="width:17px;height:17px;accent-color:var(--gold);flex-shrink:0">
-          <span>${esc(it.name)}</span>
-        </label>`;
+        <div id="offrow-${slug}-${it.id}" style="display:flex;align-items:center;gap:9px;padding:8px 11px;border:1px solid ${q?'var(--gold)':'var(--line-soft,#e6ded0)'};border-radius:9px;background:${q?'#fff8ec':'#fff'};font-size:13.5px;color:var(--ink)">
+          <span style="flex:1;min-width:0">${esc(it.name)}</span>
+          <div class="card-stepper" style="flex-shrink:0">
+            <button type="button" aria-label="Fewer ${esc(it.name)}" onclick="bumpOfferPick('${slug}','${it.id}',-1)">−</button>
+            <span id="offqty-${slug}-${it.id}">${q}</span>
+            <button type="button" aria-label="More ${esc(it.name)}" onclick="bumpOfferPick('${slug}','${it.id}',1)">+</button>
+          </div>
+        </div>`;
     }).join('');
 
     return `
@@ -1322,11 +1327,11 @@ function renderOfferTiles() {
           <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold-bright,#e0b766);font-weight:800;margin-bottom:3px">Mix &amp; Match Offer</div>
           <div style="font-family:var(--display);font-size:24px;font-weight:700;line-height:1.1">${esc(d.name)}</div>
           <div style="font-family:var(--display);font-size:20px;color:var(--gold-bright,#e0b766);font-weight:700">Pick any ${d.qty} for £${d.price.toFixed(2)}</div>
-          <div style="font-size:12px;color:rgba(255,255,255,.75);margin-top:4px">Tick the ${d.qty} packs you want from the list below, then add them to your basket. You can add more than one set.</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.75);margin-top:4px">Use the + and − to choose your packs — any mix, including more than one of the same. Pick in lots of ${d.qty}, then add to your basket.</div>
         </div>
       </div>
       <div style="background:#fff;padding:14px 16px">
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px">${list}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">${list}</div>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:13px">
           <div id="offstatus-${slug}" style="flex:1;min-width:150px;font-size:13px;font-weight:700;color:var(--ink)"></div>
           <button id="offadd-${slug}" onclick="addOfferSet('${slug}')" class="add-btn" style="padding:11px 20px;font-size:14px;font-weight:800;border-radius:10px;background:var(--gold);color:#fff;border:none;cursor:pointer">Add to basket</button>
@@ -1338,33 +1343,36 @@ function renderOfferTiles() {
   offers.forEach(updateOfferTileStatus);
 }
 
-function toggleOfferPick(slug, id) {
-  const sel = offerSel[slug] || (offerSel[slug] = new Set());
-  if (sel.has(id)) sel.delete(id); else sel.add(id);
-  // reflect the tick visually without a full re-render
-  const cb = document.querySelector(`#offerBanners input[onchange*="'${slug}','${id}'"]`);
-  if (cb) {
-    const label = cb.closest('label');
-    if (label) {
-      const on = sel.has(id);
-      label.style.borderColor = on ? 'var(--gold)' : 'var(--line-soft,#e6ded0)';
-      label.style.background  = on ? '#fff8ec' : '#fff';
-    }
+function offerSelTotal(slug) {
+  const sel = offerSel[slug] || {};
+  return Object.values(sel).reduce((s, q) => s + (q || 0), 0);
+}
+
+function bumpOfferPick(slug, id, delta) {
+  const sel = offerSel[slug] || (offerSel[slug] = {});
+  const q = Math.max(0, (sel[id] || 0) + delta);
+  if (q === 0) delete sel[id]; else sel[id] = q;
+  // update just this row, no full re-render
+  const qEl = document.getElementById(`offqty-${slug}-${id}`);
+  if (qEl) qEl.textContent = q;
+  const row = document.getElementById(`offrow-${slug}-${id}`);
+  if (row) {
+    row.style.borderColor = q ? 'var(--gold)' : 'var(--line-soft,#e6ded0)';
+    row.style.background  = q ? '#fff8ec' : '#fff';
   }
   updateOfferTileStatus(slug);
 }
 
 function updateOfferTileStatus(slug) {
   const d = CAT_DEAL[slug]; if (!d) return;
-  const sel = offerSel[slug] || new Set();
-  const n = sel.size, rem = n % d.qty;
+  const n = offerSelTotal(slug), rem = n % d.qty;
   const statusEl = document.getElementById('offstatus-' + slug);
   const btn = document.getElementById('offadd-' + slug);
   const ready = n > 0 && rem === 0;
   if (statusEl) {
-    if (n === 0)      statusEl.textContent = `Tick any ${d.qty} packs`;
-    else if (rem !== 0) statusEl.textContent = `${n} ticked · tick ${d.qty - rem} more to complete a set`;
-    else              statusEl.textContent = `${n} ticked · ${n / d.qty} × £${d.price.toFixed(2)} = £${(d.price * n / d.qty).toFixed(2)}`;
+    if (n === 0)        statusEl.textContent = `Choose any ${d.qty} packs`;
+    else if (rem !== 0) statusEl.textContent = `${n} chosen · add ${d.qty - rem} more to complete a set`;
+    else                statusEl.textContent = `${n} chosen · ${n / d.qty} × £${d.price.toFixed(2)} = £${(d.price * n / d.qty).toFixed(2)}`;
     statusEl.style.color = ready ? 'var(--green,#2e7d32)' : 'var(--ink)';
   }
   if (btn) {
@@ -1375,24 +1383,23 @@ function updateOfferTileStatus(slug) {
   }
 }
 
-// Add the ticked items to the basket as a complete set (or sets), at the deal rate.
+// Add the chosen items to the basket as a complete set (or sets), at the deal rate.
 function addOfferSet(slug) {
   const d = CAT_DEAL[slug]; if (!d) return;
-  const sel = offerSel[slug] || new Set();
-  if (sel.size === 0 || sel.size % d.qty !== 0) return;
+  const sel = offerSel[slug] || {};
+  const total = offerSelTotal(slug);
+  if (total === 0 || total % d.qty !== 0) return;
   const byId = {};
   (OFFER_ITEMS[slug] || []).forEach(it => { byId[it.id] = it; });
-  sel.forEach(id => {
-    const it = byId[id]; if (!it) return;
-    if (basket[id]) basket[id].qty += 1;
-    else basket[id] = { id, name: it.name, price: d.perUnit, cls: slug, unit: 'pack', qty: 1, img: d.image || '', deal: slug };
+  Object.keys(sel).forEach(id => {
+    const it = byId[id]; const add = sel[id] || 0;
+    if (!it || add <= 0) return;
+    if (basket[id]) basket[id].qty += add;
+    else basket[id] = { id, name: it.name, price: d.perUnit, cls: slug, unit: 'pack', qty: add, img: d.image || '', deal: slug };
   });
-  offerSel[slug] = new Set();
+  offerSel[slug] = {};
   renderOfferTiles();
   updateBasketUI();
-  // open the basket so they can see it landed
-  const panel = document.getElementById('basketPanel');
-  if (panel && !panel.classList.contains('open')) { /* leave closed; the bar shows the count */ }
 }
 
 // ── Delivery banner: live home-delivery days for the coming week ──
