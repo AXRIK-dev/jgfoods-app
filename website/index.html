@@ -503,10 +503,14 @@
         </div>
       </div>
 
-      <!-- product grid — populated dynamically from Supabase -->
-      <div class="prod-grid" id="prodGrid">
-        <p id="prodLoading" style="grid-column:1/-1;text-align:center;padding:40px;color:#888;font-size:14px">Loading products…</p>
-      </div><!-- /prod-grid -->
+      <div style="flex:1;min-width:0">
+        <!-- mix & match offer banners — built from offer categories -->
+        <div id="offerBanners"></div>
+        <!-- product grid — populated dynamically from Supabase -->
+        <div class="prod-grid" id="prodGrid">
+          <p id="prodLoading" style="grid-column:1/-1;text-align:center;padding:40px;color:#888;font-size:14px">Loading products…</p>
+        </div><!-- /prod-grid -->
+      </div>
     </div><!-- /shop-layout -->
   </div>
 </section>
@@ -1268,6 +1272,47 @@ async function loadProducts() {
 
   // Build the filter controls from the categories that have products
   renderCategoryFilters();
+  renderOfferBanners();
+}
+
+// A prominent "pick any N for £X" banner above the items for each offer
+// category that has products, with a live count of what's been chosen.
+function renderOfferBanners() {
+  const wrap = document.getElementById('offerBanners');
+  if (!wrap) return;
+  const present = new Set([...document.querySelectorAll('.prod-card')].map(c => c.dataset.cat));
+  const offers = Object.keys(CAT_DEAL).filter(s => present.has(s));
+  if (!offers.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = offers.map(slug => {
+    const d = CAT_DEAL[slug];
+    return `
+    <div class="offer-banner" data-cat="${slug}" style="background:linear-gradient(135deg,var(--navy),var(--navy-2));border-radius:14px;padding:15px 18px;margin-bottom:14px;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.08)">
+      <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
+        <span style="font-size:26px;line-height:1">🏷</span>
+        <div style="flex:1;min-width:170px">
+          <div style="font-family:var(--display);font-size:18px;font-weight:700">${d.name} — pick any ${d.qty} for £${d.price.toFixed(2)}</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.78);margin-top:2px">Mix &amp; match any of the items below (£${d.perUnit.toFixed(2)} each). Tap <b>Add</b> on the ${d.qty} you want — choose in lots of ${d.qty}.</div>
+        </div>
+        <div id="offprog-${slug}" style="font-size:12.5px;font-weight:800;background:rgba(255,255,255,.16);border-radius:9px;padding:8px 13px;white-space:nowrap"></div>
+      </div>
+    </div>`;
+  }).join('');
+  updateOfferProgress();
+}
+
+// Update each offer banner's live progress chip from the basket.
+function updateOfferProgress() {
+  Object.keys(CAT_DEAL).forEach(slug => {
+    const el = document.getElementById('offprog-' + slug);
+    if (!el) return;
+    const d = CAT_DEAL[slug];
+    const count = Object.values(basket).filter(b => b.deal === slug).reduce((s, b) => s + b.qty, 0);
+    const rem = count % d.qty;
+    if (count === 0)      el.textContent = `Pick any ${d.qty}`;
+    else if (rem === 0)   el.textContent = `✓ ${count} chosen`;
+    else                  el.textContent = `${count} chosen · add ${d.qty - rem} more`;
+    el.style.background = (count > 0 && rem === 0) ? 'rgba(120,200,120,.32)' : 'rgba(255,255,255,.16)';
+  });
 }
 
 // ── Delivery banner: live home-delivery days for the coming week ──
@@ -1479,6 +1524,8 @@ function updateBasketUI() {
     if (editing) eb.innerHTML = `✏️ <b>Editing your ${editingOrder.dayLabel || ''} order</b> — add or remove items, then press <b>Save changes</b>. You can change it right up to the cut-off, or until Jon marks it paid.`;
   }
   if (pbt) pbt.textContent = editing ? 'Save changes' : 'Place order';
+
+  updateOfferProgress();
 
   // Mix & match offer nudge — prompt to complete each set
   const dn = document.getElementById('dealNudge');
@@ -1815,6 +1862,11 @@ function filterCategory(el, cat) {
 
   document.querySelectorAll('.prod-card').forEach(card => {
     card.classList.toggle('hidden', cat !== 'all' && card.dataset.cat !== cat);
+  });
+
+  // Show an offer banner only when its items are on screen (its own filter or "All")
+  document.querySelectorAll('#offerBanners .offer-banner').forEach(b => {
+    b.style.display = (cat === 'all' || b.dataset.cat === cat) ? '' : 'none';
   });
 }
 
