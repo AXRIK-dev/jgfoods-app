@@ -1906,6 +1906,14 @@ async function placeOrder() {
     return;
   }
 
+  // Capture a standing-order request into the notes so Jon sees it and can
+  // arrange it (recurring automation is a future step).
+  let notesExtra = '';
+  if (standingOrderActive) {
+    const freq = document.getElementById('so-frequency')?.value === 'fortnightly' ? 'every two weeks' : 'every week';
+    notesExtra = `⭐ STANDING ORDER REQUEST — repeat ${freq}. Customer to be contacted to confirm and arrange upfront payment.`;
+  }
+
   const di = dealGroupsIncomplete();
   if (di.length) {
     alert(`Your "${di[0].name}" offer is ${di[0].qty} for £${di[0].price.toFixed(2)}. Please add ${di[0].need} more (or remove ${di[0].over}) to complete the set.`);
@@ -1944,7 +1952,7 @@ async function placeOrder() {
       p_slot_id: selectedSlotId,
       p_items:   rpcItems,
       p_channel: 'website',
-      p_notes:   notes || null,
+      p_notes:   [notes, notesExtra].filter(Boolean).join(' — ') || null,
     });
 
     // Transport-level error, or a handled error returned from the function
@@ -2064,10 +2072,7 @@ function toggleStandingOrder() {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeOrderPanel(); closeSignInPanel(); } });
 
 // ============ ACCOUNT STATE ============
-// TODO: Replace with Supabase Auth
-// import { createClient } from '@supabase/supabase-js'
-// const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-
+// Customer accounts run on Supabase Auth (sign in/up/reset wired below).
 let currentUser = null; // { name, email, phone, address, lastOrder: [] }
 
 function updateNavForUser() {
