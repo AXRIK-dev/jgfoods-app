@@ -168,7 +168,10 @@
   .prod-body{padding:12px 13px 14px;display:flex;flex-direction:column;flex:1}
   .prod-body h4{font-size:13.5px;font-weight:800;color:var(--ink);line-height:1.25}
   .prod-desc{font-size:11px;color:var(--ink-soft);margin-top:3px;flex:1}
-  .prod-foot{display:flex;align-items:center;justify-content:space-between;margin-top:12px}
+  .prod-foot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .card-stepper{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:2px 4px}
+  .card-stepper button{width:24px;height:24px;border-radius:6px;background:var(--cream);color:var(--navy);font-size:16px;font-weight:800;line-height:1;display:flex;align-items:center;justify-content:center}
+  .card-stepper span{min-width:16px;text-align:center;font-size:13px;font-weight:800;color:var(--ink)}
   .price{font-family:var(--display);font-size:19px;font-weight:600;color:var(--navy)}
   .price small{font-size:11px;font-family:var(--body);color:var(--ink-soft);font-weight:700}
   .add-btn{background:var(--navy);color:#fff;font-size:12px;font-weight:700;padding:7px 14px;border-radius:8px;transition:.16s}
@@ -1213,7 +1216,14 @@ async function loadProducts() {
         <div class="prod-desc">${p.description || ''}</div>
         <div class="prod-foot">
           <span class="price">£${parseFloat(p.price).toFixed(2)}</span>
-          <button class="add-btn" onclick="addToBasket('${p.id}','${p.name.replace(/'/g,"\\'")}',${parseFloat(p.price)},'${cat}','${p.unit || 'pack'}')">Add</button>
+          <div style="display:flex;align-items:center;gap:7px">
+            <div class="card-stepper">
+              <button type="button" aria-label="Fewer" onclick="bumpCardQty('${p.id}',-1)">−</button>
+              <span id="cq-${p.id}">1</span>
+              <button type="button" aria-label="More" onclick="bumpCardQty('${p.id}',1)">+</button>
+            </div>
+            <button class="add-btn" onclick="addFromCard('${p.id}','${p.name.replace(/'/g,"\\'")}',${parseFloat(p.price)},'${cat}','${p.unit || 'pack'}')">Add</button>
+          </div>
         </div>
       </div>`;
     grid.appendChild(card);
@@ -1310,14 +1320,30 @@ const basket = {};
 let selectedSlotId = null;
 let availableSlots = [];
 
-function addToBasket(id, name, price, cls, unit) {
+// Per-card quantity chosen on the availability list (before adding to basket)
+const cardQtys = {};
+function bumpCardQty(id, delta) {
+  cardQtys[id] = Math.max(1, (cardQtys[id] || 1) + delta);
+  const el = document.getElementById('cq-' + id);
+  if (el) el.textContent = cardQtys[id];
+}
+function addFromCard(id, name, price, cls, unit) {
+  const n = cardQtys[id] || 1;
+  addToBasket(id, name, price, cls, unit, n);
+  cardQtys[id] = 1;
+  const el = document.getElementById('cq-' + id);
+  if (el) el.textContent = '1';
+}
+
+function addToBasket(id, name, price, cls, unit, count) {
+  const n = Math.max(1, parseInt(count, 10) || 1);
   if (basket[id]) {
-    basket[id].qty++;
+    basket[id].qty += n;
   } else {
     // Pull the product photo (if any) straight off the card so it shows in the basket
     const cardEl = document.querySelector(`[data-id="${id}"]`);
     const img = cardEl?.dataset.img || '';
-    basket[id] = { id, name, price, cls, unit: unit || 'pack', qty: 1, img };
+    basket[id] = { id, name, price, cls, unit: unit || 'pack', qty: n, img };
   }
   updateBasketUI();
 
