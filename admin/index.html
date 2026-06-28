@@ -1753,10 +1753,11 @@
     <div class="field-row">
       <div class="field">
         <label>Category</label>
-        <select id="ep-cat"><!-- populated by renderCategoryOptions() --></select>
+        <select id="ep-cat" onchange="epCatChanged()"><!-- populated by renderCategoryOptions() --></select>
       </div>
       <div class="field"><label>Price (£) *</label><input id="ep-price" type="number" min="0" step="0.50" placeholder="34.00"></div>
     </div>
+    <div id="ep-deal-hint" style="display:none;background:var(--gold-soft,#f4ebd4);border:1px solid var(--gold,#b8924a);border-radius:9px;padding:9px 11px;font-size:12px;color:var(--navy);margin-bottom:4px"></div>
     <div class="field"><label>Description (shown on website)</label><textarea id="ep-desc" placeholder="Fresh skinless breast fillets" style="min-height:60px"></textarea></div>
     <div style="display:flex;gap:9px;margin-top:6px">
       <button class="btn-add" style="flex:1;justify-content:center;padding:13px" onclick="saveEditProduct()">Save changes</button>
@@ -3120,7 +3121,12 @@ function renderStock() {
     updateLiveCount();
     return;
   }
-  list.innerHTML = sampleProducts.map(p => `
+  list.innerHTML = sampleProducts.map(p => {
+    const deal = categoryDeal(p.cat);
+    const priceCell = deal
+      ? `<div class="sr-price" style="justify-content:flex-end"><span class="cat-tag" style="background:var(--gold-soft,#f0e2c2);color:var(--navy);white-space:nowrap" title="Price is set by the offer">🏷 ${deal.qty} for £${deal.price.toFixed(2)}</span></div>`
+      : `<div class="sr-price"><span class="sr-price-label">£</span><input type="number" min="0" step="0.50" value="${p.price.toFixed(2)}" oninput="updatePrice('${p.id}',this.value)" aria-label="Price for ${p.name}"></div>`;
+    return `
     <div class="stock-row${p.live ? '' : ' off'}" id="sr-${p.id}">
       <div class="sr-img" title="Upload photo" onclick="triggerImgUpload('${p.id}')">
         ${p.img ? `<img src="${p.img}" alt="${p.name}" id="img-${p.id}">` : `<span class="img-placeholder">📷</span><img src="" id="img-${p.id}" style="display:none">`}
@@ -3130,16 +3136,13 @@ function renderStock() {
         <h4>${p.name}</h4>
         <span class="cat-tag">${p.cat}</span>
       </div>
-      <div class="sr-price">
-        <span class="sr-price-label">£</span>
-        <input type="number" min="0" step="0.50" value="${p.price.toFixed(2)}" oninput="updatePrice('${p.id}',this.value)" aria-label="Price for ${p.name}">
-      </div>
+      ${priceCell}
       <span class="sr-state ${p.live ? 'live' : 'hidden'}" id="ss-${p.id}">${p.live ? 'Live' : 'Hidden'}</span>
       <div class="toggle${p.live ? ' on' : ''}" id="tog-${p.id}" onclick="toggleProduct('${p.id}')" role="switch" aria-checked="${p.live}"></div>
       <button onclick="openEditProduct('${p.id}')" style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:7px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer;flex-shrink:0">Edit</button>
       <button onclick="deleteProduct('${p.id}','${p.name.replace(/'/g,"\\'")}') " style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:7px;background:#fff0f0;border:1px solid #fcc;color:#c0392b;cursor:pointer;flex-shrink:0">Delete</button>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
   updateLiveCount();
 }
 
@@ -3360,6 +3363,7 @@ function addNewProduct() {
   renderCategoryOptions();
   const sel = document.getElementById('ep-cat');
   if (sel.options.length) sel.selectedIndex = 0;
+  epCatChanged();
   document.getElementById('editProductModal').classList.add('show');
 }
 
@@ -3562,6 +3566,7 @@ function openEditProduct(id) {
   document.getElementById('ep-cat').value = p.cat;
   document.getElementById('ep-price').value = p.price.toFixed(2);
   document.getElementById('ep-desc').value = p.desc || '';
+  epCatChanged();
   document.getElementById('editProductModal').classList.add('show');
 }
 
@@ -3672,6 +3677,7 @@ function renderCategoryManager() {
         <input type="number" min="0" step="0.50" value="${c.deal_price!=null?Number(c.deal_price):''}" placeholder="–" onchange="setCategoryDeal('${c.id}','price',this.value)" style="width:60px;border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px;text-align:right">
         <span style="color:var(--ink-soft)">(leave blank for a normal category)</span>
       </div>
+      ${isDeal ? `<div style="font-size:11.5px;color:var(--navy);background:var(--gold-soft,#f4ebd4);border-radius:7px;padding:7px 10px;margin:2px 0 0 36px;max-width:520px">✅ Offer set. Now add each item customers can choose from with <b>+ Add product</b> — set its category to <b>${c.name}</b>. They'll pick any ${c.deal_qty} of them on the website for £${Number(c.deal_price).toFixed(2)}.</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -3741,6 +3747,33 @@ async function toggleCategoryActive(id) {
 }
 
 // Turn a category into a "pick N for £X" offer (or clear it by blanking a field)
+// Returns the mix & match deal for a category NAME, or null if it isn't an offer.
+function categoryDeal(catName) {
+  const c = (categories || []).find(x => x.name === catName);
+  return (c && c.deal_qty && c.deal_price)
+    ? { qty: Math.round(c.deal_qty), price: parseFloat(c.deal_price) }
+    : null;
+}
+
+// In the Add/Edit product form: if the chosen category is an offer, the
+// per-item price is set by the deal, so tell Jon and ease off the price box.
+function epCatChanged() {
+  const sel = document.getElementById('ep-cat');
+  const hint = document.getElementById('ep-deal-hint');
+  const price = document.getElementById('ep-price');
+  if (!sel || !hint) return;
+  const deal = categoryDeal(sel.value);
+  if (deal) {
+    const each = (deal.price / deal.qty);
+    hint.innerHTML = `🏷 This is a <b>mix &amp; match offer</b> category — customers pick <b>${deal.qty} for £${deal.price.toFixed(2)}</b> (£${each.toFixed(2)} each). The price box below is ignored for these items, so you can leave it as is.`;
+    hint.style.display = 'block';
+    if (price) { price.style.opacity = '0.5'; if (!price.value) price.value = each.toFixed(2); }
+  } else {
+    hint.style.display = 'none';
+    if (price) price.style.opacity = '1';
+  }
+}
+
 async function setCategoryDeal(id, field, value) {
   const c = categories.find(x => x.id === id);
   if (!c) return;
@@ -7363,7 +7396,7 @@ const HELP_PAGES = {
       { icon:'💷', title:'Changing prices', body:'Click the price on any product to edit it. Changes take effect immediately on the website once the database is connected.' },
       { icon:'➕', title:'Adding a new product', body:'Press <strong>+ Add product</strong> at the top right. Fill in the name, pick a category, set the price, then save. The product goes live on the website straight away.' },
       { icon:'🏷️', title:'Managing categories', body:'Press <strong>Manage categories</strong> to add, rename, reorder or hide the sections customers browse by on the website (Chicken, Steak & Beef, and so on). Add a new one any time — type the name and press <strong>Add</strong>. Rename one and every product in it updates automatically. Hide a category to take it off the website without losing it, or delete it (its products move to "Other"). The order you set here is the order customers see.' },
-      { icon:'🏷️', title:'Mix & match offers (e.g. 3 for £15)', body:'In <strong>Manage categories</strong>, each category has a <strong>Mix &amp; match offer</strong> line: set <strong>pick __ for £__</strong> (e.g. pick 3 for £15) and every product you put in that category becomes part of that offer. On the website customers pick those items in sets (3, 6, 9…) at the deal price. To make an offer, just create a category (e.g. "Special offers"), set the numbers, and add products to it. Leave the boxes blank for a normal category.' },
+      { icon:'🏷️', title:'Mix & match offers (e.g. 3 for £15)', body:'Two steps. <strong>1)</strong> In <strong>Manage categories</strong>, create a category (e.g. "Mix &amp; Match") and on its <strong>Mix &amp; match offer</strong> line set <strong>pick __ for £__</strong> (e.g. pick 3 for £15). <strong>2)</strong> Add each item customers can choose from as its own product with <strong>+ Add product</strong>, setting its category to that offer — e.g. Beef Burgers, Chicken Kebabs, Pork Sausages (you can add 20+). You don\'t set a price on these items; the offer sets it. On the website customers then pick any 3 of those items themselves for £15 (or 6 for £30, and so on), and the exact items they chose come through on the order so you know what to deliver. Tip: don\'t add a product literally called "Mix &amp; Match" — add the real items instead. Leave the offer boxes blank for a normal category.' },
       { icon:'📷', title:'Adding a photo', body:'Tap the photo box on any product and choose a picture. You\'ll see it straight away. For a brand-new product, the photo is saved up to the website when you press <strong>Save changes</strong> — so always Save after adding a photo. For a product that\'s already saved, the photo uploads right away.' },
     ]
   },
