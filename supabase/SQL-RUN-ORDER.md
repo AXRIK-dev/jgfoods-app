@@ -247,6 +247,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 23. `023_edit_my_order.sql`
+**What it does:** Lets a signed-in customer change their **own unpaid order** online — add or remove items right up to the cut-off, merged into the one order. Adds the `edit_my_order(order_id, items)` function, which checks the order belongs to them, that it isn't paid, and that the slot is still open, then rebuilds the items using prices from the products table (never trusting the browser). Locks automatically once Jon marks it paid or the cut-off passes.
+
+**When to run:** After 013 (auto-invoice). Safe on the live database — idempotent.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

@@ -905,9 +905,11 @@ function submitContactForm(form){
 
     <!-- items list -->
     <div id="basketItems" style="display:none">
+      <div id="editOrderBanner" style="display:none;background:#fff8ec;border:1px solid var(--gold);border-radius:11px;padding:12px 14px;margin-bottom:12px;font-size:12.5px;color:var(--ink);line-height:1.5"></div>
       <div class="p-label">Your items</div>
       <div id="itemsList"></div>
 
+      <div id="newOrderFields">
       <div class="p-label">Choose delivery day</div>
       <div id="slotPicker">
         <div class="sd" style="padding:6px 2px">Loading delivery days…</div>
@@ -973,6 +975,7 @@ function submitContactForm(form){
           <p>Cash or bank transfer accepted. No payment needed now.</p>
         </div>
       </div>
+      </div><!-- /newOrderFields -->
 
       <div class="order-summary">
         <div class="os-row"><span>Subtotal</span><span id="osSub">£0.00</span></div>
@@ -982,7 +985,7 @@ function submitContactForm(form){
 
       <button class="place-btn" id="placeBtn" onclick="placeOrder()">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h10M9 5l3 3-3 3" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Place order
+        <span id="placeBtnText">Place order</span>
       </button>
     </div>
   </div>
@@ -1415,6 +1418,18 @@ function updateBasketUI() {
   const orderTotal = getOrderTotal();
   document.getElementById('osSub').textContent = formatGBP(total);
   document.getElementById('osTotal').textContent = formatGBP(orderTotal);
+
+  // Editing an existing unpaid order: hide the new-order fields, show the banner
+  const editing = !!editingOrder;
+  const nof = document.getElementById('newOrderFields');
+  const eb  = document.getElementById('editOrderBanner');
+  const pbt = document.getElementById('placeBtnText');
+  if (nof) nof.style.display = editing ? 'none' : '';
+  if (eb) {
+    eb.style.display = editing ? 'block' : 'none';
+    if (editing) eb.innerHTML = `✏️ <b>Editing your ${editingOrder.dayLabel || ''} order</b> — add or remove items, then press <b>Save changes</b>. You can change it right up to the cut-off, or until Jon marks it paid.`;
+  }
+  if (pbt) pbt.textContent = editing ? 'Save changes' : 'Place order';
 }
 
 // ============ DELIVERY SLOTS (live from Supabase) ============
@@ -1517,7 +1532,113 @@ function resetPanel() {
 }
 
 // ============ PLACE ORDER ============
+// ============ EDIT AN EXISTING (UNPAID) ORDER ============
+let editingOrder = null;   // { id, slotId, dayLabel, date, items:[] } when the customer has an editable order
+
+// Find the signed-in customer's pending, unpaid, before-cutoff order (if any)
+async function loadMyPendingOrder() {
+  editingOrder = null;
+  if (!currentUser || !window.sbClient) return;
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data, error } = await window.sbClient
+      .from('orders')
+      .select('id, status, delivery_slot_id, delivery_slots(delivery_date, day_label, is_open, cutoff_at), order_items(product_id, product_name, unit_price, quantity), invoices(status)')
+      .neq('status', 'cancelled').neq('status', 'delivered')
+      .order('created_at', { ascending: false });
+    if (error || !data) return;
+    const now = Date.now();
+    const editable = data.find(o => {
+      const s = o.delivery_slots;
+      if (!s || !s.is_open) return false;
+      if (s.delivery_date < today) return false;
+      if (s.cutoff_at && new Date(s.cutoff_at).getTime() <= now) return false;
+      const inv = (o.invoices && o.invoices[0]) || null;
+      if (inv && inv.status === 'paid') return false;
+      return true;
+    });
+    if (!editable) return;
+    editingOrder = {
+      id: editable.id,
+      slotId: editable.delivery_slot_id,
+      dayLabel: editable.delivery_slots.day_label || '',
+      date: editable.delivery_slots.delivery_date,
+      items: (editable.order_items || []).map(i => ({
+        product_id: i.product_id, name: i.product_name, price: parseFloat(i.unit_price) || 0, qty: i.quantity,
+      })),
+    };
+  } catch (e) { console.error('loadMyPendingOrder', e); }
+}
+
+// Load that order into the basket so the basket itself becomes the editor
+function enterOrderEditMode() {
+  if (!editingOrder) return;
+  Object.keys(basket).forEach(k => delete basket[k]);
+  editingOrder.items.forEach(it => {
+    basket[it.product_id] = { id: it.product_id, name: it.name, price: it.price, cls: '', unit: 'pack', qty: it.qty, img: '' };
+  });
+  selectedSlotId = editingOrder.slotId;
+  updateBasketUI();
+}
+
+function exitOrderEditMode() {
+  editingOrder = null;
+  Object.keys(basket).forEach(k => delete basket[k]);
+  updateBasketUI();
+}
+
+async function saveOrderEdits() {
+  const items = Object.values(basket);
+  if (!items.length) {
+    alert('Your order needs at least one item. To cancel the whole order, call or message Jon on 07702 852704.');
+    return;
+  }
+  const btn = document.getElementById('placeBtn');
+  const txt = document.getElementById('placeBtnText');
+  btn.disabled = true; if (txt) txt.textContent = 'Saving…';
+  const rpcItems = items.map(i => ({ product_id: i.id, quantity: i.qty }));
+  try {
+    const { data, error } = await window.sbClient.rpc('edit_my_order', { p_order_id: editingOrder.id, p_items: rpcItems });
+    if (error) throw error;
+    if (data && data.error) {
+      btn.disabled = false; if (txt) txt.textContent = 'Save changes';
+      alert(data.error);
+      if (/paid|cut.?off/i.test(data.error)) { editingOrder = null; updateBasketUI(); }  // it's locked now
+      return;
+    }
+    // Saved — reload the order so the basket matches what's now stored, ready for more edits
+    await loadMyPendingOrder();
+    if (editingOrder) {
+      enterOrderEditMode();
+      btn.disabled = false;
+      if (txt) { txt.textContent = '✓ Saved'; setTimeout(() => { if (editingOrder && txt) txt.textContent = 'Save changes'; }, 1800); }
+    } else {
+      Object.keys(basket).forEach(k => delete basket[k]);
+      updateBasketUI();
+      btn.disabled = false; if (txt) txt.textContent = 'Place order';
+      alert('Your changes are saved. This order is now locked (paid, or past the cut-off).');
+    }
+  } catch (e) {
+    btn.disabled = false; if (txt) txt.textContent = 'Save changes';
+    alert('Could not save your changes — please try again, or call Jon on 07702 852704.');
+    console.error('saveOrderEdits', e);
+  }
+}
+
+function showOrderUpdated() {
+  const dayLabel = editingOrder && editingOrder.dayLabel;
+  document.getElementById('basketView').style.display = 'none';
+  document.getElementById('confirmScreen').classList.add('show');
+  document.getElementById('panelTitle').textContent = 'Order updated';
+  document.getElementById('panelSub').textContent = 'Your changes are saved';
+  const ref = document.getElementById('orderRef');
+  if (ref) ref.textContent = dayLabel ? (dayLabel + ' delivery') : 'Updated';
+  Object.keys(basket).forEach(k => delete basket[k]);
+  editingOrder = null;
+}
+
 async function placeOrder() {
+  if (editingOrder) { return saveOrderEdits(); }
   const first   = document.getElementById('f-first').value.trim();
   const last    = document.getElementById('f-last').value.trim();
   const phone   = document.getElementById('f-phone').value.trim();
@@ -1582,6 +1703,8 @@ async function placeOrder() {
     }
 
     showConfirmation(data.reference);
+    // The order they just placed can now be topped up until the cut-off / payment
+    if (currentUser) { await loadMyPendingOrder(); if (editingOrder) enterOrderEditMode(); }
   } catch (e) {
     btn.disabled = false;
     btn.textContent = 'Place order';
@@ -1837,6 +1960,9 @@ async function registerAccount() {
 async function signOut() {
   await window.sbClient.auth.signOut();
   currentUser = null;
+  editingOrder = null;
+  Object.keys(basket).forEach(k => delete basket[k]);
+  updateBasketUI();
   updateNavForUser();
   closeSignInPanel();
 }
@@ -1899,6 +2025,10 @@ async function applyAuthedUser(session) {
 
   updateNavForUser();
   showSignedInState();
+
+  // If they have an unpaid order for the coming delivery, load it so they can edit it
+  await loadMyPendingOrder();
+  if (editingOrder) enterOrderEditMode();
 }
 
 // ── Forgot password: send the reset email ──
