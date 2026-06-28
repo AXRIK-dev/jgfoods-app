@@ -412,8 +412,10 @@
         </button>
       </div>
       <div id="navSignedIn" style="display:none" class="nav-signed-in">
-        <div class="nav-avatar" id="navAvatar">S</div>
-        <span class="nav-welcome" id="navWelcome">Hi Sarah</span>
+        <div onclick="openSignInPanel()" title="My account" style="display:flex;align-items:center;gap:8px;cursor:pointer;background:rgba(255,255,255,.08);padding:5px 12px 5px 6px;border-radius:30px">
+          <div class="nav-avatar" id="navAvatar">S</div>
+          <span class="nav-welcome" id="navWelcome">My account</span>
+        </div>
         <button style="font-size:11px;font-weight:700;color:rgba(255,255,255,.5);padding:4px 8px" onclick="signOut()">Sign out</button>
       </div>
       <button class="nav-cta" onclick="openOrderPanel()">Order now</button>
@@ -428,7 +430,8 @@
     <a class="nav-link" href="#trade" onclick="closeMobileMenu()">Trade accounts</a>
     <a class="nav-link" href="#reviews" onclick="closeMobileMenu()">Reviews</a>
     <a class="nav-link" href="#contact" onclick="closeMobileMenu()">Contact</a>
-    <button class="nav-link" style="text-align:left" onclick="openSignInPanel('signin');closeMobileMenu()">Sign in / Register</button>
+    <button class="nav-link" id="mobAccountBtn" style="text-align:left;display:none" onclick="openSignInPanel();closeMobileMenu()">👤 My account</button>
+    <button class="nav-link" id="mobSigninBtn" style="text-align:left" onclick="openSignInPanel('signin');closeMobileMenu()">Sign in / Register</button>
     <button class="nav-cta" onclick="openOrderPanel();closeMobileMenu()">Order now</button>
   </div>
 </nav>
@@ -1095,10 +1098,22 @@ function submitContactForm(form){
         <div id="siBadge" style="margin-top:6px"></div>
       </div>
       <div id="siPendingOrder" style="display:none"></div>
+
       <div style="background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:14px;margin-top:4px">
-        <p style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--ink-soft);margin-bottom:10px">Your saved details</p>
-        <p style="font-size:12.5px;color:var(--ink);line-height:1.7" id="siDetails">—</p>
+        <p style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--ink-soft);margin-bottom:10px">Your details</p>
+        <div class="field"><label>Name</label><input type="text" id="acc-name" placeholder="Your name"></div>
+        <div class="field"><label>Phone</label><input type="tel" id="acc-phone" placeholder="07700 000000"></div>
+        <div class="field"><label>Delivery address</label><input type="text" id="acc-address" placeholder="14 Any Street, Ormskirk"></div>
+        <div class="field"><label>Postcode</label><input type="text" id="acc-postcode" placeholder="L39 2AB"></div>
+        <button onclick="saveMyDetails(this)" style="width:100%;background:var(--navy);color:#fff;font-weight:800;font-size:13px;padding:11px;border-radius:10px;margin-top:6px">Save details</button>
+        <p id="acc-msg" style="font-size:12px;margin-top:8px;text-align:center"></p>
       </div>
+
+      <div style="background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:14px;margin-top:12px">
+        <p style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--ink-soft);margin-bottom:8px">Previous orders</p>
+        <div id="acc-orders"><p style="font-size:12px;color:var(--ink-soft)">Loading…</p></div>
+      </div>
+
       <button style="width:100%;margin-top:14px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);font-weight:800;font-size:13px;padding:12px;border-radius:10px" onclick="signOut()">Sign out</button>
     </div>
 
@@ -1819,14 +1834,20 @@ let currentUser = null; // { name, email, phone, address, lastOrder: [] }
 function updateNavForUser() {
   const guest = document.getElementById('navGuestButtons');
   const signedIn = document.getElementById('navSignedIn');
+  const mobAcc = document.getElementById('mobAccountBtn');
+  const mobSig = document.getElementById('mobSigninBtn');
   if (currentUser) {
     guest.style.display = 'none';
     signedIn.style.display = 'flex';
     document.getElementById('navAvatar').textContent = currentUser.name.charAt(0).toUpperCase();
-    document.getElementById('navWelcome').textContent = 'Hi ' + currentUser.name.split(' ')[0];
+    document.getElementById('navWelcome').textContent = 'My account';
+    if (mobAcc) mobAcc.style.display = 'block';
+    if (mobSig) mobSig.style.display = 'none';
   } else {
     guest.style.display = 'block';
     signedIn.style.display = 'none';
+    if (mobAcc) mobAcc.style.display = 'none';
+    if (mobSig) mobSig.style.display = 'block';
   }
 }
 
@@ -1912,12 +1933,14 @@ function showSignedInState() {
     } else { po.style.display = 'none'; po.innerHTML = ''; }
   }
 
-  // Saved details
-  document.getElementById('siDetails').innerHTML = [
-    currentUser.phone  ? `📞 ${currentUser.phone}`   : null,
-    currentUser.address? `📍 ${currentUser.address}` : null,
-    isTrade && currentUser.businessName ? `🏢 ${currentUser.businessName}` : null,
-  ].filter(Boolean).join('<br>') || '—';
+  // Editable details + previous orders
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  setVal('acc-name', currentUser.name);
+  setVal('acc-phone', currentUser.phone);
+  setVal('acc-address', currentUser.address);
+  setVal('acc-postcode', currentUser.postcode);
+  const accMsg = document.getElementById('acc-msg'); if (accMsg) accMsg.textContent = '';
+  loadMyOrders();
 
   // Reorder — only show when there's no live order to manage
   const showReorder = !editingOrder && currentUser.lastOrder && currentUser.lastOrder.length;
@@ -1938,6 +1961,66 @@ function editMyOrderFromAccount() {
   enterOrderEditMode();
   closeSignInPanel();
   openOrderPanel();
+}
+
+// Save the customer's own details from the account panel
+async function saveMyDetails(btn) {
+  const name     = (document.getElementById('acc-name').value || '').trim();
+  const phone    = (document.getElementById('acc-phone').value || '').trim();
+  const address  = (document.getElementById('acc-address').value || '').trim();
+  const postcode = (document.getElementById('acc-postcode').value || '').trim();
+  const msg = document.getElementById('acc-msg');
+  if (!name) { if (msg) { msg.style.color = '#8c322c'; msg.textContent = 'Please enter your name.'; } return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const { data: { user } } = await window.sbClient.auth.getUser();
+    if (!user) throw new Error('Not signed in');
+    await upsertCustomerRecord(user.id, { name, email: currentUser.email, phone, address, postcode });
+    currentUser.name = name; currentUser.phone = phone; currentUser.address = address; currentUser.postcode = postcode;
+    updateNavForUser();
+    if (msg) { msg.style.color = '#1a6640'; msg.textContent = '✓ Saved'; setTimeout(() => { if (msg) msg.textContent = ''; }, 2500); }
+  } catch (e) {
+    console.error('saveMyDetails', e);
+    if (msg) { msg.style.color = '#8c322c'; msg.textContent = 'Could not save — please try again.'; }
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Save details'; }
+}
+
+// Show the customer's previous orders in the account panel
+async function loadMyOrders() {
+  const el = document.getElementById('acc-orders');
+  if (!el || !window.sbClient) return;
+  try {
+    const { data, error } = await window.sbClient
+      .from('orders')
+      .select('id, status, total_amount, created_at, delivery_slots(delivery_date, day_label), order_items(product_name, quantity)')
+      .order('created_at', { ascending: false }).limit(12);
+    if (error) throw error;
+    if (!data || !data.length) {
+      el.innerHTML = '<p style="font-size:12px;color:var(--ink-soft)">No orders yet — your first one will appear here.</p>';
+      return;
+    }
+    el.innerHTML = data.map(o => {
+      const s = o.delivery_slots;
+      const when = s && s.delivery_date
+        ? new Date(s.delivery_date + 'T00:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
+        : new Date(o.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+      const items = (o.order_items || []).map(i => i.quantity > 1 ? `${i.product_name} ×${i.quantity}` : i.product_name).join(', ');
+      const st = (o.status || '').toLowerCase();
+      const stColor = st === 'delivered' ? '#1a6640' : st === 'cancelled' ? '#8c322c' : 'var(--ink-soft)';
+      return `<div style="border-top:1px solid var(--line-soft);padding:10px 0">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+          <b style="font-size:12.5px;color:var(--ink)">${(s && s.day_label) || ''} ${when}</b>
+          <span style="font-family:var(--display);font-weight:700;color:var(--navy)">£${(parseFloat(o.total_amount)||0).toFixed(2)}</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--ink-soft);margin-top:3px;line-height:1.5">${items || '—'}</div>
+        ${st ? `<span style="font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:${stColor}">${st}</span>` : ''}
+      </div>`;
+    }).join('');
+  } catch (e) {
+    console.error('loadMyOrders', e);
+    el.innerHTML = '<p style="font-size:12px;color:var(--ink-soft)">Couldn\'t load your orders just now.</p>';
+  }
 }
 
 async function signIn() {
