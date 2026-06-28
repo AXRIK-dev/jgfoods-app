@@ -6115,7 +6115,16 @@ let currentRunDay  = null;    // selected delivery date (YYYY-MM-DD) on the Runs
 let runDaySlots    = [];      // upcoming delivery slots, loaded by loadAppData
 let currentMapsUrl = '';
 
-function openRoutePlanner(dateStr) {
+// Fallback ordering when the Google key isn't set (trade first, then domestic).
+function routeHeuristic(orders) {
+  return [...orders].sort((a, b) => {
+    if (a.type === 'trade' && b.type !== 'trade') return -1;
+    if (b.type === 'trade' && a.type !== 'trade') return 1;
+    return 0;
+  });
+}
+
+async function openRoutePlanner(dateStr) {
   currentRunDay = dateStr || currentRunDay;
   const orders = sampleOrders.filter(o => o.date === currentRunDay && o.status !== 'delivered' && o.status !== 'cancelled');
   const label = runDayLabel(currentRunDay) || 'Delivery';
@@ -6128,25 +6137,49 @@ function openRoutePlanner(dateStr) {
   document.getElementById('routeModalOverlay').classList.add('show');
   document.body.style.overflow = 'hidden';
 
-  // Simulate API optimisation delay then render
-  setTimeout(() => renderRoute(orders, label), 1200);
+  let ordered = null, meta = null;
+  // Ask Google (server-side) for the optimal order. Needs addresses to work.
+  const withAddr = orders.filter(o => (o.address || '').trim());
+  if (withAddr.length >= 2) {
+    try {
+      const res = await fetch('/.netlify/functions/route', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          origin: 'Ormskirk, Lancashire',
+          destination: 'Ormskirk, Lancashire',
+          addresses: withAddr.map(o => o.address),
+        }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        if (Array.isArray(d.order) && d.order.length === withAddr.length) {
+          // Optimised stops (with addresses), then any address-less orders appended.
+          const optimisedWithAddr = d.order.map(i => withAddr[i]);
+          const noAddr = orders.filter(o => !(o.address || '').trim());
+          ordered = [...optimisedWithAddr, ...noAddr];
+          meta = { distanceMeters: d.distanceMeters || 0, durationSeconds: d.durationSeconds || 0, optimised: true };
+        }
+      }
+    } catch (e) { /* fall back below */ }
+  }
+
+  if (!ordered) ordered = routeHeuristic(orders);   // key not set / failed → simple order
+  renderRoute(ordered, label, meta);
 }
 
-function renderRoute(orders, label) {
-  // Simulated optimised order — in production this order comes from the Routes API response
-  // (routes[0].optimizedIntermediateWaypointIndex tells you the reordered indices)
-  const optimised = [...orders].sort((a, b) => {
-    // Simple simulation: trade orders first (they're usually further out), then domestic
-    if (a.type === 'trade' && b.type !== 'trade') return -1;
-    if (b.type === 'trade' && a.type !== 'trade') return 1;
-    return 0;
-  });
-
+function renderRoute(optimised, label, meta) {
   const totalValue = optimised.reduce((s, o) => s + o.total, 0);
   const tradeCount = optimised.filter(o => o.type === 'trade').length;
 
-  document.getElementById('rmSubtitle').textContent =
-    `${optimised.length} stops · tap Open in Google Maps for live directions`;
+  let metaTxt = `${optimised.length} stops · tap Open in Google Maps for live directions`;
+  if (meta && meta.optimised) {
+    const mi = meta.distanceMeters ? (meta.distanceMeters / 1609.34).toFixed(1) + ' mi' : '';
+    const mins = meta.durationSeconds ? Math.round(meta.durationSeconds / 60) + ' min drive' : '';
+    const bits = ['✓ Optimised by Google', mi, mins].filter(Boolean).join(' · ');
+    metaTxt = bits;
+  }
+  document.getElementById('rmSubtitle').textContent = metaTxt;
 
   // Summary stats — all real. Distance and drive time come from Google Maps
   // itself when you open the route (free, no API key needed).
