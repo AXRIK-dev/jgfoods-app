@@ -3150,8 +3150,10 @@ function renderStock() {
   const list = document.getElementById('stockList');
   const offerNames = offerCategoryNames();
   const normal = sampleProducts.filter(p => !offerNames.has(p.cat));
+  const offers = (categories || []).filter(c => c.is_offer)
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
-  if (normal.length === 0) {
+  if (normal.length === 0 && offers.length === 0) {
     list.innerHTML = `<div style="text-align:center;padding:40px 20px;color:var(--ink-soft);">
       <p style="font-size:15px;margin:0 0 6px">No products yet</p>
       <p style="font-size:13px;margin:0">Click <strong>+ Add Product</strong> above to get started.</p>
@@ -3160,8 +3162,46 @@ function renderStock() {
     return;
   }
 
-  list.innerHTML = normal.map(p => productRowHtml(p)).join('');
+  // Offers appear at the top (mirroring the website), then everyday products.
+  list.innerHTML = offers.map(c => offerRowHtml(c)).join('') + normal.map(p => productRowHtml(p)).join('');
   updateLiveCount();
+}
+
+// A read-only summary row for a special offer, shown in the Availability list
+// so Jon sees what the customer sees. Editing happens in Special offers.
+function offerRowHtml(c) {
+  const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const off = c.is_active === false;
+  const priced = c.deal_qty && c.deal_price;
+  const itemCount = sampleProducts.filter(p => p.cat === c.name).length;
+  const img = c.image_url || '';
+  const dealTag = priced
+    ? `<span class="cat-tag" style="background:var(--gold-soft,#f0e2c2);color:var(--navy)">🏷 ${Math.round(c.deal_qty)} for £${Number(c.deal_price).toFixed(2)}</span>`
+    : `<span class="cat-tag" style="background:#fde2e2;color:#c0392b">⚠️ price not set</span>`;
+  const live = !off && priced && itemCount > 0;
+  return `
+    <div class="stock-row${live ? '' : ' off'}" style="border-left:4px solid var(--gold,#b8924a)">
+      <div class="sr-img" style="position:relative">
+        ${img ? `<img src="${img}" alt="${esc(c.name)}">` : `<span class="img-placeholder">🏷</span>`}
+      </div>
+      <div class="sr-main">
+        <h4>${esc(c.name)}</h4>
+        <span class="cat-tag" style="background:var(--navy);color:#fff">SPECIAL OFFER</span>
+        ${dealTag}
+        <span class="cat-tag">${itemCount} pack${itemCount===1?'':'s'}</span>
+      </div>
+      <div class="sr-price" style="justify-content:flex-end">${priced ? `<span style="font-weight:700;color:var(--navy)">${Math.round(c.deal_qty)} for £${Number(c.deal_price).toFixed(2)}</span>` : ''}</div>
+      <span class="sr-state ${live ? 'live' : 'hidden'}">${live ? 'Live' : 'Hidden'}</span>
+      <div class="toggle${off ? '' : ' on'}" onclick="toggleCategoryActive('${c.id}')" role="switch" aria-checked="${!off}" title="Show on website"></div>
+      <button onclick="editOffer('${c.id}')" style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:7px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer;flex-shrink:0">Edit</button>
+      <button onclick="deleteOffer('${c.id}')" style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:7px;background:#fff0f0;border:1px solid #fcc;color:#c0392b;cursor:pointer;flex-shrink:0">Delete</button>
+    </div>`;
+}
+
+// Jump straight into a specific offer's editor from the Availability list.
+function editOffer(id) {
+  openOfferId = id;
+  openOffersManager();
 }
 
 // One ordinary product row.
@@ -3304,6 +3344,7 @@ async function createOffer() {
   if (input) input.value = '';
   openOfferId = cat.id;
   renderOffersManager();
+  renderStock();
   if (supabase) {
     const { data, error } = await supabase.from('categories')
       .insert({ name, slug, sort_order, is_active: true, is_offer: true })
@@ -3372,6 +3413,7 @@ async function addOfferItemsBulk(catId) {
   if (ta) ta.value = '';
   toggleBulkPaste(catId);
   renderOffersManager();
+  renderStock();
   if (supabase && toInsert.length) {
     const { data, error } = await supabase.from('products')
       .insert(toInsert.map(l => ({ name: l.name, category: c.name, price, description: null, is_available: true })))
@@ -3963,6 +4005,7 @@ async function addOfferItem(catId) {
   sampleProducts.push(local);
   if (input) input.value = '';
   renderOffersManager();
+  renderStock();
   // keep focus flowing so Jon can rattle off items
   setTimeout(() => document.getElementById('offer-add-' + catId)?.focus(), 0);
   if (supabase) {
@@ -3981,6 +4024,7 @@ async function removeOfferItem(productId) {
   const idx = sampleProducts.findIndex(x => x.id === productId);
   if (idx !== -1) sampleProducts.splice(idx, 1);
   renderOffersManager();
+  renderStock();
   const isUUID = x => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
   if (supabase && isUUID(productId)) {
     const { error } = await supabase.from('products').delete().eq('id', productId);
@@ -4051,6 +4095,8 @@ async function toggleCategoryActive(id) {
   c.is_active = c.is_active === false;   // flip
   renderCategoryManager();
   renderCategoryOptions();
+  renderOffersManager();
+  renderStock();           // keep the Availability list (incl. offer rows) in step
   if (supabase) {
     const { error } = await supabase.from('categories').update({ is_active:c.is_active }).eq('id', id);
     if (error) console.error('Toggle category error:', error);
@@ -4092,6 +4138,7 @@ async function setCategoryDeal(id, field, value) {
   if (field === 'qty')   c.deal_qty   = (v && v >= 2) ? Math.round(v) : null;
   if (field === 'price') c.deal_price = (v != null && v >= 0) ? v : null;
   renderOffersManager();
+  renderStock();
   if (supabase) {
     const isUUID = x => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
     if (isUUID(id)) {
