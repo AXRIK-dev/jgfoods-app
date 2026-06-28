@@ -1170,7 +1170,7 @@ async function loadCategories() {
   try {
     const { data, error } = await window.sbClient
       .from('categories')
-      .select('name, slug, sort_order, is_active, deal_qty, deal_price, image_url')
+      .select('name, slug, sort_order, is_active, deal_qty, deal_price, image_url, is_offer')
       .order('sort_order', { ascending: true });
     if (error || !data || !data.length) return;   // keep defaults
     categoryList = data
@@ -1178,12 +1178,23 @@ async function loadCategories() {
       .map(c => ({ name:c.name, slug:c.slug || slugifyCat(c.name),
                    dealQty: c.deal_qty || null,
                    dealPrice: c.deal_price != null ? parseFloat(c.deal_price) : null,
+                   isOffer: c.is_offer === true,
                    image: c.image_url || '' }));
     CAT_SLUG = {}; CAT_DEAL = {};
     categoryList.forEach(c => {
       CAT_SLUG[c.name] = c.slug;
-      if (c.dealQty && c.dealPrice) {
-        CAT_DEAL[c.slug] = { qty: c.dealQty, price: c.dealPrice, perUnit: c.dealPrice / c.dealQty, name: c.name, image: c.image };
+      // Every special offer is keyed here (so its items stay out of the grid and
+      // off the browse filter). qty/price may be null until Jon sets them.
+      if (c.isOffer) {
+        const priced = c.dealQty && c.dealPrice;
+        CAT_DEAL[c.slug] = {
+          qty: c.dealQty || null,
+          price: c.dealPrice || null,
+          perUnit: priced ? (c.dealPrice / c.dealQty) : 0,
+          priced: !!priced,
+          name: c.name,
+          image: c.image,
+        };
       }
     });
   } catch (e) { /* keep defaults */ }
@@ -1316,9 +1327,9 @@ function renderOfferCards() {
       </div>
       <div class="prod-body">
         <h4>${esc(d.name)}</h4>
-        <div class="prod-desc">Mix &amp; match — choose any ${d.qty} packs</div>
+        <div class="prod-desc">${d.priced ? `Mix &amp; match — choose any ${d.qty} packs` : 'Mix &amp; match offer'}</div>
         <div class="prod-foot">
-          <span class="price">${d.qty} for £${d.price.toFixed(2)}</span>
+          <span class="price">${d.priced ? `${d.qty} for £${d.price.toFixed(2)}` : 'Mix &amp; match'}</span>
           <button class="add-btn" onclick="openOfferPicker('${slug}')">Choose packs</button>
         </div>
       </div>`;
@@ -1328,6 +1339,7 @@ function renderOfferCards() {
 
 function openOfferPicker(slug) {
   const d = CAT_DEAL[slug]; if (!d) return;
+  if (!d.priced) { alert('This offer isn’t available to order online just yet — please call or message Jon to order, or check back soon.'); return; }
   offerSel[slug] = offerSel[slug] || {};
   const items = OFFER_ITEMS[slug] || [];
   const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
