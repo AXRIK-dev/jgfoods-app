@@ -1092,7 +1092,9 @@ function submitContactForm(form){
         <div style="width:60px;height:60px;border-radius:50%;background:var(--gold);color:var(--navy-deep);font-weight:800;font-size:22px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px" id="siAvatar">S</div>
         <p style="font-family:var(--display);font-size:18px;font-weight:600;color:var(--navy)" id="siName">Sarah Taylor</p>
         <p style="font-size:12px;color:var(--ink-soft);margin-top:4px" id="siEmail">sarah@example.com</p>
+        <div id="siBadge" style="margin-top:6px"></div>
       </div>
+      <div id="siPendingOrder" style="display:none"></div>
       <div style="background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:14px;margin-top:4px">
         <p style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--ink-soft);margin-bottom:10px">Your saved details</p>
         <p style="font-size:12.5px;color:var(--ink);line-height:1.7" id="siDetails">—</p>
@@ -1885,11 +1887,30 @@ function showSignedInState() {
   document.getElementById('siName').textContent = currentUser.name;
   document.getElementById('siEmail').textContent = currentUser.email;
 
-  // Account type badge
+  // Account type badge — set once (no appending, so it can't pile up)
   const badge = isTrade
-    ? `<span style="display:inline-block;margin-top:4px;font-size:9.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;background:var(--navy);color:var(--gold-bright);padding:3px 9px;border-radius:10px">Trade account</span>`
-    : `<span style="display:inline-block;margin-top:4px;font-size:9.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;background:var(--green-soft);color:var(--green);padding:3px 9px;border-radius:10px">Home delivery</span>`;
-  document.getElementById('siEmail').insertAdjacentHTML('afterend', `<div style="margin-top:6px">${badge}</div>`);
+    ? `<span style="display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;background:var(--navy);color:var(--gold-bright);padding:3px 9px;border-radius:10px">Trade account</span>`
+    : `<span style="display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;background:var(--green-soft);color:var(--green);padding:3px 9px;border-radius:10px">Home delivery</span>`;
+  const badgeEl = document.getElementById('siBadge');
+  if (badgeEl) badgeEl.innerHTML = badge;
+
+  // ── Your current (unpaid) order — the main thing to manage ──
+  const po = document.getElementById('siPendingOrder');
+  if (po) {
+    if (editingOrder && editingOrder.items && editingOrder.items.length) {
+      const itemsStr = editingOrder.items.map(i => i.qty > 1 ? `${i.name} ×${i.qty}` : i.name).join(', ');
+      const total = editingOrder.items.reduce((s, i) => s + i.price * i.qty, 0);
+      po.style.display = 'block';
+      po.innerHTML =
+        `<div style="background:linear-gradient(160deg,var(--navy-2),var(--navy));border-radius:14px;padding:16px;color:#fff;margin:4px 0 14px;border:1px solid rgba(224,189,114,.22)">
+          <div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--gold-soft)">Your order for ${editingOrder.dayLabel}</div>
+          <div style="font-size:13px;margin:8px 0 5px;line-height:1.5;color:rgba(255,255,255,.92)">${itemsStr}</div>
+          <div style="font-family:var(--display);font-size:19px;font-weight:700;color:var(--gold-bright)">£${total.toFixed(2)}</div>
+          <button onclick="editMyOrderFromAccount()" style="width:100%;margin-top:12px;background:var(--gold);color:var(--navy-deep);font-weight:800;font-size:13px;padding:12px;border-radius:10px">✏️ Add or change items</button>
+          <p style="font-size:10.5px;color:rgba(255,255,255,.7);margin-top:8px;text-align:center">Change it any time until the cut-off, or until it's paid.</p>
+        </div>`;
+    } else { po.style.display = 'none'; po.innerHTML = ''; }
+  }
 
   // Saved details
   document.getElementById('siDetails').innerHTML = [
@@ -1898,13 +1919,25 @@ function showSignedInState() {
     isTrade && currentUser.businessName ? `🏢 ${currentUser.businessName}` : null,
   ].filter(Boolean).join('<br>') || '—';
 
-  // Reorder banner — trade customers see "your usual order", domestic see last order
-  if (currentUser.lastOrder && currentUser.lastOrder.length) {
-    document.getElementById('reorderBanner').style.display = 'block';
-    document.getElementById('reorderItems').textContent = currentUser.lastOrder.join(', ');
-    const reorderBtn = document.querySelector('.rb-btn');
-    if (reorderBtn) reorderBtn.textContent = isTrade ? '🔄 Reorder your usual' : '🛒 Reorder last order';
+  // Reorder — only show when there's no live order to manage
+  const showReorder = !editingOrder && currentUser.lastOrder && currentUser.lastOrder.length;
+  const rb = document.getElementById('reorderBanner');
+  if (rb) {
+    rb.style.display = showReorder ? 'block' : 'none';
+    if (showReorder) {
+      document.getElementById('reorderItems').textContent = currentUser.lastOrder.join(', ');
+      const reorderBtn = document.querySelector('.rb-btn');
+      if (reorderBtn) reorderBtn.textContent = isTrade ? '🔄 Reorder your usual' : '🛒 Reorder last order';
+    }
   }
+}
+
+// From the account panel: jump into editing the live order
+function editMyOrderFromAccount() {
+  if (!editingOrder) return;
+  enterOrderEditMode();
+  closeSignInPanel();
+  openOrderPanel();
 }
 
 async function signIn() {
@@ -2024,11 +2057,12 @@ async function applyAuthedUser(session) {
   } catch (e) { /* reorder is a nice-to-have */ }
 
   updateNavForUser();
-  showSignedInState();
 
-  // If they have an unpaid order for the coming delivery, load it so they can edit it
+  // Load any unpaid order for the coming delivery FIRST, so the account panel shows it
   await loadMyPendingOrder();
   if (editingOrder) enterOrderEditMode();
+
+  showSignedInState();
 }
 
 // ── Forgot password: send the reset email ──
