@@ -1243,7 +1243,7 @@
       <div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
           <h3 style="font-family:var(--display);font-size:16px;font-weight:600;color:var(--navy)">Week ending</h3>
-          <input type="date" id="weekEndDate" class="fin-input" style="width:160px">
+          <input type="date" id="weekEndDate" class="fin-input" style="width:160px" onchange="autoFillWeeklySales()">
         </div>
 
         <div style="background:var(--cream);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:16px">
@@ -7312,13 +7312,26 @@ function flagBankHoliday() {
 
 // Sum THIS WEEK's Daily Sales (auto order takings + any manual extras) into the
 // weekly Sales figure — so Jon never types the sales total.
+// Local YYYY-MM-DD (avoids the UTC day-shift toISOString causes under BST)
+function isoLocal(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+// Friday ending the Sat→Fri trading week that contains `base`
+function weekEndingFriday(base) {
+  const d = new Date(base); d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7));   // forward to this week's Friday
+  return d;
+}
+
 function autoFillWeeklySales() {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const monOffset = (today.getDay() + 6) % 7;           // days back to Monday
-  const mon = new Date(today); mon.setDate(today.getDate() - monOffset);
-  const sun = new Date(mon);  sun.setDate(mon.getDate() + 6);
-  const iso = d => d.toISOString().slice(0, 10);
-  const lo = iso(mon), hi = iso(sun);
+  const input = document.getElementById('weekEndDate');
+  // Default the picker to this week's Friday the first time it's opened
+  if (input && !input.value) input.value = isoLocal(weekEndingFriday(new Date()));
+  const endStr = (input && input.value) ? input.value : isoLocal(weekEndingFriday(new Date()));
+  // Sales are the 7 days ending on the chosen "Week ending" date (inclusive)
+  const end = new Date(endStr + 'T00:00:00');
+  const start = new Date(end); start.setDate(end.getDate() - 6);
+  const lo = isoLocal(start), hi = isoLocal(end);
   const total = (dailySalesRows || [])
     .filter(r => r.date >= lo && r.date <= hi)
     .reduce((s, r) => s + (r.ordBank||0) + (r.ordCash||0) + (parseFloat(r.bank)||0) + (parseFloat(r.cash)||0), 0);
@@ -7327,7 +7340,7 @@ function autoFillWeeklySales() {
     el.value = total ? total.toFixed(2) : '';
     el.readOnly = true;
     el.style.background = 'var(--cream)';
-    el.title = "Fills in automatically from this week's Daily Sales";
+    el.title = "Fills in automatically from the Daily Sales in the week ending on the date above";
   }
   calcWeekly();
 }
@@ -7354,6 +7367,8 @@ function renderWeeklySheet() {
   const pb = document.getElementById('purchasesBody');
   const eb = document.getElementById('expensesBody');
   if (!pb || !eb) return;
+  const wk = document.getElementById('weekEndDate');
+  if (wk && !wk.value) wk.value = isoLocal(weekEndingFriday(new Date()));
   pb.innerHTML = SUPPLIERS.map((s,i) => `
     <tr>
       <td>${s.name}</td>
@@ -7422,11 +7437,9 @@ async function saveWeekly() {
   const totalExp   = expenses.reduce((s, e) => s + e.net, 0);
   const banked     = (sales + carried + vatReclaim) - totalPurch - totalExp;
 
-  // Use Friday of the current week as week_ending
-  const today = new Date();
-  const friday = new Date(today);
-  friday.setDate(today.getDate() + (5 - today.getDay() + 7) % 7 || 7);
-  const weekEnding = friday.toISOString().split('T')[0];
+  // Save against the week currently being viewed (the "Week ending" picker)
+  const weekInput = document.getElementById('weekEndDate');
+  const weekEnding = (weekInput && weekInput.value) ? weekInput.value : isoLocal(weekEndingFriday(new Date()));
 
   try {
     if (supabase) {
