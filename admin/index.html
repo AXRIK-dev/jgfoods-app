@@ -4489,24 +4489,35 @@ function renderCustomers(filter) {
 }
 
 async function deleteCustomer(id, name) {
-  if (!confirm(`Delete customer "${name}"?\n\nThis will also delete their orders and delivery history. If they have invoices, delete those first from the Finance page.\n\nThis cannot be undone.`)) return;
+  if (!confirm(`Delete customer "${name}"?\n\nThis removes their account login so the email is free to use again. If they have order or invoice history, the record itself is kept for your books.\n\nThis cannot be undone.`)) return;
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-    const { error } = await window.supabase.from('customers').delete().eq('id', id);
-    if (error) {
-      if (error.code === '23503') {
-        alert(`Can't delete ${name} — they have invoices on record. Delete their invoices from the Finance page first, then try again.`);
-      } else {
-        alert('Failed to delete: ' + error.message);
+    // Use the RPC: it also removes the Supabase Auth login (which a plain
+    // customers delete can't do), so the email can be registered again.
+    const { data, error } = await window.supabase.rpc('delete_customer_account', { p_customer_id: id });
+    if (error) { alert('Failed to delete: ' + error.message); return; }
+    if (data && data.error) { alert(data.error); return; }
+    // Refresh everything from the server so the list reflects whether the
+    // record was fully removed or kept (history) — no guessing locally.
+    if (typeof loadAppData === 'function') { await loadAppData(); }
+    else {
+      if (!(data && data.kept_record)) {
+        const idx = sampleCustomers.findIndex(c => c.id === id);
+        if (idx !== -1) sampleCustomers.splice(idx, 1);
       }
-      return;
+      renderCustomers(); renderDashboard(); rebuildInvoiceCustomers(); renderFinance();
     }
+    if (data && data.kept_record) {
+      alert(`${name}'s login was removed and the email is free again. Their record was kept because it has order or invoice history.`);
+    }
+    return;
   }
+  // Local sample row (no live id) — just drop it from the list
   const idx = sampleCustomers.findIndex(c => c.id === id);
   if (idx !== -1) sampleCustomers.splice(idx, 1);
   renderCustomers();
   renderDashboard();
-  rebuildInvoiceCustomers();   // refresh the invoice customer dropdown
-  renderFinance();             // refresh bank-payments table
+  rebuildInvoiceCustomers();
+  renderFinance();
 }
 
 function filterCustomers(type) {

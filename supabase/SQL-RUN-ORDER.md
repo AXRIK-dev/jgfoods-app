@@ -275,6 +275,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 28. `028_customer_account_fixes.sql`
+**What it does:** Fixes two customer-account bugs. (1) `place_order` now attaches a signed-in customer's order to **their own** linked record (`user_id = auth.uid()`) instead of re-matching the checkout form by "email OR phone", which could file the order against the wrong customer. (2) Adds `delete_customer_account(customer_id)` — the admin **Delete** button now calls this so it also removes the **Supabase Auth login**, freeing the email for re-registration. The customer record is kept only when it has order/invoice history.
+
+**When to run:** After 013 (place_order / auto-invoice), 006 (roles) and 019 (customer accounts). **Run it in the Supabase SQL editor** — it deletes from `auth.users`, which needs the elevated role the SQL editor runs as. Safe + idempotent.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app
