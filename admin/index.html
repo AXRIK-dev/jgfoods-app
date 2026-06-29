@@ -1375,6 +1375,33 @@
   </div>
 </div>
 
+<!-- ============ DELIVERY TEMP MODAL (prompted on "Delivered") ============ -->
+<div class="modal-overlay" id="deliveryTempModal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-head">
+      <div>
+        <h3>🌡️ Delivery temperature</h3>
+        <p style="font-size:11px;color:var(--ink-soft);margin-top:3px" id="dtempName"></p>
+      </div>
+      <button class="modal-close" onclick="closeModal('deliveryTempModal')">✕</button>
+    </div>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:2px 0 14px">Pop in the fridge/cool-box reading at the door. It's saved to your Temperature Log for environmental health.</p>
+    <div class="field">
+      <label>Temperature (°C)</label>
+      <input id="dtempValue" type="number" step="0.5" inputmode="decimal" placeholder="e.g. 1.5"
+             style="font-size:20px;font-weight:700;text-align:center" onkeydown="if(event.key==='Enter')confirmDeliveryTemp()">
+    </div>
+    <div class="field" style="margin-top:10px">
+      <label>Note (optional)</label>
+      <input id="dtempNote" type="text" placeholder="e.g. cool box, ice packs in">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn-gold" style="flex:1;justify-content:center;padding:13px" onclick="confirmDeliveryTemp()">Save &amp; mark delivered</button>
+      <button class="btn-navy" style="padding:13px 16px;background:var(--cream);color:var(--ink-soft);border:1px solid var(--line)" onclick="skipDeliveryTemp()">Skip</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ ADD CUSTOMER MODAL ============ -->
 <div class="modal-overlay" id="addCustomerModal">
   <div class="modal">
@@ -1466,7 +1493,7 @@
       <button class="btn-navy" onclick="prevTempMonth()">← Prev</button>
       <button class="btn-navy" id="tempMonthLabel" style="pointer-events:none;background:var(--navy-2)">May 2026</button>
       <button class="btn-navy" onclick="nextTempMonth()">Next →</button>
-      <button class="btn-gold" onclick="printTemps()">🖨 Print / Save PDF</button>
+      <button class="btn-gold" onclick="exportTempsPDF()">⬇ Export PDF</button>
     </div>
   </div>
 
@@ -3159,12 +3186,44 @@ function retentionSnooze() {
   if (banner) banner.style.display = 'none';
 }
 
+// Holds the order we're delivering while the temp prompt is open
+let deliveryTempCtx = null;
+
 async function updateOrderStatus(status) {
+  if (!currentOrderId) return;
+
+  // When marking delivered, capture the fridge temp at the door first.
+  // Only if we have the customer + slot to file it against (live orders).
+  if (status === 'delivered' && supabase) {
+    const o = sampleOrders.find(x => x.id === currentOrderId);
+    const custId = currentOrderFull?.ord?.customer_id || null;
+    if (o && custId && o.slotId && o.date) {
+      deliveryTempCtx = {
+        orderId: currentOrderId,
+        customerId: custId,
+        customerName: o.name,
+        slotId: o.slotId,
+        date: o.date,
+      };
+      document.getElementById('dtempName').textContent = `${o.name} · ${o.date ? runDayLabel(o.date) : ''} delivery`;
+      document.getElementById('dtempValue').value = '';
+      document.getElementById('dtempNote').value = '';
+      document.getElementById('orderModal').classList.remove('show');
+      document.getElementById('deliveryTempModal').classList.add('show');
+      setTimeout(() => document.getElementById('dtempValue').focus(), 50);
+      return;   // applyOrderStatus runs after the prompt is answered
+    }
+  }
+
+  await applyOrderStatus(status);
+}
+
+// Actually set + persist the order status (shared by the buttons and the temp prompt)
+async function applyOrderStatus(status) {
   if (!currentOrderId) return;
   const o = sampleOrders.find(x => x.id === currentOrderId);
   if (o) { o.status = status; renderOrders(); }
   document.getElementById('orderModal').classList.remove('show');
-  // Persist to Supabase
   if (supabase && currentOrderId) {
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentOrderId);
     if (isUUID) {
@@ -3174,6 +3233,66 @@ async function updateOrderStatus(status) {
         .eq('id', currentOrderId);
       if (error) console.error('Order status update failed:', error.message);
     }
+  }
+}
+
+// Save the temp reading against this delivery, then mark the order delivered
+async function confirmDeliveryTemp() {
+  const ctx = deliveryTempCtx;
+  const raw = document.getElementById('dtempValue').value;
+  if (raw === '' || isNaN(parseFloat(raw))) {
+    alert('Enter the temperature, or tap Skip if you haven\'t got it.');
+    return;
+  }
+  const temp = parseFloat(raw);
+  const note = document.getElementById('dtempNote').value.trim() || null;
+  document.getElementById('deliveryTempModal').classList.remove('show');
+
+  if (ctx && supabase) {
+    try {
+      await saveDeliveryTempRow(ctx, temp, note);
+    } catch (e) {
+      console.error('Delivery temp save failed:', e);
+      // Don't block the delivery status over a temp hiccup — it can be added in the Temp Log
+    }
+  }
+  if (ctx) { currentOrderId = ctx.orderId; }
+  await applyOrderStatus('delivered');
+  deliveryTempCtx = null;
+  if (typeof renderTempGrid === 'function') renderTempGrid();
+}
+
+// Mark delivered without a temp (Jon can fill it in later on the Temp Log)
+async function skipDeliveryTemp() {
+  const ctx = deliveryTempCtx;
+  document.getElementById('deliveryTempModal').classList.remove('show');
+  if (ctx) { currentOrderId = ctx.orderId; }
+  await applyOrderStatus('delivered');
+  deliveryTempCtx = null;
+}
+
+// Upsert one delivery_temps row (one reading per customer per run)
+async function saveDeliveryTempRow(ctx, temp, note) {
+  const { data: existing } = await supabase
+    .from('delivery_temps')
+    .select('id')
+    .eq('delivery_slot_id', ctx.slotId)
+    .eq('customer_id', ctx.customerId)
+    .maybeSingle();
+
+  const patch = { temp_celsius: temp, logged_at: new Date().toISOString() };
+  if (note !== null) patch.notes = note;
+
+  if (existing?.id) {
+    await supabase.from('delivery_temps').update(patch).eq('id', existing.id);
+  } else {
+    await supabase.from('delivery_temps').insert({
+      delivery_slot_id: ctx.slotId,
+      customer_id:      ctx.customerId,
+      customer_name:    ctx.customerName,
+      delivery_date:    ctx.date,
+      ...patch,
+    });
   }
 }
 
@@ -6522,6 +6641,91 @@ async function saveTempCell(input) {
 function prevTempMonth() { tempMonth--; if (tempMonth < 0) { tempMonth=11; tempYear--; } renderTempGrid(); }
 function nextTempMonth() { tempMonth++; if (tempMonth > 11) { tempMonth=0; tempYear++; } renderTempGrid(); }
 function printTemps() { window.print(); }
+
+// ── Branded monthly temperature-log PDF for environmental health ──
+// Builds from the rows currently loaded for the selected month (tempData).
+function exportTempsPDF() {
+  const JS = window.jspdf && window.jspdf.jsPDF;
+  if (!JS) { alert('PDF tool is still loading — try again in a second.'); return; }
+  const rows = (tempData || [])
+    .filter(r => r.temp_celsius !== null && r.temp_celsius !== undefined)
+    .slice()
+    .sort((a, b) => (a.delivery_date < b.delivery_date ? -1 : a.delivery_date > b.delivery_date ? 1
+                     : a.customer_name.localeCompare(b.customer_name)));
+  const monthName = new Date(tempYear, tempMonth, 1).toLocaleString('en-GB', { month:'long', year:'numeric' });
+  if (!rows.length) { alert(`No temperature readings recorded for ${monthName} yet.`); return; }
+
+  const NAVY=[22,39,63], NAVYD=[13,23,38], GOLD=[194,149,74], GOLDB=[224,189,114],
+        INK=[38,32,25], INKSOFT=[106,95,81], COLD=[21,101,192], WARN=[140,50,44], OK=[26,102,64];
+  const doc = new JS({ unit:'pt', format:'a4' });
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+  const L = 48, R = W - 48;
+
+  function header() {
+    doc.setFillColor(...NAVYD).rect(0, 0, W, 104, 'F');
+    doc.setFillColor(...GOLD).rect(0, 104, W, 3, 'F');
+    doc.setFont('helvetica','bold').setFontSize(26).setTextColor(255,255,255);
+    doc.text('JG Foods', L, 50);
+    doc.setFont('helvetica','bold').setFontSize(8).setTextColor(...GOLDB);
+    doc.text('MOBILE BUTCHER · NORTH LIVERPOOL, ORMSKIRK & WEST LANCASHIRE', L, 66);
+    doc.setFont('helvetica','normal').setFontSize(8.5).setTextColor(206,213,222);
+    doc.text('07702 852 704   ·   jongreen347@gmail.com', L, 82);
+    doc.setFont('helvetica','bold').setFontSize(15).setTextColor(255,255,255);
+    doc.text('TEMPERATURE LOG', R, 48, { align:'right' });
+    doc.setFont('helvetica','bold').setFontSize(11).setTextColor(...GOLDB);
+    doc.text(monthName, R, 66, { align:'right' });
+    doc.setFont('helvetica','normal').setFontSize(8.5).setTextColor(206,213,222);
+    doc.text('Cold-chain delivery records', R, 80, { align:'right' });
+  }
+
+  // Column layout
+  const cDate = L + 6, cCust = L + 96, cTemp = R - 150, cNote = R - 96;
+  function tableHead(y) {
+    doc.setFillColor(...NAVY).rect(L, y - 13, R - L, 24, 'F');
+    doc.setFont('helvetica','bold').setFontSize(8.5).setTextColor(255,255,255);
+    doc.text('DATE', cDate, y + 3);
+    doc.text('CUSTOMER', cCust, y + 3);
+    doc.text('°C', cTemp, y + 3, { align:'right' });
+    doc.text('NOTE', cNote, y + 3);
+    return y + 27;
+  }
+
+  header();
+  doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INKSOFT);
+  doc.text('Ideal range 0–2°C. Readings outside the range are flagged for follow-up.', L, 134);
+  let y = tableHead(160);
+
+  doc.setFontSize(10);
+  rows.forEach((r, idx) => {
+    if (y > H - 70) { doc.addPage(); header(); y = tableHead(150); doc.setFontSize(10); }
+    if (idx % 2 === 1) { doc.setFillColor(248,244,236).rect(L, y - 11, R - L, 18, 'F'); }
+    const dt = new Date(r.delivery_date + 'T12:00:00');
+    const dateStr = `${dt.getDate()}/${dt.getMonth()+1}/${String(dt.getFullYear()).slice(2)}`;
+    const t = parseFloat(r.temp_celsius);
+    const tc = isNaN(t) ? INK : (t < 0 ? COLD : t <= 2 ? OK : WARN);
+    doc.setFont('helvetica','normal').setTextColor(...INK);
+    doc.text(dateStr, cDate, y);
+    doc.text(doc.splitTextToSize(String(r.customer_name || ''), cTemp - cCust - 16)[0] || '', cCust, y);
+    doc.setFont('helvetica','bold').setTextColor(...tc);
+    doc.text(`${t.toFixed(1)}°C`, cTemp, y, { align:'right' });
+    doc.setFont('helvetica','normal').setTextColor(...INKSOFT).setFontSize(8.5);
+    doc.text(doc.splitTextToSize(String(r.notes || ''), R - cNote - 4)[0] || '', cNote, y);
+    doc.setFontSize(10);
+    y += 18;
+  });
+
+  // Sign-off line for the records
+  y += 18;
+  if (y > H - 80) { doc.addPage(); header(); y = 150; }
+  doc.setDrawColor(...GOLD).setLineWidth(1).line(L, y, R, y);
+  doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INK);
+  doc.text(`${rows.length} reading${rows.length !== 1 ? 's' : ''} recorded in ${monthName}.`, L, y + 18);
+  doc.text('Checked by: ____________________     Date: ____________', L, y + 38);
+  doc.setFontSize(8).setTextColor(150,142,130);
+  doc.text('JG Foods · delivery temperature record · generated ' + new Date().toLocaleDateString('en-GB'), W/2, H - 30, { align:'center' });
+
+  doc.save(`JG-Foods-Temp-Log-${tempYear}-${String(tempMonth+1).padStart(2,'0')}.pdf`);
+}
 
 // ============ INVOICE GENERATOR ============
 // Built lazily from sampleCustomers — rebuilt after loadAppData so real customers appear
