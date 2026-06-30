@@ -224,11 +224,22 @@
   .modal-head h3{font-family:var(--display);font-size:19px;font-weight:600;color:var(--navy)}
   .modal-close{width:28px;height:28px;border-radius:7px;background:var(--cream);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--ink-soft)}
   .modal-close:hover{background:var(--line)}
-  .modal-detail-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13px}
+  .modal-detail-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13px}
   .modal-detail-row:last-of-type{border-bottom:none}
-  .modal-detail-row span{color:var(--ink-soft)}
-  .modal-detail-row b{color:var(--ink);font-weight:700}
+  .modal-detail-row span{color:var(--ink-soft);flex-shrink:0}
+  .modal-detail-row b{color:var(--ink);font-weight:700;min-width:0;overflow-wrap:anywhere;text-align:right}
   .modal-status-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+  /* Order item lines inside the modal — long names wrap instead of overflowing */
+  .oitem-row{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:3px 0}
+  .oitem-row .oi-name{min-width:0;overflow-wrap:anywhere}
+  .oitem-row .oi-price{flex-shrink:0;color:var(--ink-soft)}
+  /* Stop any stray wide child from spilling past the viewport on phones */
+  .modal{overflow-x:hidden}
+  @media(max-width:600px){
+    .modal-overlay{padding:12px}
+    .modal{padding:22px 18px}
+    .modal-status-row .status-btn{flex:1 1 calc(50% - 4px)}
+  }
   .status-btn{font-size:12px;font-weight:800;padding:8px 14px;border-radius:8px;cursor:pointer;transition:.15s;border:2px solid transparent}
   .status-btn.active-status{border-color:var(--navy)}
 
@@ -442,7 +453,11 @@
     .page{padding:18px 14px 50px}
     .stats-row{grid-template-columns:1fr 1fr}
     .field-row{grid-template-columns:1fr}
+    /* Any two-column form/grid stacks on phones (overrides inline grid) */
+    .resp-2col{grid-template-columns:1fr !important}
   }
+  /* Wide data tables scroll inside their own box rather than stretching the page */
+  .fin-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
   /* ── Login screen ─────────────────────────────────────── */
   #login-screen{
     position:fixed;inset:0;z-index:9999;
@@ -1238,7 +1253,7 @@
 
   <!-- WEEKLY RECONCILIATION -->
   <div class="tab-panel" id="finance-weekly">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;max-width:1000px">
+    <div class="resp-2col" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;max-width:1000px">
 
       <div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -2819,9 +2834,18 @@ async function openOrderModal(id) {
       const { data: ord } = await supabase.from('orders')
         .select('id, total_amount, channel, notes, status, payment_method, customer_id, customers(name,email,phone,address_line_1,postcode,customer_type), order_items(id, product_id, product_name, unit_price, quantity)')
         .eq('id', id).single();
-      const invRes = await supabase.from('invoices')
-        .select('id, invoice_number, total_amount, status, invoice_type, invoice_payments(method, amount)')
+      const invSelect = 'id, invoice_number, total_amount, status, invoice_type, invoice_payments(method, amount)';
+      let invRes = await supabase.from('invoices')
+        .select(invSelect)
         .eq('order_id', id).maybeSingle();
+      // Self-heal: an order should always have a receipt/invoice. If a past
+      // auto-create silently failed, build it now so paid/print/email work.
+      if (!invRes.data && ord) {
+        try {
+          await supabase.rpc('create_invoice_for_order', { p_order_id: id });
+          invRes = await supabase.from('invoices').select(invSelect).eq('order_id', id).maybeSingle();
+        } catch (e) { console.error('Invoice self-heal failed:', e); }
+      }
       currentOrderFull = { ord, inv: invRes.data || null };
     } catch (e) { console.error('Order load failed:', e); }
   }
@@ -2866,7 +2890,7 @@ function renderOrderModalBody() {
                     : methods.includes('cash') ? 'cash' : methods.includes('bacs') ? 'bank transfer' : '';
 
   const itemRows = items.length
-    ? items.map(i => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>${ordEsc(i.name)} ×${i.qty}</span><span style="color:var(--ink-soft)">£${(i.qty*i.price).toFixed(2)}</span></div>`).join('')
+    ? items.map(i => `<div class="oitem-row"><span class="oi-name">${ordEsc(i.name)} ×${i.qty}</span><span class="oi-price">£${(i.qty*i.price).toFixed(2)}</span></div>`).join('')
     : '<span style="color:var(--ink-soft);font-size:12.5px">No items</span>';
 
   body.innerHTML = `
@@ -3060,7 +3084,17 @@ async function syncDailySalesForOrder(orderId) {
 
 async function orderMarkPaid(method) {
   const f = currentOrderFull; if (!f || !f.ord) return;
-  if (!f.inv || !f.inv.id) { alert('No invoice is linked to this order yet. If it was just placed, give it a moment and reopen.'); return; }
+  // Self-heal: if there's no invoice yet, create it now rather than dead-ending
+  if (!f.inv || !f.inv.id) {
+    try {
+      await supabase.rpc('create_invoice_for_order', { p_order_id: f.ord.id });
+      const r = await supabase.from('invoices')
+        .select('id, invoice_number, total_amount, status, invoice_type, invoice_payments(method, amount)')
+        .eq('order_id', f.ord.id).maybeSingle();
+      if (r.data) f.inv = r.data;
+    } catch (e) { console.error('Invoice creation on mark-paid failed:', e); }
+    if (!f.inv || !f.inv.id) { alert('Couldn\'t create an invoice for this order. Check it has at least one item, then reopen it in a moment.'); return; }
+  }
   const already = (f.inv.invoice_payments || []).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
   const total = parseFloat(f.inv.total_amount) || parseFloat(f.ord.total_amount) || 0;
   const balance = Math.max(0, total - already);
