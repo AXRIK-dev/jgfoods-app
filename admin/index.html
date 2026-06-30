@@ -1810,6 +1810,14 @@
     </div>
     <div id="ep-deal-hint" style="display:none;background:var(--gold-soft,#f4ebd4);border:1px solid var(--gold,#b8924a);border-radius:9px;padding:9px 11px;font-size:12px;color:var(--navy);margin-bottom:4px"></div>
     <div class="field"><label>Description (shown on website)</label><textarea id="ep-desc" placeholder="Fresh skinless breast fillets" style="min-height:60px"></textarea></div>
+    <div class="field" style="background:var(--cream);border:1px solid var(--line);border-radius:10px;padding:12px 13px">
+      <label style="display:block;margin-bottom:2px">Customer choices <span style="font-weight:600;color:var(--ink-soft)">(optional — e.g. kebab seasoning)</span></label>
+      <p style="font-size:11.5px;color:var(--ink-soft);margin:0 0 9px">Add options here and the website shows a dropdown on this product. The customer's choice is added to the order and your pick list. Leave blank for no choice.</p>
+      <div class="field-row" style="margin-bottom:0">
+        <div class="field" style="margin-bottom:0"><label>Choice label</label><input id="ep-optlabel" type="text" placeholder="Seasoning"></div>
+        <div class="field" style="margin-bottom:0"><label>Options (comma-separated)</label><input id="ep-options" type="text" placeholder="Plain, Piri Piri, BBQ, Garlic"></div>
+      </div>
+    </div>
     <div style="display:flex;gap:9px;margin-top:6px">
       <button class="btn-add" style="flex:1;justify-content:center;padding:13px" onclick="saveEditProduct()">Save changes</button>
       <button onclick="closeModal('editProductModal')" style="padding:13px 18px;border-radius:9px;font-weight:800;font-size:13px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft)">Cancel</button>
@@ -2233,7 +2241,7 @@ async function loadAppData() {
     const [productsRes, customersRes, ordersRes, invoicesRes, runSlotsRes, categoriesRes] = await Promise.all([
       supabase
         .from('products')
-        .select('id, name, category, price, description, is_available, img_url, sort_order')
+        .select('id, name, category, price, description, is_available, img_url, sort_order, options, option_label')
         .order('sort_order').order('name'),
 
       supabase
@@ -2292,6 +2300,8 @@ async function loadAppData() {
         desc:  p.description || '',
         live:  p.is_available,
         img:   p.img_url || null,
+        options: Array.isArray(p.options) ? p.options : [],
+        optionLabel: p.option_label || '',
       }));
     }
 
@@ -3914,6 +3924,8 @@ function addNewProduct() {
   document.getElementById('ep-name').value = '';
   document.getElementById('ep-price').value = '';
   document.getElementById('ep-desc').value = '';
+  document.getElementById('ep-optlabel').value = '';
+  document.getElementById('ep-options').value = '';
   renderCategoryOptions();
   const sel = document.getElementById('ep-cat');
   if (sel.options.length) sel.selectedIndex = 0;
@@ -4120,6 +4132,8 @@ function openEditProduct(id) {
   document.getElementById('ep-cat').value = p.cat;
   document.getElementById('ep-price').value = p.price.toFixed(2);
   document.getElementById('ep-desc').value = p.desc || '';
+  document.getElementById('ep-optlabel').value = p.optionLabel || '';
+  document.getElementById('ep-options').value = (p.options || []).join(', ');
   epCatChanged();
   document.getElementById('editProductModal').classList.add('show');
 }
@@ -4132,17 +4146,25 @@ async function saveEditProduct() {
   const desc = document.getElementById('ep-desc').value.trim();
   if (!name) { alert('Please enter a product name.'); return; }
 
+  // Parse the customer-choice options (comma-separated). Empty = no choice.
+  const options = (document.getElementById('ep-options').value || '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  const optionLabel = options.length
+    ? (document.getElementById('ep-optlabel').value.trim() || 'Option')
+    : null;
+  const optionsCol = options.length ? options : null;
+
   const isUUID = x => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
 
   // ── New product ──────────────────────────────────────────
   if (!id) {
-    const local = { id:'sp'+Date.now(), name, cat, price, desc, live:true, img:null };
+    const local = { id:'sp'+Date.now(), name, cat, price, desc, live:true, img:null, options, optionLabel: optionLabel || '' };
     sampleProducts.push(local);
     closeModal('editProductModal');
     renderStock();
     if (supabase) {
       const { data, error } = await supabase.from('products')
-        .insert({ name, category:cat, price, description:desc || null, is_available:true })
+        .insert({ name, category:cat, price, description:desc || null, is_available:true, options: optionsCol, option_label: optionLabel })
         .select('id').single();
       if (error) { console.error('Create product error:', error); }
       else if (data) { local.id = data.id; }   // swap temp id for real UUID
@@ -4153,13 +4175,13 @@ async function saveEditProduct() {
   // ── Existing product ─────────────────────────────────────
   const p = sampleProducts.find(x => x.id === id);
   if (!p) return;
-  p.name = name; p.cat = cat; p.price = price; p.desc = desc;
+  p.name = name; p.cat = cat; p.price = price; p.desc = desc; p.options = options; p.optionLabel = optionLabel || '';
   closeModal('editProductModal');
   renderStock();
 
   if (supabase && isUUID(id)) {
     const { error } = await supabase.from('products').update({
-      name, category:cat, price, description: desc || null,
+      name, category:cat, price, description: desc || null, options: optionsCol, option_label: optionLabel,
     }).eq('id', id);
     if (error) console.error('Update product error:', error);
   }

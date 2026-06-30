@@ -1230,7 +1230,7 @@ async function loadProducts() {
 
   const { data, error } = await window.sbClient
     .from('products')
-    .select('id, name, category, price, description, img_url, unit')
+    .select('id, name, category, price, description, img_url, unit, options, option_label')
     .eq('is_available', true)
     .order('sort_order', { ascending: true, nullsFirst: false })
     .order('name');
@@ -1275,11 +1275,21 @@ async function loadProducts() {
     const priceHtml = deal
       ? `<div><span class="price" style="font-size:15px">${deal.qty} for £${deal.price.toFixed(2)}</span><div style="font-size:10.5px;color:var(--ink-soft);margin-top:1px">£${deal.perUnit.toFixed(2)} each · mix &amp; match</div></div>`
       : `<span class="price">£${effPrice.toFixed(2)}</span>`;
+    // Customer-choice options (e.g. seasoning) — show a dropdown if set
+    const opts = Array.isArray(p.options) ? p.options : [];
+    const optLabel = p.option_label || 'Option';
+    const optHtml = opts.length
+      ? `<select class="prod-opt" id="opt-${p.id}" aria-label="${optLabel}" style="width:100%;margin:8px 0 2px;padding:9px 11px;border:1.5px solid var(--line);border-radius:9px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff">
+           <option value="">${optLabel} — choose…</option>
+           ${opts.map(o => `<option value="${o.replace(/"/g,'&quot;')}">${o}</option>`).join('')}
+         </select>`
+      : '';
     card.innerHTML = `
       ${imgHtml}
       <div class="prod-body">
         <h4>${p.name}</h4>
         <div class="prod-desc">${p.description || ''}</div>
+        ${optHtml}
         <div class="prod-foot">
           ${priceHtml}
           <div style="display:flex;align-items:center;gap:7px">
@@ -1435,7 +1445,7 @@ function addOfferSet(slug) {
     const it = byId[id]; const add = sel[id] || 0;
     if (!it || add <= 0) return;
     if (basket[id]) basket[id].qty += add;
-    else basket[id] = { id, name: it.name, price: d.perUnit, cls: slug, unit: 'pack', qty: add, img: d.image || '', deal: slug };
+    else basket[id] = { id, productId: id, name: it.name, price: d.perUnit, cls: slug, unit: 'pack', qty: add, img: d.image || '', deal: slug };
   });
   offerSel[slug] = {};
   closeOfferPicker();
@@ -1537,28 +1547,44 @@ function bumpCardQty(id, delta) {
   if (el) el.textContent = cardQtys[id];
 }
 function addFromCard(id, name, price, cls, unit) {
+  // If this product offers a choice (e.g. seasoning), one must be picked first
+  const sel = document.getElementById('opt-' + id);
+  let option = '';
+  if (sel) {
+    option = sel.value;
+    if (!option) {
+      sel.style.borderColor = 'var(--gold)';
+      sel.focus();
+      return;
+    }
+    sel.style.borderColor = '';
+  }
   const n = cardQtys[id] || 1;
-  addToBasket(id, name, price, cls, unit, n);
+  addToBasket(id, name, price, cls, unit, n, option);
   cardQtys[id] = 1;
   const el = document.getElementById('cq-' + id);
   if (el) el.textContent = '1';
+  if (sel) sel.value = '';
 }
 
-function addToBasket(id, name, price, cls, unit, count) {
+function addToBasket(productId, name, price, cls, unit, count, option) {
   const n = Math.max(1, parseInt(count, 10) || 1);
-  if (basket[id]) {
-    basket[id].qty += n;
+  const opt = option || '';
+  const key = opt ? `${productId}::${opt}` : productId;        // separate line per choice
+  const displayName = opt ? `${name} — ${opt}` : name;
+  if (basket[key]) {
+    basket[key].qty += n;
   } else {
     // Pull the product photo + any offer info straight off the card
-    const cardEl = document.querySelector(`[data-id="${id}"]`);
+    const cardEl = document.querySelector(`[data-id="${productId}"]`);
     const img = cardEl?.dataset.img || '';
     const deal = cardEl?.dataset.deal || '';
-    basket[id] = { id, name, price, cls, unit: unit || 'pack', qty: n, img, deal };
+    basket[key] = { id: key, productId, option: opt, name: displayName, price, cls, unit: unit || 'pack', qty: n, img, deal };
   }
   updateBasketUI();
 
   // animate button
-  const btn = document.querySelector(`[data-id="${id}"] .add-btn`);
+  const btn = document.querySelector(`[data-id="${productId}"] .add-btn`);
   if (btn) {
     const orig = btn.textContent;
     btn.textContent = '✓ Added';
@@ -1815,7 +1841,7 @@ function enterOrderEditMode() {
     const cardEl = document.querySelector(`[data-id="${it.product_id}"]`);
     const offerSlug = offerSlugForProduct(it.product_id);
     basket[it.product_id] = {
-      id: it.product_id, name: it.name, price: it.price, qty: it.qty, unit: 'pack',
+      id: it.product_id, productId: it.product_id, name: it.name, price: it.price, qty: it.qty, unit: 'pack',
       cls: cardEl?.dataset.cls || offerSlug || '',
       img: cardEl?.dataset.img || (offerSlug ? (CAT_DEAL[offerSlug]?.image || '') : ''),
       deal: cardEl?.dataset.deal || offerSlug || '',
@@ -1845,7 +1871,7 @@ async function saveOrderEdits() {
   const btn = document.getElementById('placeBtn');
   const txt = document.getElementById('placeBtnText');
   btn.disabled = true; if (txt) txt.textContent = 'Saving…';
-  const rpcItems = items.map(i => ({ product_id: i.id, quantity: i.qty }));
+  const rpcItems = items.map(i => ({ product_id: i.productId || i.id, quantity: i.qty, product_name: i.name }));
   try {
     const { data, error } = await window.sbClient.rpc('edit_my_order', { p_order_id: editingOrder.id, p_items: rpcItems });
     if (error) throw error;
@@ -1933,9 +1959,10 @@ async function placeOrder() {
   const pcMatch = address.toUpperCase().match(/[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}/);
   const postcode = pcMatch ? pcMatch[0] : '';
 
-  // Build items for the RPC: snapshot name + price at time of order
+  // Build items for the RPC: snapshot name (incl. any chosen option) + price.
+  // product_id stays the real product UUID; the option lives in the name.
   const rpcItems = items.map(i => ({
-    product_id:   i.id,
+    product_id:   i.productId || i.id,
     product_name: i.name,
     unit_price:   i.price,
     quantity:     i.qty,

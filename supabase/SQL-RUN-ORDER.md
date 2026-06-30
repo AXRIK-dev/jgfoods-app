@@ -282,6 +282,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 29. `029_product_options.sql`
+**What it does:** Adds `options` (text[]) and `option_label` to products so one product can offer a customer-chosen variant (e.g. kebab **seasoning**) instead of needing a separate product per combination. The website shows a dropdown; the choice is appended to the order line name ("Chicken Kebab — Piri Piri"), so it flows to the order, invoice and pick list automatically. Also updates `edit_my_order` so a chosen option survives a customer edit.
+
+**When to run:** After 013 (auto-invoice) and 023 (edit_my_order). Safe on the live database — idempotent.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app
