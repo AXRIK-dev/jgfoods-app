@@ -456,6 +456,13 @@
     .field-row{grid-template-columns:1fr}
     /* Any two-column form/grid stacks on phones (overrides inline grid) */
     .resp-2col{grid-template-columns:1fr !important}
+    /* Tighten the top bar so the avatar + Sign out always fit */
+    .tn-inner{padding:0 12px}
+    .tn-brand{margin-right:8px}
+    .tn-brand small{display:none}
+    .tn-user{display:none}              /* the avatar stands in for the name */
+    .tn-right{gap:6px}
+    #nav-signout{margin-left:4px !important}
   }
   /* Wide data tables scroll inside their own box rather than stretching the page */
   .fin-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
