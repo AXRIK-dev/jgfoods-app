@@ -1456,6 +1456,7 @@ function addOfferSet(slug) {
 async function loadDeliveryBanner() {
   const el = document.getElementById('deliverBannerText');
   if (!el) return;
+  try { await window.sbClient.rpc('ensure_delivery_slots'); } catch (e) {}
   const TRADE_NOTE = 'Trade &amp; commercial — delivery arranged directly to suit you.';
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const horizon = new Date(today); horizon.setDate(today.getDate() + 8);
@@ -1693,6 +1694,9 @@ function updateBasketUI() {
 async function loadSlots() {
   const picker = document.getElementById('slotPicker');
   if (!picker) return;
+
+  // Make sure the usual delivery days exist (rolling, hands-off). Best-effort.
+  try { await window.sbClient.rpc('ensure_delivery_slots'); } catch (e) {}
 
   const today = new Date().toISOString().slice(0, 10);
   const { data, error } = await window.sbClient

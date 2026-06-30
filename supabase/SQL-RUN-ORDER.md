@@ -289,6 +289,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 30. `030_auto_delivery_slots.sql`
+**What it does:** Adds `ensure_delivery_slots()` — keeps open delivery runs for the **usual days** generated across the coming weeks automatically, so Jon never has to "open" each week by hand. The website calls it on load, so the next days are always there for customers. Also adds **holiday mode**: an `app_settings` row `holiday {from, until}` (until = return date) — during a holiday the function removes order-free runs in the window, closes any with orders (for rebooking), and skips creating new ones; clear the holiday and the usual days regenerate.
+
+**When to run:** After 008 (app_settings + flexible days). Safe on the live database — idempotent. Granted to `anon` + `authenticated`.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

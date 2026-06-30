@@ -896,12 +896,30 @@
   </div>
 
   <!-- Add a one-off day -->
-  <div style="background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:22px">
+  <div style="background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:18px">
     <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:4px">Add a one-off delivery day</div>
     <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px">Delivering on a day you don't usually? Add it here — any day of the week.</p>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <input type="date" id="oneOffDate" style="background:#fff;border:1.5px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px;color:var(--ink)">
       <button class="btn-navy" style="padding:10px 16px;font-size:12.5px" onclick="addOneOffDay()">+ Add this day</button>
+    </div>
+  </div>
+
+  <!-- Holiday / time off -->
+  <div style="background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:22px">
+    <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:4px">🏖 Holiday / time off</div>
+    <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px">Going away? Set the dates and the website automatically stops taking orders for those days, then starts again on your return — no need to close each day by hand.</p>
+    <div id="holidayActive" style="display:none;background:#fff;border:1px solid var(--gold);border-radius:10px;padding:12px 14px"></div>
+    <div id="holidaySetter" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--ink-soft);margin-bottom:4px">First day off</label>
+        <input type="date" id="holFrom" style="background:#fff;border:1.5px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px;color:var(--ink)">
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--ink-soft);margin-bottom:4px">Back to work (first day back)</label>
+        <input type="date" id="holUntil" style="background:#fff;border:1.5px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px;color:var(--ink)">
+      </div>
+      <button class="btn-navy" style="padding:10px 16px;font-size:12.5px" onclick="setHoliday()">Set holiday</button>
     </div>
   </div>
 
@@ -1912,6 +1930,11 @@
       <div class="field"><label>Last name *</label><input id="ec-last" type="text" placeholder="Taylor"></div>
     </div>
     <div class="field"><label>Phone</label><input id="ec-phone" type="tel" placeholder="07700 000000"></div>
+    <div class="field">
+      <label>Account email <span style="font-weight:400;color:var(--ink-soft)">(their website login)</span></label>
+      <input id="ec-email" type="email" readonly title="The email this customer signed up with. Read-only — it's their account login."
+             style="background:var(--cream);color:var(--ink-soft);cursor:default">
+    </div>
     <div class="field"><label>Address</label><input id="ec-address" type="text" placeholder="14 Any Street, Ormskirk"></div>
     <div class="field">
       <label>Type</label>
@@ -4464,6 +4487,9 @@ function editCustomer(id) {
   document.getElementById('ec-first').value = c.name.split(' ')[0] || '';
   document.getElementById('ec-last').value = c.name.split(' ').slice(1).join(' ') || '';
   document.getElementById('ec-phone').value = c.phone || '';
+  const emailEl = document.getElementById('ec-email');
+  emailEl.value = c.email || '';
+  emailEl.placeholder = c.email ? '' : 'No account — added manually';
   document.getElementById('ec-address').value = c.address || '';
   document.getElementById('ec-type').value = c.type || 'domestic';
   document.getElementById('ec-referredby').value = c.referredBy || '';
@@ -5821,6 +5847,7 @@ let SCHEDULE = {
   usualDays: ['Monday','Wednesday','Thursday'],
   capacity:  50,
   cutoff:    { days_before: 1, hour: 17, minute: 0 },
+  holiday:   null,    // { from:'YYYY-MM-DD', until:'YYYY-MM-DD' } — until = return date
   slots:     [],
 };
 
@@ -5842,13 +5869,18 @@ function cutoffISOFor(dateStr) {
 async function loadSchedule() {
   if (!supabase) return;
   try {
+    // Roll the usual days forward automatically before we read them
+    try { await supabase.rpc('ensure_delivery_slots'); } catch (e) { console.error('ensure_delivery_slots', e); }
+
     const { data: settings } = await supabase
       .from('app_settings').select('key, value')
-      .in('key', ['usual_days','default_capacity','default_cutoff']);
+      .in('key', ['usual_days','default_capacity','default_cutoff','holiday']);
+    SCHEDULE.holiday = null;
     (settings || []).forEach(s => {
       if (s.key === 'usual_days' && Array.isArray(s.value?.days)) SCHEDULE.usualDays = s.value.days;
       if (s.key === 'default_capacity' && s.value?.value != null)  SCHEDULE.capacity  = s.value.value;
       if (s.key === 'default_cutoff' && s.value)                   SCHEDULE.cutoff    = s.value;
+      if (s.key === 'holiday' && s.value?.from && s.value?.until)   SCHEDULE.holiday   = s.value;
     });
 
     const today = toDateStr(new Date());
@@ -5869,8 +5901,85 @@ async function loadSchedule() {
 
 function renderSchedule() {
   renderUsualChips();
+  renderHolidayBanner();
   renderScheduleList();
   renderAffected();
+}
+
+function renderHolidayBanner() {
+  const active = document.getElementById('holidayActive');
+  const setter = document.getElementById('holidaySetter');
+  if (!active || !setter) return;
+  const h = SCHEDULE.holiday;
+  if (h && h.from && h.until) {
+    const fromTxt = prettyDate(h.from);
+    // 'until' is the return date; last day off is the day before
+    const back = new Date(h.until + 'T00:00:00');
+    const lastOff = new Date(back); lastOff.setDate(back.getDate() - 1);
+    active.style.display = 'block';
+    setter.style.display = 'none';
+    active.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:13.5px;font-weight:800;color:var(--navy)">🏖 On holiday — deliveries paused</div>
+          <div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px">${fromTxt} to ${prettyDate(toDateStr(lastOff))} · back on <b style="color:var(--navy)">${prettyDate(h.until)}</b></div>
+        </div>
+        <button class="btn-navy" style="padding:9px 14px;font-size:12px;background:#fbeaea;color:#a12020;border:1px solid #f0c0c0" onclick="clearHoliday()">Cancel holiday</button>
+      </div>`;
+  } else {
+    active.style.display = 'none';
+    setter.style.display = 'flex';
+  }
+}
+
+async function setHoliday() {
+  if (!supabase) return;
+  const from  = document.getElementById('holFrom').value;
+  const until = document.getElementById('holUntil').value;
+  if (!from || !until) { alert('Please choose both dates — your first day off and the day you\'re back.'); return; }
+  if (until <= from)   { alert('Your return date needs to be after your first day off.'); return; }
+
+  // Warn if any run in the window already has orders (Jon must rebook those)
+  let withOrders = [];
+  try {
+    const { data } = await supabase.from('delivery_slots')
+      .select('delivery_date, orders_count')
+      .gte('delivery_date', from).lt('delivery_date', until);
+    withOrders = (data || []).filter(s => (s.orders_count || 0) > 0);
+  } catch (e) { console.error('holiday order check', e); }
+  if (withOrders.length) {
+    const list = withOrders.map(s => prettyDate(s.delivery_date) + ` (${s.orders_count})`).join(', ');
+    if (!confirm(`Heads up — these days inside your holiday already have orders: ${list}.\n\nThey'll be closed and shown in the "Orders need rebooking" banner so you can call those customers. Continue?`)) return;
+  }
+
+  try {
+    const { error } = await supabase.from('app_settings')
+      .upsert({ key: 'holiday', value: { from, until } }, { onConflict: 'key' });
+    if (error) throw error;
+    SCHEDULE.holiday = { from, until };
+    await supabase.rpc('ensure_delivery_slots');   // suppress runs in the window now
+    await loadSchedule();
+    if (typeof loadAppData === 'function') await loadAppData();
+  } catch (err) {
+    console.error('setHoliday error:', err);
+    alert('Could not set the holiday. Please try again.');
+  }
+}
+
+async function clearHoliday() {
+  if (!supabase) return;
+  if (!confirm('Cancel the holiday? Your usual delivery days will start showing on the website again.')) return;
+  try {
+    const { error } = await supabase.from('app_settings').delete().eq('key', 'holiday');
+    if (error) throw error;
+    SCHEDULE.holiday = null;
+    await supabase.rpc('ensure_delivery_slots');   // regenerate the usual days
+    await loadSchedule();
+    if (typeof loadAppData === 'function') await loadAppData();
+  } catch (err) {
+    console.error('clearHoliday error:', err);
+    alert('Could not cancel the holiday. Please try again.');
+  }
 }
 
 function renderUsualChips() {
@@ -5914,14 +6023,19 @@ async function saveUsualDays() {
 }
 
 // Build the next few weeks: usual days + any existing slots, unified by date
+function isHolidayDate(ds) {
+  const h = SCHEDULE.holiday;
+  return !!(h && h.from && h.until && ds >= h.from && ds < h.until);
+}
+
 function buildUpcomingDates() {
   const map = {};
   const today = new Date(); today.setHours(0,0,0,0);
   for (let i = 0; i < SCHEDULE_HORIZON_DAYS; i++) {
     const d = new Date(today); d.setDate(today.getDate() + i);
     const name = WEEKDAYS[d.getDay()];
-    if (SCHEDULE.usualDays.includes(name)) {
-      const ds = toDateStr(d);
+    const ds = toDateStr(d);
+    if (SCHEDULE.usualDays.includes(name) && !isHolidayDate(ds)) {
       map[ds] = { date: ds, day: name, slot: null };
     }
   }
