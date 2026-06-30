@@ -296,6 +296,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 31. `031_expenses.sql`
+**What it does:** Adds the **Expenses & Purchases ledger** — an `expenses` table (date, payee, category, kind purchase/expense, amount, VAT, paid-by, receipt photo URL, notes) plus a public `receipts` storage bucket with admin-only write. This is the ongoing record of every business cost; Jon logs each once (snapping the receipt — the AI reader fills the form). Admin-only RLS.
+
+**When to run:** After 006 (roles) and 001. Safe on the live database — idempotent. **Also needs** `ANTHROPIC_API_KEY` already set on the admin Netlify site (same key as the other AI features) for the receipt reader; without it, entry falls back to manual.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

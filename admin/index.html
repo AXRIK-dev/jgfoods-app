@@ -1219,6 +1219,7 @@
   <div class="tabs">
     <div class="tab active" onclick="switchTab('finance','daily')">Daily Sales</div>
     <div class="tab" onclick="switchTab('finance','weekly')">Weekly</div>
+    <div class="tab" onclick="switchTab('finance','expenses')">Expenses &amp; Purchases</div>
     <div class="tab" onclick="switchTab('finance','bankpay')">Payments</div>
     <div class="tab" onclick="switchTab('finance','monthly')">Monthly (Accountant)</div>
   </div>
@@ -1322,6 +1323,70 @@
         <button class="btn-navy" style="width:100%;justify-content:center;padding:13px;margin-top:8px" onclick="exportWeekly()">⬇ Export as spreadsheet</button>
       </div>
 
+    </div>
+  </div>
+
+  <!-- EXPENSES & PURCHASES -->
+  <div class="tab-panel" id="finance-expenses">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <p style="font-size:13px;color:var(--ink-soft);max-width:560px">Log every cost once — snap the receipt and the details fill in for you. Your weekly and accountant figures add up from here.</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="month" id="expMonth" class="fin-input" style="width:160px" onchange="renderExpenses()">
+        <button class="btn-add" onclick="openExpense()">+ Add expense</button>
+      </div>
+    </div>
+    <div class="stats-row" style="margin-bottom:16px">
+      <div class="stat-card"><div class="sc-label">Stock / purchases</div><div class="sc-val" id="expPurchVal">£0</div><div class="sc-sub">this month</div></div>
+      <div class="stat-card"><div class="sc-label">Overheads</div><div class="sc-val" id="expExpVal">£0</div><div class="sc-sub">this month</div></div>
+      <div class="stat-card gold"><div class="sc-label">VAT on costs</div><div class="sc-val" id="expVatVal">£0</div><div class="sc-sub">reclaimable</div></div>
+      <div class="stat-card blue"><div class="sc-label">Total out</div><div class="sc-val" id="expTotalVal">£0</div><div class="sc-sub">this month</div></div>
+    </div>
+    <div id="expList"><p style="padding:20px;color:var(--ink-soft);font-size:13px;text-align:center">Loading…</p></div>
+    <button class="btn-navy" style="margin-top:14px" onclick="exportExpenses()">⬇ Export for accountant (CSV)</button>
+  </div>
+
+  <!-- ADD / EDIT EXPENSE MODAL -->
+  <div class="modal-overlay" id="expenseModal">
+    <div class="modal">
+      <div class="modal-head"><h3 id="exp-title">Add expense</h3><button class="modal-close" onclick="closeModal('expenseModal')">✕</button></div>
+      <input type="hidden" id="exp-id">
+      <div class="field" style="background:var(--cream);border:1px solid var(--line);border-radius:10px;padding:12px 13px">
+        <label style="display:block;margin-bottom:2px">📸 Receipt photo</label>
+        <p style="font-size:11.5px;color:var(--ink-soft);margin:0 0 9px">Snap the receipt — the details below fill in automatically. Check them and tap Save. You can always type them in by hand.</p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <input type="file" id="exp-photo" accept="image/*" capture="environment" onchange="handleReceiptPhoto(event)" style="font-size:12px">
+          <span id="exp-ai-msg" style="font-size:12px;font-weight:700"></span>
+        </div>
+        <img id="exp-photo-preview" alt="" style="display:none;max-width:150px;max-height:150px;border-radius:8px;margin-top:10px;border:1px solid var(--line)">
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Date</label><input id="exp-date" type="date"></div>
+        <div class="field"><label>Paid by</label>
+          <select id="exp-method"><option value="bank">Bank</option><option value="cash">Cash</option><option value="card">Card</option><option value="other">Other</option></select>
+        </div>
+      </div>
+      <div class="field"><label>Paid to (supplier / payee)</label>
+        <input id="exp-payee" list="exp-payee-list" type="text" placeholder="e.g. Hogan Butchers">
+        <datalist id="exp-payee-list"></datalist>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Type</label>
+          <select id="exp-kind"><option value="purchase">Stock / purchase</option><option value="expense">Overhead expense</option></select>
+        </div>
+        <div class="field"><label>Category</label>
+          <input id="exp-category" list="exp-cat-list" type="text" placeholder="e.g. Stock, Fuel">
+          <datalist id="exp-cat-list"></datalist>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Amount (£)</label><input id="exp-amount" type="number" min="0" step="0.01" placeholder="0.00"></div>
+        <div class="field"><label>VAT (£)</label><input id="exp-vat" type="number" min="0" step="0.01" placeholder="0.00"></div>
+      </div>
+      <div class="field"><label>Note (optional)</label><input id="exp-notes" type="text" placeholder="e.g. weekly stock order"></div>
+      <div style="display:flex;gap:9px;margin-top:6px">
+        <button class="btn-add" id="exp-save-btn" style="flex:1;justify-content:center;padding:13px" onclick="saveExpense()">Save</button>
+        <button onclick="closeModal('expenseModal')" style="padding:13px 18px;border-radius:9px;font-weight:800;font-size:13px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft)">Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -2681,6 +2746,7 @@ function switchTab(page, tab) {
   document.getElementById(`${page}-${tab}`).classList.add('active');
   // Finance sales figures fill themselves from Daily Sales
   if (page === 'finance' && tab === 'weekly'  && typeof autoFillWeeklySales === 'function') autoFillWeeklySales();
+  if (page === 'finance' && tab === 'expenses' && typeof renderExpenses === 'function') renderExpenses();
   if (page === 'finance' && tab === 'monthly' && typeof renderMonthlySheet === 'function') renderMonthlySheet();
 }
 
@@ -7857,6 +7923,210 @@ async function saveWeekly() {
 
 function exportWeekly() {
   alert('Export as spreadsheet — will generate an .xlsx matching JG Foods Weekly Sales_Purchases.xlsx format. Coming once Supabase is connected.');
+}
+
+// ============ EXPENSES & PURCHASES LEDGER ============
+// One ongoing record of every cost, with a receipt photo. Snap → AI fills
+// the form → save. Weekly + Monthly accountant figures sum from here.
+let expenseRows = [];
+let pendingReceipt = null;   // { url } for the photo on the open form
+
+function expMonthStr() {
+  const el = document.getElementById('expMonth');
+  if (el && el.value) return el.value;                  // 'YYYY-MM'
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+function fillExpenseDatalists() {
+  const payee = document.getElementById('exp-payee-list');
+  const cat   = document.getElementById('exp-cat-list');
+  if (payee) payee.innerHTML = (typeof SUPPLIERS!=='undefined'?SUPPLIERS:[]).map(s => `<option value="${s.name}">`).join('');
+  if (cat) {
+    const cats = ['Stock','Fuel','Van','Packaging','Insurance','Stationery','Storage','Pension','Tax & NI','Drawings','Other']
+      .concat((typeof EXPENSES!=='undefined'?EXPENSES:[]).map(e => e.name));
+    cat.innerHTML = cats.filter((v,i,a)=>a.indexOf(v)===i).map(c => `<option value="${c}">`).join('');
+  }
+}
+
+function openExpense(id) {
+  fillExpenseDatalists();
+  pendingReceipt = null;
+  const setV = (k,v)=>{ const el=document.getElementById(k); if(el) el.value=v; };
+  document.getElementById('exp-ai-msg').textContent = '';
+  const prev = document.getElementById('exp-photo-preview'); prev.style.display='none'; prev.src='';
+  document.getElementById('exp-photo').value = '';
+  if (id) {
+    const r = expenseRows.find(x => x.id === id);
+    if (!r) return;
+    document.getElementById('exp-title').textContent = 'Edit expense';
+    setV('exp-id', r.id); setV('exp-date', r.entry_date); setV('exp-method', r.payment_method||'bank');
+    setV('exp-payee', r.payee||''); setV('exp-kind', r.kind||'expense'); setV('exp-category', r.category||'');
+    setV('exp-amount', r.amount!=null?Number(r.amount).toFixed(2):''); setV('exp-vat', r.vat_amount!=null?Number(r.vat_amount).toFixed(2):'');
+    setV('exp-notes', r.notes||'');
+    if (r.receipt_url) { pendingReceipt = { url: r.receipt_url }; prev.src=r.receipt_url; prev.style.display='block'; }
+  } else {
+    document.getElementById('exp-title').textContent = 'Add expense';
+    setV('exp-id',''); setV('exp-date', toDateStr(new Date())); setV('exp-method','bank');
+    setV('exp-payee',''); setV('exp-kind','purchase'); setV('exp-category','');
+    setV('exp-amount',''); setV('exp-vat',''); setV('exp-notes','');
+  }
+  document.getElementById('expenseModal').classList.add('show');
+}
+
+function blobToBase64(blob) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result).split(',')[1] || '');
+    r.onerror = rej; r.readAsDataURL(blob);
+  });
+}
+
+async function handleReceiptPhoto(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  const msg = document.getElementById('exp-ai-msg');
+  const prev = document.getElementById('exp-photo-preview');
+  try { prev.src = URL.createObjectURL(file); prev.style.display='block'; } catch(e){}
+  if (!supabase) return;
+  msg.style.color = 'var(--ink-soft)'; msg.textContent = 'Uploading…';
+  try {
+    const norm = await normalizeProductImage(file);
+    const path = `${Date.now()}-${Math.random().toString(36).slice(2,8)}.jpg`;
+    const { error: upErr } = await supabase.storage.from('receipts').upload(path, norm.blob, { contentType: norm.contentType, upsert: false });
+    if (upErr) throw upErr;
+    const { data: urlData } = supabase.storage.from('receipts').getPublicUrl(path);
+    pendingReceipt = { url: urlData?.publicUrl || null };
+    msg.style.color = 'var(--navy)'; msg.textContent = '🤖 Reading receipt…';
+    try {
+      const b64 = await blobToBase64(norm.blob);
+      const resp = await fetch('/.netlify/functions/receipt-ai', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ image_base64: b64, media_type: 'image/jpeg' }) });
+      const data = await resp.json();
+      if (resp.ok && data && !data.fallback) {
+        const setIf = (k,v)=>{ const el=document.getElementById(k); if(el && v!=null && v!=='') el.value=v; };
+        setIf('exp-date', data.entry_date);
+        setIf('exp-payee', data.payee);
+        setIf('exp-category', data.category);
+        if (data.kind) setIf('exp-kind', data.kind);
+        if (data.amount)     setIf('exp-amount', Number(data.amount).toFixed(2));
+        if (data.vat_amount) setIf('exp-vat', Number(data.vat_amount).toFixed(2));
+        msg.style.color = 'var(--green)'; msg.textContent = '✓ Filled in from photo — check & save';
+      } else {
+        msg.style.color = 'var(--ink-soft)'; msg.textContent = 'Photo saved — pop the details in below';
+      }
+    } catch (e) {
+      console.error('receipt-ai', e);
+      msg.style.color = 'var(--ink-soft)'; msg.textContent = 'Photo saved — pop the details in below';
+    }
+  } catch (e) {
+    console.error('receipt upload', e);
+    msg.style.color = 'var(--oxblood)'; msg.textContent = 'Couldn\'t upload the photo — you can still save the expense.';
+  }
+}
+
+async function saveExpense() {
+  const btn = document.getElementById('exp-save-btn');
+  const val = id => document.getElementById(id)?.value;
+  const amount = parseFloat(val('exp-amount')) || 0;
+  if (amount <= 0) { alert('Please enter the amount paid.'); return; }
+  const row = {
+    entry_date: val('exp-date') || toDateStr(new Date()),
+    payee: (val('exp-payee')||'').trim() || null,
+    category: (val('exp-category')||'').trim() || null,
+    kind: val('exp-kind') || 'expense',
+    amount,
+    vat_amount: parseFloat(val('exp-vat')) || 0,
+    payment_method: val('exp-method') || 'bank',
+    receipt_url: (pendingReceipt && pendingReceipt.url) || null,
+    notes: (val('exp-notes')||'').trim() || null,
+  };
+  const id = val('exp-id');
+  if (btn){ btn.disabled=true; btn.textContent='Saving…'; }
+  try {
+    if (!supabase) throw new Error('No database connection');
+    if (id) { const { error } = await supabase.from('expenses').update(row).eq('id', id); if (error) throw error; }
+    else    { const { error } = await supabase.from('expenses').insert(row); if (error) throw error; }
+    closeModal('expenseModal');
+    await renderExpenses();
+  } catch (e) {
+    console.error('saveExpense', e);
+    alert('Could not save: ' + (e.message || e));
+  } finally {
+    if (btn){ btn.disabled=false; btn.textContent='Save'; }
+  }
+}
+
+async function renderExpenses() {
+  const list = document.getElementById('expList');
+  if (!list || !supabase) return;
+  const mEl = document.getElementById('expMonth');
+  if (mEl && !mEl.value) mEl.value = expMonthStr();
+  const month = expMonthStr();
+  list.innerHTML = '<p style="padding:16px;color:var(--ink-soft);font-size:13px">Loading…</p>';
+  const { data, error } = await supabase.from('expenses')
+    .select('id, entry_date, payee, category, kind, amount, vat_amount, payment_method, receipt_url, notes')
+    .gte('entry_date', month + '-01').lte('entry_date', month + '-31')
+    .order('entry_date', { ascending: false });
+  if (error) { list.innerHTML = `<p style="padding:16px;color:var(--oxblood);font-size:13px">Couldn't load: ${error.message}</p>`; return; }
+  expenseRows = data || [];
+  let purch=0, exp=0, vat=0;
+  expenseRows.forEach(r => { const a=parseFloat(r.amount)||0; if(r.kind==='purchase')purch+=a; else exp+=a; vat+=parseFloat(r.vat_amount)||0; });
+  const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.textContent='£'+v.toFixed(2); };
+  set('expPurchVal',purch); set('expExpVal',exp); set('expVatVal',vat); set('expTotalVal',purch+exp);
+  if (!expenseRows.length) { list.innerHTML = `<p style="padding:22px;color:var(--ink-soft);font-size:13px;text-align:center">No costs logged for this month yet.<br><span style="font-size:12px">Tap <b>+ Add expense</b> and snap a receipt.</span></p>`; return; }
+  list.innerHTML = expenseRows.map(r => {
+    const a = parseFloat(r.amount)||0;
+    const kindTag = r.kind==='purchase'
+      ? '<span style="font-size:10px;font-weight:800;color:#1a4fad;background:#e8f0fe;padding:2px 7px;border-radius:10px">STOCK</span>'
+      : '<span style="font-size:10px;font-weight:800;color:var(--oxblood);background:#f6e5cf;padding:2px 7px;border-radius:10px">EXPENSE</span>';
+    const method = r.payment_method ? r.payment_method.charAt(0).toUpperCase()+r.payment_method.slice(1) : '';
+    const photo = r.receipt_url
+      ? `<a href="${r.receipt_url}" target="_blank" rel="noopener" title="View receipt" style="flex-shrink:0"><img src="${r.receipt_url}" alt="" style="width:42px;height:42px;object-fit:cover;border-radius:7px;border:1px solid var(--line)"></a>`
+      : `<div style="width:42px;height:42px;border-radius:7px;border:1px dashed var(--line);flex-shrink:0"></div>`;
+    return `<div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin-bottom:8px">
+      ${photo}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13.5px;font-weight:800;color:var(--navy);display:flex;align-items:center;gap:7px;flex-wrap:wrap">${ordEsc(r.payee||'—')} ${kindTag}</div>
+        <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">${prettyDate(r.entry_date)} · ${ordEsc(r.category||'')}${method?' · '+method:''}${r.vat_amount>0?` · VAT £${(parseFloat(r.vat_amount)||0).toFixed(2)}`:''}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-family:var(--display);font-size:15px;font-weight:700;color:var(--navy)">£${a.toFixed(2)}</div>
+        <div style="display:flex;gap:6px;margin-top:4px">
+          <button onclick="openExpense('${r.id}')" style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft)">Edit</button>
+          <button onclick="deleteExpense('${r.id}')" style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:#fff0f0;border:1px solid #fcc;color:#c0392b">×</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function deleteExpense(id) {
+  const r = expenseRows.find(x => x.id === id);
+  if (!confirm(`Delete this expense${r&&r.payee?` (${r.payee})`:''}? This can't be undone.`)) return;
+  try {
+    await supabase.from('expenses').delete().eq('id', id);
+    if (r && r.receipt_url) {
+      try { const path = r.receipt_url.split('/receipts/')[1]; if (path) await supabase.storage.from('receipts').remove([path.split('?')[0]]); } catch(e){}
+    }
+    await renderExpenses();
+  } catch (e) { console.error('deleteExpense', e); alert('Could not delete: ' + (e.message||e)); }
+}
+
+function exportExpenses() {
+  if (!expenseRows.length) { alert('No expenses to export for this month.'); return; }
+  const month = expMonthStr();
+  const esc = v => { const s=String(v==null?'':v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+  const head = ['Date','Type','Paid to','Category','Amount','VAT','Paid by','Note','Receipt'];
+  const lines = [head.join(',')].concat(
+    expenseRows.slice().sort((a,b)=>a.entry_date<b.entry_date?-1:1).map(r => [
+      r.entry_date, r.kind, r.payee||'', r.category||'', (parseFloat(r.amount)||0).toFixed(2),
+      (parseFloat(r.vat_amount)||0).toFixed(2), r.payment_method||'', r.notes||'', r.receipt_url||''
+    ].map(esc).join(','))
+  );
+  const blob = new Blob([lines.join('\n')], { type:'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=`JG-Foods-Expenses-${month}.csv`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
 
 // ============ BANK PAYMENTS TABLE ============
