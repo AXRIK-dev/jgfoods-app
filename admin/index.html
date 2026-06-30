@@ -1294,15 +1294,17 @@
           <div style="display:flex;justify-content:space-between"><span style="font-size:12.5px;font-weight:700;color:var(--ink-soft)">VAT reclaim</span><input type="number" id="wk-vat" class="fin-input" style="width:100px;text-align:right" placeholder="0.00" oninput="calcWeekly()"></div>
         </div>
 
-        <p style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--oxblood);margin-bottom:8px">Purchases</p>
+        <p style="font-size:11.5px;color:var(--ink-soft);margin-bottom:12px;background:var(--cream);border:1px solid var(--line);border-radius:8px;padding:8px 11px">Purchases &amp; expenses below add up automatically from your <b>Expenses &amp; Purchases</b> tab for this week. Add a cost there (snap the receipt) and it appears here.</p>
+
+        <p style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--oxblood);margin-bottom:8px">Purchases (stock)</p>
         <table class="fin-table" style="margin-bottom:16px">
-          <thead><tr><th>Supplier</th><th class="right">Cash</th><th class="right">Bank</th></tr></thead>
+          <thead><tr><th>Supplier</th><th class="right">Paid</th></tr></thead>
           <tbody id="purchasesBody"></tbody>
         </table>
 
         <p style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--oxblood);margin-bottom:8px">Expenses</p>
         <table class="fin-table">
-          <thead><tr><th>Item</th><th class="right">Amount</th><th class="right">VAT</th></tr></thead>
+          <thead><tr><th>Category</th><th class="right">Amount</th><th class="right">VAT</th></tr></thead>
           <tbody id="expensesBody"></tbody>
         </table>
       </div>
@@ -7801,7 +7803,7 @@ function autoFillWeeklySales() {
     el.style.background = 'var(--cream)';
     el.title = "Fills in automatically from the Daily Sales in the week ending on the date above";
   }
-  calcWeekly();
+  loadWeeklyLedger(lo, hi);   // purchases + expenses for this week, from the ledger
 }
 
 function exportDailyToWeekly() { switchTab('finance', 'weekly'); }   // kept for the button; auto-fills on open
@@ -7822,39 +7824,54 @@ const EXPENSES = [
   {name:'Insurance', hasVat:false}, {name:'Drawings', hasVat:false},
 ];
 
+// Purchases & expenses for the displayed week now come from the Expenses
+// ledger (single source of truth), grouped by supplier / category.
+let weekLedger = { purchByPayee: {}, expByCat: {}, purch: 0, exp: 0, vat: 0 };
+
 function renderWeeklySheet() {
-  const pb = document.getElementById('purchasesBody');
-  const eb = document.getElementById('expensesBody');
-  if (!pb || !eb) return;
   const wk = document.getElementById('weekEndDate');
   if (wk && !wk.value) wk.value = isoLocal(weekEndingFriday(new Date()));
-  pb.innerHTML = SUPPLIERS.map((s,i) => `
-    <tr>
-      <td>${s.name}</td>
-      <td class="right"><input type="number" step="0.01" placeholder="0.00" id="sup-cash-${i}" oninput="calcWeekly()" style="width:80px;font-size:12.5px;border:none;background:transparent;text-align:right;font-family:var(--body);color:var(--ink)"></td>
-      <td class="right"><input type="number" step="0.01" placeholder="0.00" id="sup-bank-${i}" oninput="calcWeekly()" style="width:80px;font-size:12.5px;border:none;background:transparent;text-align:right;font-family:var(--body);color:var(--ink)"></td>
-    </tr>
-  `).join('');
-  eb.innerHTML = EXPENSES.map((e,i) => `
-    <tr>
-      <td>${e.name}</td>
-      <td class="right"><input type="number" step="0.01" placeholder="0.00" id="exp-amt-${i}" oninput="calcWeekly()" style="width:80px;font-size:12.5px;border:none;background:transparent;text-align:right;font-family:var(--body);color:var(--ink)"></td>
-      <td class="right"><input type="number" step="0.01" placeholder="0.00" id="exp-vat-${i}" ${!e.hasVat?'disabled style="opacity:.3"':''} oninput="calcWeekly()" style="width:80px;font-size:12.5px;border:none;background:transparent;text-align:right;font-family:var(--body);color:var(--ink)"></td>
-    </tr>
-  `).join('');
+  // Bodies are filled from the ledger by loadWeeklyLedger() when the tab opens.
+}
+
+async function loadWeeklyLedger(lo, hi) {
+  const pb = document.getElementById('purchasesBody');
+  const eb = document.getElementById('expensesBody');
+  weekLedger = { purchByPayee: {}, expByCat: {}, purch: 0, exp: 0, vat: 0 };
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('expenses')
+        .select('payee, category, kind, amount, vat_amount')
+        .gte('entry_date', lo).lte('entry_date', hi);
+      if (error) throw error;
+      (data || []).forEach(r => {
+        const a = parseFloat(r.amount)||0, v = parseFloat(r.vat_amount)||0;
+        weekLedger.vat += v;
+        if (r.kind === 'purchase') { const k = r.payee||'Stock'; weekLedger.purchByPayee[k]=(weekLedger.purchByPayee[k]||0)+a; weekLedger.purch += a; }
+        else { const k = r.category||'Other'; weekLedger.expByCat[k]=(weekLedger.expByCat[k]||0)+a; weekLedger.exp += a; }
+      });
+    } catch (e) { console.error('loadWeeklyLedger', e); }
+  }
+  const moneyRow = (label, val, extra='') => `<tr><td>${label}</td><td class="right">£${val.toFixed(2)}</td>${extra}</tr>`;
+  if (pb) {
+    const keys = Object.keys(weekLedger.purchByPayee);
+    pb.innerHTML = keys.length
+      ? keys.sort().map(k => moneyRow(k, weekLedger.purchByPayee[k])).join('')
+      : `<tr><td colspan="2" style="color:var(--ink-soft);font-size:12px;padding:10px">No stock purchases logged this week.</td></tr>`;
+  }
+  if (eb) {
+    const keys = Object.keys(weekLedger.expByCat);
+    eb.innerHTML = keys.length
+      ? keys.sort().map(k => `<tr><td>${k}</td><td class="right">£${weekLedger.expByCat[k].toFixed(2)}</td><td class="right"></td></tr>`).join('')
+      : `<tr><td colspan="3" style="color:var(--ink-soft);font-size:12px;padding:10px">No expenses logged this week.</td></tr>`;
+  }
+  calcWeekly();
 }
 
 function calcWeekly() {
-  let purch=0;
-  SUPPLIERS.forEach((_,i) => {
-    purch += (parseFloat(document.getElementById(`sup-cash-${i}`)?.value)||0);
-    purch += (parseFloat(document.getElementById(`sup-bank-${i}`)?.value)||0);
-  });
-  let exp=0, vat=0;
-  EXPENSES.forEach((_,i) => {
-    exp += (parseFloat(document.getElementById(`exp-amt-${i}`)?.value)||0);
-    vat += (parseFloat(document.getElementById(`exp-vat-${i}`)?.value)||0);
-  });
+  const purch = weekLedger.purch || 0;
+  const exp   = weekLedger.exp || 0;
+  const vat   = weekLedger.vat || 0;
   const sales = parseFloat(document.getElementById('wk-sales')?.value)||0;
   const carried = parseFloat(document.getElementById('wk-carried')?.value)||0;
   const vatReclaim = parseFloat(document.getElementById('wk-vat')?.value)||0;
@@ -7873,27 +7890,19 @@ async function saveWeekly() {
   btn.textContent = 'Saving…';
   btn.disabled = true;
 
-  // Gather purchases
-  const purchases = SUPPLIERS.map((s, i) => ({
-    supplier: s.name,
-    cash:     parseFloat(document.getElementById(`sup-cash-${i}`)?.value) || 0,
-    bank:     parseFloat(document.getElementById(`sup-bank-${i}`)?.value) || 0,
-    total:    (parseFloat(document.getElementById(`sup-cash-${i}`)?.value) || 0) +
-              (parseFloat(document.getElementById(`sup-bank-${i}`)?.value) || 0),
+  // Purchases & expenses come from the Expenses ledger for this week
+  const purchases = Object.keys(weekLedger.purchByPayee).map(k => ({
+    supplier: k, total: weekLedger.purchByPayee[k], cash: 0, bank: 0,
   }));
-
-  // Gather expenses
-  const expenses = EXPENSES.map((e, i) => ({
-    label: e.name,
-    net:   parseFloat(document.getElementById(`exp-amt-${i}`)?.value) || 0,
-    vat:   parseFloat(document.getElementById(`exp-vat-${i}`)?.value) || 0,
+  const expenses = Object.keys(weekLedger.expByCat).map(k => ({
+    label: k, net: weekLedger.expByCat[k], vat: 0,
   }));
 
   const sales    = parseFloat(document.getElementById('wk-sales')?.value)   || 0;
   const carried  = parseFloat(document.getElementById('wk-carried')?.value) || 0;
   const vatReclaim = parseFloat(document.getElementById('wk-vat')?.value)   || 0;
-  const totalPurch = purchases.reduce((s, p) => s + p.total, 0);
-  const totalExp   = expenses.reduce((s, e) => s + e.net, 0);
+  const totalPurch = weekLedger.purch || 0;
+  const totalExp   = weekLedger.exp || 0;
   const banked     = (sales + carried + vatReclaim) - totalPurch - totalExp;
 
   // Save against the week currently being viewed (the "Week ending" picker)
@@ -7943,7 +7952,8 @@ function fillExpenseDatalists() {
   const cat   = document.getElementById('exp-cat-list');
   if (payee) payee.innerHTML = (typeof SUPPLIERS!=='undefined'?SUPPLIERS:[]).map(s => `<option value="${s.name}">`).join('');
   if (cat) {
-    const cats = ['Stock','Fuel','Van','Packaging','Insurance','Stationery','Storage','Pension','Tax & NI','Drawings','Other']
+    const cats = ['Stock','Fuel','Van','Packaging','Insurance','Stationery','Storage','Pension','Tax & NI',
+      'Subsistence / meals','Parking & tolls','Phone','Cleaning','Equipment','Drawings','Other']
       .concat((typeof EXPENSES!=='undefined'?EXPENSES:[]).map(e => e.name));
     cat.innerHTML = cats.filter((v,i,a)=>a.indexOf(v)===i).map(c => `<option value="${c}">`).join('');
   }
@@ -8338,15 +8348,44 @@ function buildMonthlyExpenses(weeks) {
   return { expRows, eTot: expRows.reduce((s, r) => s + r.purch, 0), eOth: expRows.reduce((s, r) => s + r.other, 0) };
 }
 
+// Expenditure for the month now comes from the Expenses ledger (single
+// source of truth): purchases grouped by supplier, expenses by category.
+async function fetchMonthlyExpenses() {
+  const { start, end } = getSelectedMonthRange();
+  if (!window.supabase) return [];
+  try {
+    const { data, error } = await window.supabase
+      .from('expenses')
+      .select('payee, category, kind, amount, vat_amount')
+      .gte('entry_date', start).lte('entry_date', end);
+    if (error) throw error;
+    return data || [];
+  } catch (e) { console.error('monthly expenses', e); return []; }
+}
+
+function buildMonthlyExpensesFromLedger(rows) {
+  const purchMap = {}, otherMap = {}; let eVat = 0;
+  (rows || []).forEach(r => {
+    const a = parseFloat(r.amount)||0; eVat += parseFloat(r.vat_amount)||0;
+    if (r.kind === 'purchase') { const k = r.payee || 'Stock'; purchMap[k] = (purchMap[k]||0) + a; }
+    else { const k = r.category || 'Other'; otherMap[k] = (otherMap[k]||0) + a; }
+  });
+  const expRows = [
+    ...Object.keys(purchMap).sort().map(k => ({ label: k, purch: purchMap[k], other: 0 })),
+    ...Object.keys(otherMap).sort().map(k => ({ label: k, purch: 0, other: otherMap[k] })),
+  ];
+  return { expRows, eTot: expRows.reduce((s,r)=>s+r.purch,0), eOth: expRows.reduce((s,r)=>s+r.other,0), eVat };
+}
+
 async function renderMonthlySheet() {
   const ib = document.getElementById('monthlyIncomeBody');
   const eb = document.getElementById('monthlyExpBody');
   if (!ib || !eb) return;
 
   const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = '£' + v.toFixed(2); };
-  const [dailyRows, weeks] = await Promise.all([fetchMonthlyDailySales(), fetchMonthlyWeeks()]);
+  const [dailyRows, expData] = await Promise.all([fetchMonthlyDailySales(), fetchMonthlyExpenses()]);
   const incomeRows = weeklyIncomeFromDaily(dailyRows);
-  const { expRows, eTot, eOth } = buildMonthlyExpenses(weeks);
+  const { expRows, eTot, eOth } = buildMonthlyExpensesFromLedger(expData);
   const iTot = incomeRows.reduce((s, r) => s + r.sales, 0);
 
   ib.innerHTML = incomeRows.length
@@ -8354,16 +8393,16 @@ async function renderMonthlySheet() {
     : `<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--ink-soft);font-size:13px">No sales yet this month — they appear here automatically from your paid orders.</td></tr>`;
   eb.innerHTML = expRows.length
     ? expRows.map(r => `<tr><td>${r.label}</td><td class="right">£${r.purch.toFixed(2)}</td><td class="right">£${r.other.toFixed(2)}</td></tr>`).join('')
-    : `<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--ink-soft);font-size:13px">No purchases or expenses entered this month yet — add them on the Weekly tab.</td></tr>`;
+    : `<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--ink-soft);font-size:13px">No purchases or expenses this month yet — add them on the Expenses &amp; Purchases tab.</td></tr>`;
   setEl('mi-total', iTot); setEl('mi-vat', 0);
   setEl('me-total', eTot); setEl('me-other', eOth);
 }
 
 async function exportMonthly() {
   const { label, year, monthIdx } = getSelectedMonthRange();
-  const [dailyRows, weeks] = await Promise.all([fetchMonthlyDailySales(), fetchMonthlyWeeks()]);
+  const [dailyRows, expData] = await Promise.all([fetchMonthlyDailySales(), fetchMonthlyExpenses()]);
   const incomeRows = weeklyIncomeFromDaily(dailyRows);
-  const { expRows, eTot, eOth } = buildMonthlyExpenses(weeks);
+  const { expRows, eTot, eOth } = buildMonthlyExpensesFromLedger(expData);
   const iTot = incomeRows.reduce((s, r) => s + r.sales, 0);
 
   if (!incomeRows.length && !expRows.length) {
