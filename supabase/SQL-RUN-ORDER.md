@@ -303,6 +303,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 32. `032_customer_sites.sql`
+**What it does:** Adds support for customers with **more than one delivery address** who need it billed as **one combined invoice** (e.g. Billy Bunters — two Birkenhead sites). Adds a `customer_sites` table (admin manages from Customers → Edit → Delivery sites), `orders.site_id` + `orders.invoice_id`, and `invoice_items.site_label` + `invoice_items.order_id`. Rewrites `create_invoice_for_order`: customers with **zero** sites behave exactly as before (unchanged — one invoice per order, immediately). Customers with **one or more** sites have their orders collected onto a single running **`draft`** invoice, grouped by site, until finalised from the Invoices page ("Finalise & send" → draft becomes sent/paid, and the next order starts a fresh one). Purely additive — nothing changes for any existing single-address customer.
+
+**When to run:** After 006 (roles) and 013 (auto-invoice). Safe on the live database — idempotent (`ADD COLUMN IF NOT EXISTS`, `CREATE OR REPLACE`). **This migration is bigger than most** — recommend testing on Billy Bunters specifically (add their second site, log a test delivery to each site, confirm one running invoice appears with both sites and a correct grand total, then Finalise & send it) before relying on it for a real customer bill.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

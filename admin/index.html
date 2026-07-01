@@ -788,6 +788,11 @@
       <input type="text" id="lo-address" placeholder="14 Any Street, Ormskirk, WN8 0AA">
     </div>
 
+    <div class="field" id="lo-site-wrap" style="display:none">
+      <label>Delivery site *</label>
+      <select id="lo-site"></select>
+    </div>
+
     <div class="field-row">
       <div class="field">
         <label>Delivery slot *</label>
@@ -1648,7 +1653,10 @@
       <div style="margin-top:14px">
         <p style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Order items</p>
         <div id="invItemsList" style="display:flex;flex-direction:column;gap:7px"></div>
-        <button onclick="addInvItem()" class="add-item-btn" style="margin-top:8px">+ Add item</button>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button onclick="addInvItem()" class="add-item-btn">+ Add item</button>
+          <button onclick="addInvSiteHeader()" class="add-item-btn" title="Split the invoice into sections — e.g. a customer with two delivery addresses">+ Add site</button>
+        </div>
       </div>
       <div style="margin-top:16px;background:var(--cream);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:13px;font-weight:700;color:var(--ink-soft)">Grand total</span>
@@ -1689,6 +1697,7 @@
       <h2 style="font-family:var(--display);font-size:20px;font-weight:600;color:var(--navy);margin:0">Saved invoices &amp; receipts</h2>
       <div style="display:flex;gap:6px">
         <button class="btn-add" style="font-size:12px;padding:7px 13px" onclick="renderInvoices('all')">All</button>
+        <button class="btn-add" style="font-size:12px;padding:7px 13px" onclick="renderInvoices('draft')" title="Multi-site customers' running tabs, not yet sent">Running</button>
         <button class="btn-add" style="font-size:12px;padding:7px 13px" onclick="renderInvoices('sent')">Unpaid</button>
         <button class="btn-add" style="font-size:12px;padding:7px 13px" onclick="renderInvoices('paid')">Paid</button>
         <button class="btn-add" style="font-size:12px;padding:7px 13px" onclick="renderInvoices('overdue')">Overdue</button>
@@ -2017,6 +2026,15 @@
         <option value="domestic">Domestic</option>
         <option value="trade">Trade / Commercial</option>
       </select>
+    </div>
+    <div class="field" style="background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:12px 14px">
+      <label style="font-weight:800;font-size:13px">Delivery sites <span style="font-weight:400;color:var(--ink-soft)">(optional — for customers with more than one address)</span></label>
+      <p style="font-size:11.5px;color:var(--ink-soft);margin:2px 0 10px">Add extra sites if Jon delivers to more than one address for this customer (e.g. two pub sites). Once any sites are listed here, their invoice automatically shows a subtotal per site plus one grand total — and Log Order will ask which site each delivery is for.</p>
+      <div id="ec-sites-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
+      <div style="display:flex;gap:6px">
+        <input id="ec-site-label" type="text" placeholder="Site name / address, e.g. 4a Russell Road, Birkenhead" style="flex:1">
+        <button onclick="addCustomerSite()" style="padding:0 14px;border-radius:8px;font-weight:800;font-size:12.5px;background:var(--navy);color:#fff;border:none;cursor:pointer;white-space:nowrap">+ Add site</button>
+      </div>
     </div>
     <div class="field"><label>Referred by <span style="font-weight:400;color:var(--ink-soft)">(optional)</span></label><input id="ec-referredby" type="text" placeholder="e.g. Sarah Taylor"></div>
     <div class="field" style="display:flex;align-items:center;gap:10px;background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:12px 14px">
@@ -2351,7 +2369,7 @@ async function loadAppData() {
 
   try {
     // Fetch all in parallel
-    const [productsRes, customersRes, ordersRes, invoicesRes, runSlotsRes, categoriesRes] = await Promise.all([
+    const [productsRes, customersRes, ordersRes, invoicesRes, runSlotsRes, categoriesRes, sitesRes] = await Promise.all([
       supabase
         .from('products')
         .select('id, name, category, price, description, is_available, img_url, sort_order, options, option_label')
@@ -2366,8 +2384,9 @@ async function loadAppData() {
       supabase
         .from('orders')
         .select(`
-          id, channel, status, total_amount, notes, created_at, delivery_slot_id,
+          id, channel, status, total_amount, notes, created_at, delivery_slot_id, site_id,
           customers (name, customer_type, address_line_1),
+          customer_sites (label),
           delivery_slots (day_label, delivery_date),
           order_items (product_name, quantity)
         `)
@@ -2376,7 +2395,7 @@ async function loadAppData() {
 
       supabase
         .from('invoices')
-        .select('id, order_id, invoice_number, total_amount, status, created_at, customers (name, customer_type), invoice_payments (method, amount, created_at)')
+        .select('id, order_id, invoice_number, invoice_type, total_amount, status, created_at, customers (name, customer_type), invoice_payments (method, amount, created_at)')
         .order('created_at', { ascending: false })
         .limit(200),
 
@@ -2390,6 +2409,11 @@ async function loadAppData() {
         .from('categories')
         .select('id, name, slug, sort_order, is_active, deal_qty, deal_price, image_url, is_offer')
         .order('sort_order').order('name'),
+
+      supabase
+        .from('customer_sites')
+        .select('id, customer_id, label, address_line_1, address_line_2, city, postcode, sort_order')
+        .order('sort_order').order('created_at'),
     ]);
 
     // ── Run days (delivery slots) ─────────────────────────
@@ -2442,6 +2466,17 @@ async function loadAppData() {
       if (typeof renderVIPList === 'function') renderVIPList();
     }
 
+    // ── Delivery sites (migration 032) — multi-site customers ──
+    customerSitesByCustomer = {};
+    if (sitesRes && !sitesRes.error) {
+      (sitesRes.data || []).forEach(s => {
+        const addrParts = [s.address_line_1, s.address_line_2, s.city, s.postcode].filter(Boolean);
+        const site = { id: s.id, label: s.label, address: addrParts.join(', ') };
+        if (!customerSitesByCustomer[s.customer_id]) customerSitesByCustomer[s.customer_id] = [];
+        customerSitesByCustomer[s.customer_id].push(site);
+      });
+    }
+
     // ── Orders ────────────────────────────────────────────
     if (!ordersRes.error) {
       sampleOrders.length = 0;
@@ -2461,6 +2496,7 @@ async function loadAppData() {
           channel:  o.channel ? o.channel.charAt(0).toUpperCase() + o.channel.slice(1) : '',
           status:   o.status,
           address:  o.customers?.address_line_1 || '',
+          siteLabel: o.customer_sites?.label || '',   // migration 032 — set only for multi-site customers
         });
       });
     }
@@ -2476,6 +2512,7 @@ async function loadAppData() {
           ref:      inv.invoice_number || '',
           name:     inv.customers?.name || '',
           custType: inv.customers?.customer_type === 'commercial' ? 'trade' : (inv.customers?.customer_type || (ord?.type) || 'domestic'),
+          invType:  inv.invoice_type || 'invoice',   // 'invoice' or 'receipt' — decides how "Finalise" closes a running draft
           dayLabel: ord?.dayLabel || '',
           deliveryDate: ord?.date || null,
           date:     new Date(inv.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
@@ -2705,6 +2742,10 @@ const sampleCustomers = [];
 const sampleProducts = [];
 const sampleInvoices = [];
 
+// Multi-site customers (migration 032) — { [customer_id]: [{id, label, address}, ...] }
+// Empty/missing entry = single-address customer, everything behaves as before.
+let customerSitesByCustomer = {};
+
 // Product categories — source of truth for the dropdowns + website filters.
 // Loaded from Supabase (categories table); falls back to the six defaults
 // so the app still works offline / before the migration is run.
@@ -2905,6 +2946,7 @@ function orderCard(o) {
           ${statusBadge}
         </div>
         <div class="oc-items">${o.items}</div>
+        ${o.siteLabel ? `<div class="oc-addr" style="font-weight:800;color:var(--oxblood)">📍 ${o.siteLabel}</div>` : ''}
         <div class="oc-addr">${o.address}</div>
       </div>
       <div class="oc-right">
@@ -2926,10 +2968,24 @@ async function deleteCurrentOrder() {
   const name = o ? o.name : 'this order';
   if (!confirm(`Permanently delete ${name}'s order?\n\nThis removes the order, its items and its invoice for good. It cannot be undone.`)) return;
   if (isOrderUUID(currentOrderId)) {
-    // Remove the linked invoice first (cascades its items + payments); the order
-    // cascades its own order_items.
-    const { error: invErr } = await window.supabase.from('invoices').delete().eq('order_id', currentOrderId);
-    if (invErr) { alert('Failed to delete the invoice: ' + invErr.message); return; }
+    // Classic case: this order has its own invoice (order_id points at it) —
+    // delete it whole (cascades its items + payments), same as always.
+    const { data: directInv, error: findErr } = await window.supabase.from('invoices')
+      .select('id').eq('order_id', currentOrderId).maybeSingle();
+    if (findErr) { alert('Failed to check the invoice: ' + findErr.message); return; }
+    if (directInv) {
+      const { error: invErr } = await window.supabase.from('invoices').delete().eq('id', directInv.id);
+      if (invErr) { alert('Failed to delete the invoice: ' + invErr.message); return; }
+    } else {
+      // Multi-site customer (migration 032): the invoice is shared with other
+      // orders via orders.invoice_id — remove only THIS order's lines from it
+      // and keep the rest of the invoice (other sites/deliveries) intact.
+      const { data: link } = await window.supabase.from('orders').select('invoice_id').eq('id', currentOrderId).maybeSingle();
+      if (link?.invoice_id) {
+        await window.supabase.from('invoice_items').delete().eq('invoice_id', link.invoice_id).eq('order_id', currentOrderId);
+        try { await window.supabase.rpc('recalc_invoice_totals', { p_invoice_id: link.invoice_id }); } catch (e) { console.error('Recalc failed:', e); }
+      }
+    }
     const { error } = await window.supabase.from('orders').delete().eq('id', currentOrderId);
     if (error) { alert('Failed to delete: ' + error.message); return; }
   }
@@ -2958,16 +3014,27 @@ async function openOrderModal(id) {
       const { data: ord } = await supabase.from('orders')
         .select('id, total_amount, channel, notes, status, payment_method, customer_id, customers(name,email,phone,address_line_1,postcode,customer_type), order_items(id, product_id, product_name, unit_price, quantity)')
         .eq('id', id).single();
-      const invSelect = 'id, invoice_number, total_amount, status, invoice_type, invoice_payments(method, amount)';
-      let invRes = await supabase.from('invoices')
-        .select(invSelect)
-        .eq('order_id', id).maybeSingle();
+      const invSelect = 'id, order_id, invoice_number, total_amount, status, invoice_type, invoice_payments(method, amount)';
+      // Multi-site customers (migration 032): their invoice is shared across
+      // several orders, so it's linked via orders.invoice_id, not
+      // invoices.order_id. Try the classic direct link first, then fall back.
+      const lookupInvoice = async () => {
+        let res = await supabase.from('invoices').select(invSelect).eq('order_id', id).maybeSingle();
+        if (!res.data) {
+          const { data: link } = await supabase.from('orders').select('invoice_id').eq('id', id).maybeSingle();
+          if (link?.invoice_id) {
+            res = await supabase.from('invoices').select(invSelect).eq('id', link.invoice_id).maybeSingle();
+          }
+        }
+        return res;
+      };
+      let invRes = await lookupInvoice();
       // Self-heal: an order should always have a receipt/invoice. If a past
       // auto-create silently failed, build it now so paid/print/email work.
       if (!invRes.data && ord) {
         try {
           await supabase.rpc('create_invoice_for_order', { p_order_id: id });
-          invRes = await supabase.from('invoices').select(invSelect).eq('order_id', id).maybeSingle();
+          invRes = await lookupInvoice();
         } catch (e) { console.error('Invoice self-heal failed:', e); }
       }
       currentOrderFull = { ord, inv: invRes.data || null };
@@ -3146,11 +3213,26 @@ async function orderSaveItems(btn) {
     await supabase.from('orders').update({ total_amount: total }).eq('id', oid);
     // Keep the linked invoice + financials in step
     if (f.inv && f.inv.id) {
-      await supabase.from('invoice_items').delete().eq('invoice_id', f.inv.id);
-      await supabase.from('invoice_items').insert(items.map(i => ({
-        invoice_id: f.inv.id, description: i.name, unit_price: i.price, quantity: i.qty
-      })));
-      await supabase.from('invoices').update({ total_amount: total }).eq('id', f.inv.id);
+      if (f.inv.order_id) {
+        // Classic case: this invoice belongs solely to this order — safe to
+        // replace all its lines (unchanged behaviour).
+        await supabase.from('invoice_items').delete().eq('invoice_id', f.inv.id);
+        await supabase.from('invoice_items').insert(items.map(i => ({
+          invoice_id: f.inv.id, order_id: oid, description: i.name, unit_price: i.price, quantity: i.qty
+        })));
+        await supabase.from('invoices').update({ total_amount: total }).eq('id', f.inv.id);
+      } else {
+        // Multi-site customer (migration 032): this invoice is shared with
+        // other orders — only touch THIS order's own lines, keep its site label.
+        const { data: oldLines } = await supabase.from('invoice_items')
+          .select('site_label').eq('invoice_id', f.inv.id).eq('order_id', oid).limit(1);
+        const siteLabel = (oldLines && oldLines[0]) ? oldLines[0].site_label : null;
+        await supabase.from('invoice_items').delete().eq('invoice_id', f.inv.id).eq('order_id', oid);
+        await supabase.from('invoice_items').insert(items.map(i => ({
+          invoice_id: f.inv.id, order_id: oid, description: i.name, unit_price: i.price, quantity: i.qty, site_label: siteLabel
+        })));
+        try { await supabase.rpc('recalc_invoice_totals', { p_invoice_id: f.inv.id }); } catch (e) { console.error('Recalc failed:', e); }
+      }
     }
     // Reflect in the delivery-run card without a full reload
     const o = sampleOrders.find(x => x.id === oid);
@@ -3212,9 +3294,13 @@ async function orderMarkPaid(method) {
   if (!f.inv || !f.inv.id) {
     try {
       await supabase.rpc('create_invoice_for_order', { p_order_id: f.ord.id });
-      const r = await supabase.from('invoices')
-        .select('id, invoice_number, total_amount, status, invoice_type, invoice_payments(method, amount)')
-        .eq('order_id', f.ord.id).maybeSingle();
+      const invSel = 'id, order_id, invoice_number, total_amount, status, invoice_type, invoice_payments(method, amount)';
+      let r = await supabase.from('invoices').select(invSel).eq('order_id', f.ord.id).maybeSingle();
+      if (!r.data) {
+        // Multi-site customer (migration 032) — invoice is linked via orders.invoice_id
+        const { data: link } = await supabase.from('orders').select('invoice_id').eq('id', f.ord.id).maybeSingle();
+        if (link?.invoice_id) r = await supabase.from('invoices').select(invSel).eq('id', link.invoice_id).maybeSingle();
+      }
       if (r.data) f.inv = r.data;
     } catch (e) { console.error('Invoice creation on mark-paid failed:', e); }
     if (!f.inv || !f.inv.id) { alert('Couldn\'t create an invoice for this order. Check it has at least one item, then reopen it in a moment.'); return; }
@@ -4586,7 +4672,62 @@ function editCustomer(id) {
   document.getElementById('ec-referredby').value = c.referredBy || '';
   document.getElementById('ec-exempt').checked = c.exempt || false;
   document.getElementById('ec-notes').value = c.notes || '';
+  renderEcSites();
   document.getElementById('editCustomerModal').classList.add('show');
+}
+
+// ── Delivery sites (migration 032) — manage a customer's extra addresses ──
+function renderEcSites() {
+  const custId = document.getElementById('ec-id').value;
+  const list = document.getElementById('ec-sites-list');
+  if (!list) return;
+  const sites = customerSitesByCustomer[custId] || [];
+  if (!sites.length) {
+    list.innerHTML = '<p style="font-size:11.5px;color:var(--ink-soft);margin:0">No extra sites yet — this customer has one delivery address.</p>';
+    return;
+  }
+  list.innerHTML = sites.map(s => `
+    <div style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:8px 10px">
+      <span style="flex:1;font-size:12.5px;font-weight:600;color:var(--ink)">${s.label}</span>
+      <button onclick="removeCustomerSite('${s.id}')" title="Remove this site"
+        style="background:none;border:none;color:var(--oxblood);font-weight:800;cursor:pointer;font-size:14px;padding:2px 6px">✕</button>
+    </div>
+  `).join('');
+}
+
+async function addCustomerSite() {
+  const custId = document.getElementById('ec-id').value;
+  const input  = document.getElementById('ec-site-label');
+  const label  = input.value.trim();
+  if (!label) { alert('Please enter a site name or address.'); return; }
+  if (!custId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(custId)) {
+    alert('Please save this customer first, then add sites.'); return;
+  }
+  if (!supabase) { alert('Not connected to the database — please refresh and try again.'); return; }
+
+  const sortOrder = (customerSitesByCustomer[custId] || []).length;
+  const { data, error } = await supabase.from('customer_sites')
+    .insert({ customer_id: custId, label, sort_order: sortOrder })
+    .select('id, label').single();
+  if (error) { alert('Could not add that site — ' + error.message); return; }
+
+  if (!customerSitesByCustomer[custId]) customerSitesByCustomer[custId] = [];
+  customerSitesByCustomer[custId].push({ id: data.id, label: data.label, address: '' });
+  input.value = '';
+  renderEcSites();
+}
+
+async function removeCustomerSite(siteId) {
+  if (!confirm('Remove this delivery site? Past invoices are not affected.')) return;
+  if (!supabase) { alert('Not connected to the database — please refresh and try again.'); return; }
+  const { error } = await supabase.from('customer_sites').delete().eq('id', siteId);
+  if (error) { alert('Could not remove that site — ' + error.message); return; }
+
+  const custId = document.getElementById('ec-id').value;
+  if (customerSitesByCustomer[custId]) {
+    customerSitesByCustomer[custId] = customerSitesByCustomer[custId].filter(s => s.id !== siteId);
+  }
+  renderEcSites();
 }
 
 async function saveEditCustomer() {
@@ -5216,29 +5357,32 @@ function renderInvoices(filter) {
     const paid = invPaidTotal(inv);
     const bal  = invBalance(inv);
     const partPaid = paid > 0 && bal > 0;
-    const statusLabel = partPaid ? 'part paid' : inv.status;
-    const statusBg = inv.status==='paid' ? '#d9f0e0' : inv.status==='overdue' ? '#fdd' : partPaid ? '#e8f0fe' : '#f6e5cf';
-    const statusCol = inv.status==='paid' ? '#1a6640' : inv.status==='overdue' ? '#a00' : partPaid ? '#1a4fad' : 'var(--oxblood)';
+    const isDraft = inv.status === 'draft';
+    const statusLabel = isDraft ? 'running tab' : (partPaid ? 'part paid' : inv.status);
+    const statusBg = isDraft ? '#eef1f6' : inv.status==='paid' ? '#d9f0e0' : inv.status==='overdue' ? '#fdd' : partPaid ? '#e8f0fe' : '#f6e5cf';
+    const statusCol = isDraft ? 'var(--navy)' : inv.status==='paid' ? '#1a6640' : inv.status==='overdue' ? '#a00' : partPaid ? '#1a4fad' : 'var(--oxblood)';
     const payNote = invPaymentSummary(inv);
     return `
     <div style="background:#fff;border:1px solid var(--line-soft);border-radius:11px;padding:13px 15px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 12px -10px rgba(13,23,38,.4)">
       <div style="flex:1;min-width:0">
         <div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-soft);font-weight:700">${inv.ref}</div>
         <div style="font-size:14px;font-weight:800;color:var(--ink);margin-top:2px">${inv.name}</div>
-        <div style="font-size:11px;color:var(--ink-soft);margin-top:2px">${inv.date}${payNote ? ' · ' + payNote : ''}</div>
+        <div style="font-size:11px;color:var(--ink-soft);margin-top:2px">${isDraft ? 'Still collecting deliveries — ' + inv.date : inv.date}${payNote ? ' · ' + payNote : ''}</div>
         ${partPaid ? `<div style="font-size:11px;color:#1a4fad;margin-top:2px;font-weight:700">£${paid.toFixed(2)} paid · £${bal.toFixed(2)} remaining</div>` : ''}
       </div>
       <div style="font-family:var(--display);font-size:17px;font-weight:600;color:var(--navy);min-width:70px;text-align:right">£${inv.amount.toFixed(2)}</div>
       <span style="font-size:10px;font-weight:800;padding:4px 10px;border-radius:10px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;background:${statusBg};color:${statusCol}">${statusLabel}</span>
       <div style="display:flex;gap:6px;align-items:center">
-        ${inv.status !== 'paid' ? `<button style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:var(--oxblood);color:#fff;cursor:pointer;border:none" onclick="openPaymentModal('${inv.id}')">Log payment</button>` : ''}
+        ${isDraft
+          ? `<button style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:var(--navy);color:#fff;cursor:pointer;border:none" onclick="finalizeInvoice('${inv.id}')" title="Close this running tab and send it — the next order for this customer starts a fresh one">Finalise &amp; send</button>`
+          : (inv.status !== 'paid' ? `<button style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:var(--oxblood);color:#fff;cursor:pointer;border:none" onclick="openPaymentModal('${inv.id}')">Log payment</button>` : '')}
         <div class="actions-wrap">
           <button class="actions-btn" style="font-size:11px;padding:6px 12px" id="ia-${inv.id}" onclick="toggleActionsMenu('iam-${inv.id}','ia-${inv.id}')">
             Actions
             <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
           <div class="actions-menu" id="iam-${inv.id}">
-            <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openPaymentModal('${inv.id}')"><span class="ai-icon">💷</span> Log payment</div>
+            ${isDraft ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');finalizeInvoice('${inv.id}')"><span class="ai-icon">✅</span> Finalise &amp; send</div>` : `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openPaymentModal('${inv.id}')"><span class="ai-icon">💷</span> Log payment</div>`}
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');downloadInvoiceById('${inv.id}')"><span class="ai-icon">📄</span> Download PDF</div>
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openSendModal('email','${inv.name}','${inv.ref}','${inv.amount}','${inv.id}')"><span class="ai-icon">✉️</span> Send via email</div>
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openSendModal('message','${inv.name}','${inv.ref}','${inv.amount}','${inv.id}')"><span class="ai-icon">💬</span> Send via WhatsApp</div>
@@ -5248,6 +5392,30 @@ function renderInvoices(filter) {
       </div>
     </div>`;
   }).join('');
+}
+
+// Close off a running multi-site invoice (migration 032) — the next order
+// for this customer will automatically start a fresh one.
+async function finalizeInvoice(id) {
+  const inv = sampleInvoices.find(i => i.id === id);
+  if (!inv) return;
+  const isReceipt = inv.invType === 'receipt';
+  if (!confirm(`Finalise ${inv.ref} for ${inv.name}?\n\nThis closes off the running tab — any new orders for them will start a fresh invoice.`)) return;
+  if (!window.supabase) { alert('Not connected to the database — please refresh and try again.'); return; }
+
+  const now = new Date();
+  const due = new Date(now); due.setDate(due.getDate() + 30);
+  const updates = isReceipt
+    ? { status: 'paid', issued_at: now.toISOString(), paid_at: now.toISOString() }
+    : { status: 'sent', issued_at: now.toISOString(), due_at: due.toISOString() };
+
+  const { error } = await window.supabase.from('invoices').update(updates).eq('id', id);
+  if (error) { alert('Could not finalise this invoice — ' + error.message); return; }
+
+  inv.status = updates.status;
+  renderInvoices();
+  renderDashboard();
+  alert(`${inv.ref} finalised${isReceipt ? ' and marked paid' : ' — marked as sent'}. The next order for ${inv.name} will start a new invoice.`);
 }
 
 async function deleteInvoice(id, ref, name) {
@@ -5426,7 +5594,7 @@ async function getSendData(invId, custName, invRef, amount) {
   if (invId && window.supabase) {
     const { data: inv, error } = await window.supabase
       .from('invoices')
-      .select('invoice_number, invoice_type, total_amount, customers(name, phone, email, address_line_1, customer_type), invoice_items(description, unit_price, quantity)')
+      .select('invoice_number, invoice_type, total_amount, customers(name, phone, email, address_line_1, customer_type), invoice_items(description, unit_price, quantity, site_label)')
       .eq('id', invId).single();
     if (!error && inv) {
       ref     = inv.invoice_number;
@@ -5436,7 +5604,7 @@ async function getSendData(invId, custName, invRef, amount) {
       phone   = inv.customers?.phone || '';
       email   = inv.customers?.email || '';
       address = inv.customers?.address_line_1 || '';
-      items   = (inv.invoice_items || []).map(i => ({ desc: i.description, qty: i.quantity, price: parseFloat(i.unit_price) || 0 }));
+      items   = (inv.invoice_items || []).map(i => ({ desc: i.description, qty: i.quantity, price: parseFloat(i.unit_price) || 0, site_label: i.site_label || null }));
     }
   }
 
@@ -5451,8 +5619,7 @@ async function getSendData(invId, custName, invRef, amount) {
     address = cust.address || '';
     type    = (cust.type === 'domestic') ? 'receipt' : (currentInvoiceType || 'invoice');
     ref     = invRef || currentInvoiceRef || 'INV-XXXX';
-    items   = invItems.filter(i => i.desc && (parseFloat(i.qty)||0) > 0)
-      .map(i => ({ desc:i.desc, qty:parseFloat(i.qty)||0, price:parseFloat(i.price)||0 }));
+    items   = flattenInvItems();
     total   = items.length ? items.reduce((s,i) => s + i.qty*i.price, 0)
       : (parseFloat(String(amount||'').replace(/[^0-9.]/g,'')) || 0);
   }
@@ -5462,7 +5629,14 @@ async function getSendData(invId, custName, invRef, amount) {
 
 function fmtMoney(n) { return '£' + (Number(n)||0).toFixed(2); }
 function itemLinesText(items) {
-  return (items||[]).map(i => `• ${i.desc} ×${i.qty} — ${fmtMoney((i.qty||0)*(i.price||0))}`).join('\n');
+  const { groups } = groupInvoiceLines((items||[]).map(i => ({ desc: i.desc, qty: i.qty||0, price: i.price||0, site_label: i.site_label || null })));
+  const isGrouped = groups.length > 1 || (groups.length === 1 && groups[0].label);
+  return groups.map(g => {
+    const head = (isGrouped && g.label) ? `*${g.label}*\n` : '';
+    const body = g.lines.map(i => `• ${i.desc} ×${i.qty} — ${fmtMoney(i.qty*i.price)}`).join('\n');
+    const sub  = isGrouped ? `\nSubtotal: ${fmtMoney(g.subtotal)}` : '';
+    return head + body + sub;
+  }).join('\n\n');
 }
 
 async function openSendModal(mode, custName, invRef, amount, invId) {
@@ -5677,11 +5851,28 @@ async function selectCustomer(id) {
   document.getElementById('lo-type').value    = c.type    || 'domestic';
   closeLookup();
   updateLogTotal();
+  renderLogSitePicker(c.id);
 
   const nameField = document.getElementById('lo-name');
   nameField.style.borderColor = 'var(--green)';
   nameField.style.background  = 'var(--green-soft)';
   setTimeout(() => { nameField.style.borderColor = ''; nameField.style.background = ''; }, 1200);
+}
+
+// Multi-site customers (migration 032) — show a "which site?" dropdown in
+// Log Order when the selected customer has more than one delivery address.
+// Hidden entirely for the ~100% of customers with just one address.
+let logSelectedCustomerId = null;
+
+function renderLogSitePicker(custId) {
+  logSelectedCustomerId = custId;
+  const wrap = document.getElementById('lo-site-wrap');
+  const sel  = document.getElementById('lo-site');
+  const sites = customerSitesByCustomer[custId] || [];
+  if (!wrap || !sel) return;
+  if (!sites.length) { wrap.style.display = 'none'; sel.innerHTML = ''; return; }
+  sel.innerHTML = sites.map(s => `<option value="${s.id}">${s.label}</option>`).join('');
+  wrap.style.display = 'block';
 }
 
 function closeLookup() {
@@ -5884,6 +6075,15 @@ async function saveLogOrder() {
       }
     }
 
+    // 2b. Delivery site (migration 032) — only set when the site picker is
+    // showing AND it's for the same customer we just resolved (belt-and-braces:
+    // if Jon typed a different phone than the one he looked up, this customer
+    // may not be the multi-site one, so we don't attach a stray site_id).
+    const siteWrap = document.getElementById('lo-site-wrap');
+    const siteId = (siteWrap && siteWrap.style.display !== 'none' && logSelectedCustomerId === customerId)
+      ? (document.getElementById('lo-site')?.value || null)
+      : null;
+
     // 3. Insert order
     const { data: orderData, error: orderErr } = await supabase
       .from('orders').insert({
@@ -5893,6 +6093,7 @@ async function saveLogOrder() {
         status:           'pending',
         total_amount:     total,
         notes:            document.getElementById('lo-notes').value.trim() || null,
+        site_id:          siteId,
       }).select('id').single();
     if (orderErr) throw orderErr;
 
@@ -5929,6 +6130,11 @@ function clearLogForm() {
   logItemCount = 0;
   addLogItem();
   updateLogTotal();
+  logSelectedCustomerId = null;
+  const siteWrap = document.getElementById('lo-site-wrap');
+  if (siteWrap) siteWrap.style.display = 'none';
+  const siteSel = document.getElementById('lo-site');
+  if (siteSel) siteSel.innerHTML = '';
 }
 
 // ============ SCHEDULE / DELIVERY DAYS ============
@@ -6507,6 +6713,13 @@ let runDaySlots    = [];      // upcoming delivery slots, loaded by loadAppData
 let currentMapsUrl = '';
 
 // Fallback ordering when the Google key isn't set (trade first, then domestic).
+// Multi-site customers (migration 032): route to the SITE address when the
+// order has one, not the customer's main address — that's the whole point
+// of a site (e.g. Billy Bunters' two Birkenhead addresses).
+function orderDeliveryAddress(o) {
+  return (o.siteLabel || o.address || '').trim();
+}
+
 function routeHeuristic(orders) {
   return [...orders].sort((a, b) => {
     if (a.type === 'trade' && b.type !== 'trade') return -1;
@@ -6530,7 +6743,7 @@ async function openRoutePlanner(dateStr) {
 
   let ordered = null, meta = null;
   // Ask Google (server-side) for the optimal order. Needs addresses to work.
-  const withAddr = orders.filter(o => (o.address || '').trim());
+  const withAddr = orders.filter(o => orderDeliveryAddress(o));
   if (withAddr.length >= 2) {
     try {
       const res = await fetch('/.netlify/functions/route', {
@@ -6539,7 +6752,7 @@ async function openRoutePlanner(dateStr) {
         body: JSON.stringify({
           origin: 'Ormskirk, Lancashire',
           destination: 'Ormskirk, Lancashire',
-          addresses: withAddr.map(o => o.address),
+          addresses: withAddr.map(o => orderDeliveryAddress(o)),
         }),
       });
       if (res.ok) {
@@ -6547,7 +6760,7 @@ async function openRoutePlanner(dateStr) {
         if (Array.isArray(d.order) && d.order.length === withAddr.length) {
           // Optimised stops (with addresses), then any address-less orders appended.
           const optimisedWithAddr = d.order.map(i => withAddr[i]);
-          const noAddr = orders.filter(o => !(o.address || '').trim());
+          const noAddr = orders.filter(o => !orderDeliveryAddress(o));
           ordered = [...optimisedWithAddr, ...noAddr];
           meta = { distanceMeters: d.distanceMeters || 0, durationSeconds: d.durationSeconds || 0, optimised: true };
         }
@@ -6600,8 +6813,8 @@ function renderRoute(optimised, label, meta) {
         <div class="stop-num ${isLast ? 'end' : 'stop'}">${i + 1}</div>
         <div class="stop-card">
           <div class="sc-label">${o.type === 'trade' ? 'Trade' : 'Domestic'} · ${o.channel}</div>
-          <h4>${o.name}</h4>
-          <div class="sc-addr">📍 ${o.address}</div>
+          <h4>${o.name}${o.siteLabel ? ` — ${o.siteLabel}` : ''}</h4>
+          <div class="sc-addr">📍 ${orderDeliveryAddress(o)}</div>
           <div class="sc-items">${o.items}</div>
         </div>
       </div>
@@ -6613,8 +6826,8 @@ function renderRoute(optimised, label, meta) {
   // Build Google Maps URL with all addresses
   // Format: https://www.google.com/maps/dir/?api=1&origin=X&destination=Y&waypoints=A|B|C&travelmode=driving
   const base = 'Ormskirk, Lancashire'; // Jon's start/end
-  const waypoints = optimised.map(o => encodeURIComponent(o.address)).join('|');
-  const lastAddr = encodeURIComponent(optimised[optimised.length - 1].address);
+  const waypoints = optimised.map(o => encodeURIComponent(orderDeliveryAddress(o))).join('|');
+  const lastAddr = encodeURIComponent(orderDeliveryAddress(optimised[optimised.length - 1]));
   currentMapsUrl = `https://www.google.com/maps/dir/?api=1` +
     `&origin=${encodeURIComponent(base)}` +
     `&destination=${encodeURIComponent(base)}` +
@@ -7028,8 +7241,60 @@ let invItems = [];
 
 function addInvItem(desc='', qty=1, price=0) {
   const id = Date.now() + Math.floor(Math.random() * 1000);
-  invItems.push({ id, productId: null, desc, qty, price });
+  invItems.push({ id, type: 'item', productId: null, desc, qty, price });
   renderInvItems();
+}
+
+// Multi-site invoices (e.g. Billy Bunters — one invoice, two delivery
+// addresses). A "site header" row splits everything below it (until the
+// next header) into its own labelled section with its own subtotal.
+// Never used = every invoice renders exactly as it always has.
+function addInvSiteHeader() {
+  const id = Date.now() + Math.floor(Math.random() * 1000);
+  invItems.push({ id, type: 'header', label: '' });
+  renderInvItems();
+}
+
+function updateInvSiteLabel(id, val) {
+  const row = invItems.find(i => i.id === id);
+  if (row) row.label = val;   // no re-render needed — keeps typing focus
+}
+
+// Turn the live builder's invItems (items + optional site headers) into a
+// flat, ordered list of billable lines, each tagged with the site label
+// that was above it (or null if none). This is the exact shape saved to
+// invoice_items — same helper used to group them back up for display.
+function flattenInvItems() {
+  let currentSite = null;
+  const lines = [];
+  invItems.forEach(row => {
+    if (row.type === 'header') { currentSite = (row.label || '').trim() || null; return; }
+    if (!row.desc) return;
+    lines.push({ desc: row.desc, qty: parseFloat(row.qty) || 0, price: parseFloat(row.price) || 0, site_label: currentSite });
+  });
+  return lines;
+}
+
+// Group flat {desc, qty, price, site_label} lines into sections, in the
+// order each site label first appears. A plain invoice (no site headers
+// ever added) always comes back as ONE group with label=null — render that
+// case exactly like today's flat invoice, no visual change.
+function groupInvoiceLines(lines) {
+  const groups = [];
+  const byLabel = new Map();
+  lines.forEach(l => {
+    const key = l.site_label || '';
+    if (!byLabel.has(key)) {
+      const g = { label: l.site_label || null, lines: [], subtotal: 0 };
+      byLabel.set(key, g);
+      groups.push(g);
+    }
+    const g = byLabel.get(key);
+    g.lines.push(l);
+    g.subtotal += l.qty * l.price;
+  });
+  const grandTotal = groups.reduce((s, g) => s + g.subtotal, 0);
+  return { groups, grandTotal };
 }
 
 // Build the product dropdown options from the live availability list
@@ -7044,7 +7309,16 @@ function invProductOptions(selectedId) {
 function renderInvItems() {
   const list = document.getElementById('invItemsList');
   if (!list) return;
-  list.innerHTML = invItems.map(item => `
+  list.innerHTML = invItems.map(item => {
+    if (item.type === 'header') {
+      return `
+        <div style="display:flex;align-items:center;gap:6px;margin-top:4px;padding-top:8px;border-top:2px solid var(--gold, #c2954a)">
+          <input class="fin-input" style="flex:1;font-size:12.5px;font-weight:800;padding:7px 9px" placeholder="Site name / address, e.g. 4a Russell Road, Birkenhead"
+            value="${(item.label || '').replace(/"/g, '&quot;')}" oninput="updateInvSiteLabel(${item.id}, this.value)">
+          <button onclick="removeInvItem(${item.id})" style="width:26px;height:34px;border-radius:7px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);font-size:14px">×</button>
+        </div>`;
+    }
+    return `
     <div style="display:grid;grid-template-columns:1fr 52px 76px 26px;gap:6px;align-items:start">
       <div style="display:flex;flex-direction:column;gap:5px">
         <select class="fin-input" style="font-size:12px;padding:7px 9px" onchange="pickInvProduct(${item.id}, this.value)">
@@ -7060,14 +7334,15 @@ function renderInvItems() {
         oninput="updateInvItem(${item.id},'price',this.value)">
       <button onclick="removeInvItem(${item.id})" style="width:26px;height:34px;border-radius:7px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);font-size:14px">×</button>
     </div>
-  `).join('');
+  `;
+  }).join('');
   updateInvTotal();
 }
 
 function updateInvTotal() {
-  const total = invItems.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.price) || 0), 0);
+  const { grandTotal } = groupInvoiceLines(flattenInvItems());
   const el = document.getElementById('invGrandTotal');
-  if (el) el.textContent = '£' + total.toFixed(2);
+  if (el) el.textContent = '£' + grandTotal.toFixed(2);
 }
 
 // Pick a product from the availability list (auto-fills name + price) or go custom
@@ -7108,6 +7383,39 @@ function loadInvoiceCustomer() {
   addInvItem(); // start with one blank row
 }
 
+// Shared items-table HTML — used by the on-screen preview. A plain invoice
+// (no "+ Add site" ever used) renders exactly as it always has. A multi-site
+// invoice gets a labelled sub-header + subtotal per site, then one Grand
+// Total at the end — matching a customer's own multi-site paper invoice.
+function renderInvoiceItemsTableHTML(groups, grandTotal) {
+  const lineRow = i => `
+    <tr>
+      <td>${i.desc}</td>
+      <td style="text-align:center">${i.qty}</td>
+      <td style="text-align:right">£${i.price.toFixed(2)}</td>
+      <td>£${(i.qty * i.price).toFixed(2)}</td>
+    </tr>`;
+
+  const isGrouped = groups.length > 1 || (groups.length === 1 && groups[0].label);
+
+  let body = '';
+  groups.forEach(g => {
+    if (isGrouped && g.label) {
+      body += `<tr><td colspan="4" style="padding-top:14px;font-weight:800;color:var(--oxblood);border-bottom:1px solid var(--line)">${g.label}</td></tr>`;
+    }
+    body += g.lines.map(lineRow).join('');
+    if (isGrouped) {
+      body += `<tr><td colspan="3" style="text-align:right;font-weight:700;color:var(--ink-soft)">Subtotal</td><td style="font-weight:700">£${g.subtotal.toFixed(2)}</td></tr>`;
+    }
+  });
+  body += `
+    <tr class="inv-total-row">
+      <td colspan="3"><b>Grand Total</b></td>
+      <td>£${grandTotal.toFixed(2)}</td>
+    </tr>`;
+  return body;
+}
+
 function generateInvoicePreview() {
   const custId = document.getElementById('inv-customer').value;
   const date   = document.getElementById('inv-date').value;
@@ -7118,7 +7426,7 @@ function generateInvoicePreview() {
   const invRef = currentInvoiceRef;
   const docTitle = currentInvoiceType === 'receipt' ? 'RECEIPT' : 'INVOICE';
   const dateFormatted = date ? new Date(date).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB');
-  const total = invItems.reduce((s,i) => s + (parseFloat(i.qty)||0)*(parseFloat(i.price)||0), 0);
+  const { groups, grandTotal: total } = groupInvoiceLines(flattenInvItems());
 
   document.getElementById('invoicePreview').innerHTML = `
     <div class="inv-header">
@@ -7147,18 +7455,7 @@ function generateInvoicePreview() {
       <table class="inv-table">
         <thead><tr><th>Description</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th>Total</th></tr></thead>
         <tbody>
-          ${invItems.filter(i=>i.desc).map(i => `
-            <tr>
-              <td>${i.desc}</td>
-              <td style="text-align:center">${i.qty}</td>
-              <td style="text-align:right">£${parseFloat(i.price).toFixed(2)}</td>
-              <td>£${((parseFloat(i.qty)||0)*(parseFloat(i.price)||0)).toFixed(2)}</td>
-            </tr>
-          `).join('')}
-          <tr class="inv-total-row">
-            <td colspan="3"><b>Grand Total</b></td>
-            <td>£${total.toFixed(2)}</td>
-          </tr>
+          ${renderInvoiceItemsTableHTML(groups, total)}
         </tbody>
       </table>
     </div>
@@ -7183,7 +7480,7 @@ function printInvoice() {
 async function saveInvoice() {
   const custId = document.getElementById('inv-customer')?.value;
   if (!custId) { alert('Please select a customer first.'); return; }
-  const items = invItems.filter(i => i.desc && (parseFloat(i.qty)||0) > 0);
+  const items = flattenInvItems().filter(i => i.desc && i.qty > 0);
   if (!items.length) { alert('Add at least one line item (description + quantity) before saving.'); return; }
 
   // Make sure ref/type are set (generates the preview if not already shown)
@@ -7192,7 +7489,7 @@ async function saveInvoice() {
   const cust    = INVOICE_CUSTOMERS.find(c => c.id === custId) || { name:'Customer', type:'trade' };
   const dateVal = document.getElementById('inv-date')?.value;
   const issued  = dateVal ? new Date(dateVal) : new Date();
-  const total   = items.reduce((s,i) => s + (parseFloat(i.qty)||0)*(parseFloat(i.price)||0), 0);
+  const total   = items.reduce((s,i) => s + i.qty * i.price, 0);
   const invType = currentInvoiceType;
   const invRef  = currentInvoiceRef;
   const due     = new Date(issued); due.setDate(due.getDate() + 30);
@@ -7217,8 +7514,9 @@ async function saveInvoice() {
     const lineRows = items.map(i => ({
       invoice_id:  inv.id,
       description: i.desc,
-      unit_price:  parseFloat(i.price) || 0,
-      quantity:    parseInt(i.qty, 10) || 1,
+      unit_price:  i.price,
+      quantity:    i.qty,
+      site_label:  i.site_label,
     }));
     const { error: liErr } = await window.supabase.from('invoice_items').insert(lineRows);
     if (liErr) throw liErr;
@@ -7302,18 +7600,43 @@ function buildInvoiceDoc(data) {
   doc.text('TOTAL', cTot - 8, y + 3, { align:'right' });
   y += 27;
 
+  // Multi-site invoices (migration 032): group by site_label, a labelled
+  // sub-header + subtotal per site, then one Grand Total. A plain invoice
+  // (no site_label anywhere) renders exactly as it always has.
   doc.setFont('helvetica','normal').setFontSize(10).setTextColor(INK[0],INK[1],INK[2]);
-  items.forEach((i, idx) => {
-    const qty = parseFloat(i.qty)||0, price = parseFloat(i.price)||0, lt = qty*price;
-    const lines = doc.splitTextToSize(String(i.desc), cQty - cDesc - 24);
-    const rowH = 14 * lines.length + 6;
-    if (idx % 2 === 1) doc.setFillColor(248,244,236).rect(L, y - 11, R - L, rowH, 'F');
-    doc.setTextColor(INK[0],INK[1],INK[2]);
-    doc.text(lines, cDesc + 8, y);
-    doc.text(String(qty), cQty, y, { align:'center' });
-    doc.text('£' + price.toFixed(2), cPrice, y, { align:'right' });
-    doc.text('£' + lt.toFixed(2), cTot - 8, y, { align:'right' });
-    y += rowH;
+  const { groups: pdfGroups } = groupInvoiceLines(items.map(i => ({
+    desc: i.desc, qty: parseFloat(i.qty)||0, price: parseFloat(i.price)||0, site_label: i.site_label || null,
+  })));
+  const pdfIsGrouped = pdfGroups.length > 1 || (pdfGroups.length === 1 && pdfGroups[0].label);
+  let rowIdx = 0;
+  pdfGroups.forEach(g => {
+    if (pdfIsGrouped && g.label) {
+      y += 4;
+      doc.setFont('helvetica','bold').setFontSize(10).setTextColor(OX[0],OX[1],OX[2]);
+      doc.text(String(g.label), cDesc + 8, y + 6);
+      y += 20;
+      doc.setFont('helvetica','normal').setFontSize(10).setTextColor(INK[0],INK[1],INK[2]);
+    }
+    g.lines.forEach(i => {
+      const qty = i.qty, price = i.price, lt = qty*price;
+      const lines = doc.splitTextToSize(String(i.desc), cQty - cDesc - 24);
+      const rowH = 14 * lines.length + 6;
+      if (rowIdx % 2 === 1) doc.setFillColor(248,244,236).rect(L, y - 11, R - L, rowH, 'F');
+      doc.setTextColor(INK[0],INK[1],INK[2]);
+      doc.text(lines, cDesc + 8, y);
+      doc.text(String(qty), cQty, y, { align:'center' });
+      doc.text('£' + price.toFixed(2), cPrice, y, { align:'right' });
+      doc.text('£' + lt.toFixed(2), cTot - 8, y, { align:'right' });
+      y += rowH;
+      rowIdx++;
+    });
+    if (pdfIsGrouped) {
+      doc.setFont('helvetica','bold').setFontSize(9.5).setTextColor(INKSOFT[0],INKSOFT[1],INKSOFT[2]);
+      doc.text('Subtotal', cPrice, y, { align:'right' });
+      doc.text('£' + g.subtotal.toFixed(2), cTot - 8, y, { align:'right' });
+      doc.setFont('helvetica','normal').setFontSize(10).setTextColor(INK[0],INK[1],INK[2]);
+      y += 16;
+    }
   });
 
   // ── Grand total ──
@@ -7347,8 +7670,7 @@ function buildInvoiceDoc(data) {
 async function downloadInvoicePDF() {
   const custId = document.getElementById('inv-customer')?.value;
   if (!custId) { alert('Please select a customer first.'); return; }
-  const items = invItems.filter(i => i.desc && (parseFloat(i.qty)||0) > 0)
-    .map(i => ({ desc:i.desc, qty:parseFloat(i.qty)||0, price:parseFloat(i.price)||0 }));
+  const items = flattenInvItems();
   if (!items.length) { alert('Add at least one line item before downloading.'); return; }
   if (!currentInvoiceRef) generateInvoicePreview();
 
@@ -8662,6 +8984,7 @@ const HELP_PAGES = {
       { icon:'👤', title:'Customer lookup', body:'Or enter it manually: start typing a customer\'s name in the search box. If they\'ve ordered before, they\'ll appear in the list and their address fills in automatically.' },
       { icon:'🛒', title:'Adding items', body:'Select a product from the dropdown, enter the quantity, and press <strong>Add item</strong>. Repeat for each product in the order. The total updates automatically.' },
       { icon:'📅', title:'Delivery day', body:'The delivery day list shows the days you\'ve opened on the <strong>Schedule</strong> page, each with its date. Pick the one the customer wants and the order lands in that day\'s run. If a day you need isn\'t listed, open it first on the Schedule page.' },
+      { icon:'📍', title:'Customers with more than one address', body:'If a customer has extra delivery sites set up (Customers page → Edit → <strong>Delivery sites</strong>) — e.g. a business with two locations — a <strong>Delivery site</strong> box appears once you pick them from the lookup. Choose the right address for this delivery. It shows on the delivery run pick list and route so you go to the right place, and all their deliveries land on <strong>one combined invoice</strong> with a subtotal per site.' },
       { icon:'💬', title:'Notes', body:'Use the notes box for anything special — e.g. "leave by back gate" or "call on arrival". Jon will see this on the order card.' },
       { icon:'💰', title:'Minimum order', body:'Orders under £20 will automatically have the £5 small-order charge added. Customers marked as exempt (family/friends) won\'t see this charge.' },
     ]
@@ -8688,6 +9011,7 @@ const HELP_PAGES = {
       { icon:'⭐', title:'Exempt customers', body:'Family and friends who shouldn\'t be charged the £5 small-order fee can be marked as <strong>Exempt</strong> on their profile. Tick the box in their customer record.' },
       { icon:'🎁', title:'Referral reward', body:'When a new customer was recommended by an existing one, put the existing customer\'s name in the <strong>Referred by</strong> field. It\'s flagged so you remember to thank the person who referred them with a free pack of sausages or bacon on their next delivery.' },
       { icon:'🏢', title:'Trade accounts', body:'Trade customers have a <strong>Trade</strong> badge. You can set their individual pricing, credit terms, and invoice details from their profile.' },
+      { icon:'📍', title:'Delivery sites (customers with more than one address)', body:'Open a customer\'s <strong>Edit</strong> screen and look for <strong>Delivery sites</strong>. Add one row per extra address (e.g. two pub sites for the same business). Once any sites are listed: <strong>Log Order</strong> will ask which site each delivery is for, the delivery run and route show the right address, and — instead of a separate invoice per delivery — all their orders build up onto <strong>one running invoice</strong> with a subtotal per site, until you finalise and send it from the Invoices tab. No sites listed = nothing changes, it works exactly as before.' },
       { icon:'➕', title:'Adding a new customer', body:'Press <strong>+ Add customer</strong>. Fill in their name, address, and type. You can add notes too — e.g. access instructions or preferred contact method.' },
       { icon:'⬆️', title:'Import lots of customers at once', body:'Got a list of customers in a spreadsheet? Press <strong>⬆ Import from spreadsheet</strong>. First press <strong>Download template</strong> and fill in one row per customer in Excel — only the <strong>Name</strong> is required, leave anything you don\'t have blank. In the <strong>Type</strong> column put "Domestic" or "Trade". Save the file, then drag it onto the box (or tap to choose it). You\'ll see a preview so you can check everything before saving — anyone already on your list, or with no name, is skipped automatically. Press <strong>Import</strong> and they\'re all added in one go.' },
     ]
@@ -8703,6 +9027,8 @@ const HELP_PAGES = {
       { icon:'📸', title:'Expenses &amp; Purchases tab', body:'This is where you record <strong>every cost</strong> — stock from the wholesaler, fuel, van, packaging, insurance, the lot — one line each with the receipt attached. Tap <strong>+ Add expense</strong>, then <strong>snap the receipt</strong>: it reads the photo and fills in the supplier, date, amount and VAT for you. Check it, pick whether it\'s <strong>stock</strong> or an <strong>overhead expense</strong>, and press <strong>Save</strong>. No receipt or the photo\'s unclear? Just type it in. Each month shows running totals and every row keeps its photo. This is the single place your costs live — your Weekly and Monthly figures add up from here, and <strong>Export for accountant</strong> gives them the lot as a spreadsheet.' },
       { icon:'🏦', title:'Bank Payments tab', body:'Shows every <strong>bank-transfer</strong> payment, grouped by customer and by the delivery day of their order — filled in automatically whenever you mark an order paid by <strong>bank transfer</strong> in a delivery run. The <strong>Outstanding</strong> column is what each customer still owes. Export it for your records any time.' },
       { icon:'📤', title:'Monthly (Accountant) tab', body:'Generates the monthly summary your accountant needs, built entirely from what you\'ve already entered. The <strong>income (sales)</strong> rolls up from your orders/Daily Sales, and the <strong>purchases and expenses</strong> come from your Expenses &amp; Purchases tab — grouped by supplier and category. Pick the month and press <strong>Export</strong> to download it. Nothing to retype — it\'s all there.' },
+      { icon:'📍', title:'Running tabs for multi-site customers', body:'A customer with <strong>Delivery sites</strong> set up (see Customers help) doesn\'t get a fresh invoice every delivery — instead their orders build up onto one <strong>running tab</strong>, shown with a blue "running tab" label under <strong>Saved invoices &amp; receipts</strong> (filter: <strong>Running</strong>). When you\'re ready to bill them, press <strong>Finalise &amp; send</strong> — it closes that invoice off (with a subtotal per site and one grand total, just like a normal invoice) and their next order automatically starts a new one.' },
+      { icon:'✏️', title:'Adding site sections to an invoice by hand', body:'Building an invoice yourself for a customer with more than one address? Above the item list, press <strong>+ Add site</strong>, type the site name/address, then add that site\'s items underneath. Repeat for each site — the invoice shows a subtotal per site and one grand total, on screen, on the PDF, and however you send it.' },
     ]
   },
   vip: {
