@@ -2137,7 +2137,22 @@ async function loadUserRole() {
     .eq('id', user.id)
     .single();
 
-  currentUserRole = profile?.role || 'driver';
+  // Only 'admin' and 'driver' are staff roles allowed into this app.
+  // Customer accounts (role 'customer', e.g. from the website, or a
+  // password-recovery session that lands here by mistake) must never
+  // fall through into the dashboard — sign them straight back out.
+  if (profile?.role !== 'admin' && profile?.role !== 'driver') {
+    await supabase.auth.signOut();
+    showLoginScreen();
+    const errEl = document.getElementById('login-error');
+    if (errEl) {
+      errEl.textContent = 'This account doesn\'t have access to the admin app. Please sign in with a staff account.';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
+
+  currentUserRole = profile.role;
   applyRoleRestrictions();
   hideLoginScreen();
 }
