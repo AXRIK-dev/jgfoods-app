@@ -1473,7 +1473,7 @@
       <button class="modal-close" onclick="closeModal('orderModal')">✕</button>
     </div>
     <div id="modalOrderBody"></div>
-    <div style="margin-top:16px">
+    <div style="margin-top:16px" id="orderStatusSection">
       <p style="font-size:11px;font-weight:700;color:var(--ink-soft);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Update status</p>
       <div class="modal-status-row">
         <button class="status-btn badge-new" onclick="updateOrderStatus('new')">New</button>
@@ -1482,7 +1482,7 @@
         <button class="status-btn badge-delivered" onclick="updateOrderStatus('delivered')">Delivered</button>
       </div>
     </div>
-    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)" id="orderDeleteSection">
       <button onclick="deleteCurrentOrder()" style="font-size:12px;font-weight:700;padding:7px 14px;border-radius:8px;background:#fff0f0;border:1px solid #fcc;color:#c0392b;cursor:pointer;width:100%">🗑 Delete this order</button>
     </div>
   </div>
@@ -1522,12 +1522,6 @@
       <h3>Add customer</h3>
       <button class="modal-close" onclick="closeModal('addCustomerModal')">✕</button>
     </div>
-    <div class="field-row">
-      <div class="field"><label>First name *</label><input id="ac-first" type="text" placeholder="Sarah"></div>
-      <div class="field"><label>Last name *</label><input id="ac-last" type="text" placeholder="Taylor"></div>
-    </div>
-    <div class="field"><label>Phone *</label><input id="ac-phone" type="tel" placeholder="07700 000000"></div>
-    <div class="field"><label>Address</label><input id="ac-address" type="text" placeholder="14 Any Street, Ormskirk"></div>
     <div class="field">
       <label>Account type</label>
       <select id="ac-type">
@@ -1535,10 +1529,21 @@
         <option value="trade">Trade / Commercial</option>
       </select>
     </div>
+    <div class="field-row" id="acDomesticNameFields">
+      <div class="field"><label>First name *</label><input id="ac-first" type="text" placeholder="Sarah"></div>
+      <div class="field"><label>Last name *</label><input id="ac-last" type="text" placeholder="Taylor"></div>
+    </div>
     <div class="field" id="acBusinessNameField" style="display:none">
-      <label>Business name</label>
+      <label>Business name *</label>
       <input id="ac-business" type="text" placeholder="The Crown Pub">
     </div>
+    <div class="field" id="acContactNameField" style="display:none">
+      <label>Contact person <span style="font-weight:400;color:var(--ink-soft)">(optional — who places the orders)</span></label>
+      <input id="ac-contact" type="text" placeholder="e.g. Sue">
+    </div>
+    <div class="field"><label>Phone *</label><input id="ac-phone" type="tel" placeholder="07700 000000"></div>
+    <div class="field"><label>Email <span style="font-weight:400;color:var(--ink-soft)">(optional)</span></label><input id="ac-email" type="email" placeholder="name@example.com"></div>
+    <div class="field"><label>Address</label><input id="ac-address" type="text" placeholder="14 Any Street, Ormskirk"></div>
     <div class="field"><label>Referred by <span style="font-weight:400;color:var(--ink-soft)">(optional)</span></label><input id="ac-referredby" type="text" placeholder="e.g. Sarah Taylor — she gets a free sausage/bacon pack as a thank-you"></div>
     <div class="field" style="display:flex;align-items:center;gap:10px;background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:12px 14px">
       <input type="checkbox" id="ac-exempt" style="width:17px;height:17px;accent-color:var(--oxblood);cursor:pointer;flex-shrink:0">
@@ -2009,17 +2014,6 @@
       <button class="modal-close" onclick="closeModal('editCustomerModal')">✕</button>
     </div>
     <input type="hidden" id="ec-id">
-    <div class="field-row">
-      <div class="field"><label>First name *</label><input id="ec-first" type="text" placeholder="Sarah"></div>
-      <div class="field"><label>Last name *</label><input id="ec-last" type="text" placeholder="Taylor"></div>
-    </div>
-    <div class="field"><label>Phone</label><input id="ec-phone" type="tel" placeholder="07700 000000"></div>
-    <div class="field">
-      <label>Account email <span style="font-weight:400;color:var(--ink-soft)">(their website login)</span></label>
-      <input id="ec-email" type="email" readonly title="The email this customer signed up with. Read-only — it's their account login."
-             style="background:var(--cream);color:var(--ink-soft);cursor:default">
-    </div>
-    <div class="field"><label>Address</label><input id="ec-address" type="text" placeholder="14 Any Street, Ormskirk"></div>
     <div class="field">
       <label>Type</label>
       <select id="ec-type">
@@ -2027,6 +2021,20 @@
         <option value="trade">Trade / Commercial</option>
       </select>
     </div>
+    <div class="field-row" id="ecDomesticNameFields">
+      <div class="field"><label>First name *</label><input id="ec-first" type="text" placeholder="Sarah"></div>
+      <div class="field"><label>Last name</label><input id="ec-last" type="text" placeholder="Taylor"></div>
+    </div>
+    <div class="field" id="ecBusinessNameField" style="display:none">
+      <label>Business name *</label>
+      <input id="ec-business" type="text" placeholder="The Crown Pub">
+    </div>
+    <div class="field"><label>Phone</label><input id="ec-phone" type="tel" placeholder="07700 000000"></div>
+    <div class="field">
+      <label>Email <span style="font-weight:400;color:var(--ink-soft)">(for invoices &amp; messages — changing it doesn't change their website login)</span></label>
+      <input id="ec-email" type="email" placeholder="name@example.com">
+    </div>
+    <div class="field"><label>Address</label><input id="ec-address" type="text" placeholder="14 Any Street, Ormskirk"></div>
     <div class="field" style="background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:12px 14px">
       <label style="font-weight:800;font-size:13px">Delivery sites <span style="font-weight:400;color:var(--ink-soft)">(optional — for customers with more than one address)</span></label>
       <p style="font-size:11.5px;color:var(--ink-soft);margin:2px 0 10px">Add extra sites if Jon delivers to more than one address for this customer (e.g. two pub sites). Once any sites are listed here, their invoice automatically shows a subtotal per site plus one grand total — and Log Order will ask which site each delivery is for.</p>
@@ -3007,6 +3015,9 @@ async function openOrderModal(id) {
   const slotLabel = o ? (o.date ? runDayLabel(o.date) : (o.dayLabel || '')) : '';
   document.getElementById('modalOrderRef').textContent = `Ref: ORD-${String(id).slice(0,8).toUpperCase()}${slotLabel ? ' · ' + slotLabel + ' delivery' : ''}`;
   document.getElementById('modalOrderBody').innerHTML = '<p style="font-size:12.5px;color:var(--ink-soft);padding:8px 0">Loading…</p>';
+  // Order view — make sure the order-only controls are visible (customer profile hides them)
+  document.getElementById('orderStatusSection').style.display = '';
+  document.getElementById('orderDeleteSection').style.display = '';
   document.getElementById('orderModal').classList.add('show');
 
   if (supabase && isOrderUUID(id)) {
@@ -4657,18 +4668,31 @@ async function deleteCategory(id) {
 }
 
 // ============ EDIT CUSTOMER ============
+function toggleEcNameFields(type) {
+  const isTrade = type === 'trade';
+  document.getElementById('ecDomesticNameFields').style.display = isTrade ? 'none' : 'flex';
+  document.getElementById('ecBusinessNameField').style.display  = isTrade ? 'block' : 'none';
+}
+
 function editCustomer(id) {
   const c = sampleCustomers.find(x => x.id === id);
   if (!c) return;
   document.getElementById('ec-id').value = id;
-  document.getElementById('ec-first').value = c.name.split(' ')[0] || '';
-  document.getElementById('ec-last').value = c.name.split(' ').slice(1).join(' ') || '';
+  if (c.type === 'trade') {
+    document.getElementById('ec-business').value = c.name || '';
+    document.getElementById('ec-first').value = '';
+    document.getElementById('ec-last').value  = '';
+  } else {
+    document.getElementById('ec-first').value = c.name.split(' ')[0] || '';
+    document.getElementById('ec-last').value = c.name.split(' ').slice(1).join(' ') || '';
+    document.getElementById('ec-business').value = '';
+  }
   document.getElementById('ec-phone').value = c.phone || '';
-  const emailEl = document.getElementById('ec-email');
-  emailEl.value = c.email || '';
-  emailEl.placeholder = c.email ? '' : 'No account — added manually';
+  document.getElementById('ec-email').value = c.email || '';
   document.getElementById('ec-address').value = c.address || '';
   document.getElementById('ec-type').value = c.type || 'domestic';
+  toggleEcNameFields(c.type || 'domestic');
+  document.getElementById('ec-type').onchange = function() { toggleEcNameFields(this.value); };
   document.getElementById('ec-referredby').value = c.referredBy || '';
   document.getElementById('ec-exempt').checked = c.exempt || false;
   document.getElementById('ec-notes').value = c.notes || '';
@@ -4734,13 +4758,22 @@ async function saveEditCustomer() {
   const id = document.getElementById('ec-id').value;
   const c = sampleCustomers.find(x => x.id === id);
   if (!c) return;
-  const first = document.getElementById('ec-first').value.trim();
-  const last  = document.getElementById('ec-last').value.trim();
-  if (!first) { alert('Please enter a name.'); return; }
-  c.name      = `${first} ${last}`.trim();
+  const type = document.getElementById('ec-type').value;
+  let businessName = null;
+  if (type === 'trade') {
+    businessName = document.getElementById('ec-business').value.trim();
+    if (!businessName) { alert('Please enter the business name.'); return; }
+    c.name = businessName;
+  } else {
+    const first = document.getElementById('ec-first').value.trim();
+    const last  = document.getElementById('ec-last').value.trim();
+    if (!first) { alert('Please enter a name.'); return; }
+    c.name = `${first} ${last}`.trim();
+  }
   c.phone     = document.getElementById('ec-phone').value.trim();
+  c.email     = document.getElementById('ec-email').value.trim();
   c.address   = document.getElementById('ec-address').value.trim();
-  c.type      = document.getElementById('ec-type').value;
+  c.type      = type;
   c.referredBy = document.getElementById('ec-referredby').value.trim();
   c.exempt    = document.getElementById('ec-exempt').checked;
   c.notes     = document.getElementById('ec-notes').value.trim();
@@ -4750,7 +4783,9 @@ async function saveEditCustomer() {
   if (supabase && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
     const { error } = await supabase.from('customers').update({
       name:          c.name,
+      business_name: businessName    || null,
       phone:         c.phone         || null,
+      email:         c.email         || null,
       address_line_1: c.address      || null,
       customer_type: c.type          || 'domestic',
       notes:         c.notes         || null,
@@ -4907,7 +4942,7 @@ function renderCustomers(filter) {
           ${c.exempt ? '<span class="badge" style="background:#fdf0e0;color:#b06000">Exempt</span>' : ''}
           ${c.referredBy && c.orders <= 1 ? '<span class="badge" style="background:#f0e5f5;color:#6b21a8">🎁 Referral gift</span>' : ''}
         </div>
-        <div class="oc-items">${c.phone} · Last order: ${c.lastOrder}${c.referredBy ? ` · Referred by ${c.referredBy}` : ''}</div>
+        <div class="oc-items">${c.phone ? `<a href="tel:${c.phone.replace(/[^\d+]/g,'')}" onclick="event.stopPropagation()" style="color:var(--navy);text-decoration:underline">${c.phone}</a>` : ''} · Last order: ${c.lastOrder}${c.referredBy ? ` · Referred by ${c.referredBy}` : ''}</div>
       </div>
       <div class="oc-right">
         <span class="oc-total">£${c.total.toFixed(2)}</span>
@@ -4963,13 +4998,28 @@ async function openCustomerDetail(id) {
   document.getElementById('modalOrderName').textContent = c.name;
   document.getElementById('modalOrderRef').textContent = `${c.type === 'trade' ? 'Trade' : 'Domestic'} customer`;
 
+  // This is a customer profile, not an order — hide the order-only controls
+  document.getElementById('orderStatusSection').style.display = 'none';
+  document.getElementById('orderDeleteSection').style.display = 'none';
+
+  const phoneDigits = (c.phone || '').replace(/[^\d+]/g, '');
+  const waNumber = phoneDigits.startsWith('0') ? '44' + phoneDigits.slice(1) : phoneDigits.replace(/^\+/, '');
+  const contactBtns = `
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      ${c.phone ? `<a href="tel:${phoneDigits}" style="flex:1;text-align:center;text-decoration:none;font-size:12.5px;font-weight:800;padding:11px 8px;border-radius:9px;background:var(--navy);color:#fff;min-width:90px">📞 Call</a>` : ''}
+      ${c.phone ? `<a href="https://wa.me/${waNumber}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;font-size:12.5px;font-weight:800;padding:11px 8px;border-radius:9px;background:#1a6640;color:#fff;min-width:90px">💬 WhatsApp</a>` : ''}
+      ${c.email ? `<a href="mailto:${c.email}" style="flex:1;text-align:center;text-decoration:none;font-size:12.5px;font-weight:800;padding:11px 8px;border-radius:9px;background:var(--cream);color:var(--ink);border:1px solid var(--line);min-width:90px">✉️ Email</a>` : ''}
+    </div>`;
+
   // Show modal immediately with basic info + loading state
   document.getElementById('modalOrderBody').innerHTML = `
-    <div class="modal-detail-row"><span>Phone</span><b>${c.phone || '—'}</b></div>
-    <div class="modal-detail-row"><span>Address</span><b>${c.address || '—'}</b></div>
+    <div class="modal-detail-row"><span>Phone</span><b>${c.phone ? `<a href="tel:${phoneDigits}" style="color:var(--navy);text-decoration:underline">${c.phone}</a>` : '—'}</b></div>
+    <div class="modal-detail-row"><span>Email</span><b>${c.email ? `<a href="mailto:${c.email}" style="color:var(--navy);text-decoration:underline">${c.email}</a>` : '—'}</b></div>
+    <div class="modal-detail-row"><span>Address</span><b>${c.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.address)}" target="_blank" rel="noopener" style="color:var(--navy);text-decoration:underline">${c.address}</a>` : '—'}</b></div>
     ${c.notes ? `<div class="modal-detail-row"><span>Notes</span><b>${c.notes}</b></div>` : ''}
     ${c.referredBy ? `<div class="modal-detail-row"><span>Referred by</span><b>${c.referredBy}</b></div>` : ''}
     ${c.exempt ? `<div style="background:#fdf3e3;border:1px solid #fcd299;border-radius:9px;padding:10px 13px;margin-top:10px;font-size:12.5px;color:#b06000;font-weight:700">✓ Exempt from £5 minimum order charge</div>` : ''}
+    ${contactBtns}
     <div id="custOrderHistory" style="margin-top:14px">
       <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px">Order History</div>
       <p style="font-size:12.5px;color:var(--ink-soft);padding:10px;background:var(--cream);border-radius:8px">Loading…</p>
@@ -5034,24 +5084,53 @@ async function openCustomerDetail(id) {
     ${rows}`;
 }
 
+// Show/hide the right name fields for the chosen account type.
+// Trade = one "Business name" box (+ optional contact person). Domestic = first + last name.
+function toggleCustomerNameFields(type) {
+  const isTrade = type === 'trade';
+  document.getElementById('acDomesticNameFields').style.display = isTrade ? 'none' : 'flex';
+  document.getElementById('acBusinessNameField').style.display  = isTrade ? 'block' : 'none';
+  document.getElementById('acContactNameField').style.display   = isTrade ? 'block' : 'none';
+}
+
 function showAddCustomerModal() {
+  // Fresh form every time
+  ['ac-first','ac-last','ac-business','ac-contact','ac-phone','ac-email','ac-address','ac-referredby','ac-notes']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('ac-exempt').checked = false;
+  document.getElementById('ac-type').value = 'domestic';
+  toggleCustomerNameFields('domestic');
+  document.getElementById('ac-type').onchange = function() { toggleCustomerNameFields(this.value); };
   document.getElementById('addCustomerModal').classList.add('show');
-  document.getElementById('ac-type').onchange = function() {
-    document.getElementById('acBusinessNameField').style.display =
-      this.value === 'trade' ? 'block' : 'none';
-  };
 }
 
 async function saveCustomer() {
-  const first = document.getElementById('ac-first').value.trim();
-  const last  = document.getElementById('ac-last').value.trim();
-  if (!first || !last) { alert('Please enter a name.'); return; }
+  const type = document.getElementById('ac-type').value;
+  let name, businessName = null;
+
+  if (type === 'trade') {
+    businessName = document.getElementById('ac-business').value.trim();
+    if (!businessName) { alert('Please enter the business name.'); return; }
+    name = businessName;
+    // Fold the contact person into notes so it's always visible on the record
+    const contact = document.getElementById('ac-contact').value.trim();
+    if (contact) {
+      const notesEl = document.getElementById('ac-notes');
+      notesEl.value = `Contact: ${contact}${notesEl.value.trim() ? '\n' + notesEl.value.trim() : ''}`;
+    }
+  } else {
+    const first = document.getElementById('ac-first').value.trim();
+    const last  = document.getElementById('ac-last').value.trim();
+    if (!first) { alert('Please enter a first name.'); return; }
+    name = `${first} ${last}`.trim();
+  }
 
   const newCust = {
     id:         'c' + Date.now(),
-    name:       `${first} ${last}`,
-    type:       document.getElementById('ac-type').value,
+    name,
+    type,
     phone:      document.getElementById('ac-phone').value.trim(),
+    email:      document.getElementById('ac-email').value.trim(),
     address:    document.getElementById('ac-address') ? document.getElementById('ac-address').value.trim() : '',
     notes:      document.getElementById('ac-notes')   ? document.getElementById('ac-notes').value.trim()   : '',
     referredBy: document.getElementById('ac-referredby').value.trim(),
@@ -5069,8 +5148,10 @@ async function saveCustomer() {
     try {
       const { data, error } = await supabase.from('customers').insert({
         name:            newCust.name,
+        business_name:   businessName    || null,
         customer_type:   newCust.type,
         phone:           newCust.phone   || null,
+        email:           newCust.email   || null,
         address_line_1:  newCust.address || null,
         notes:           newCust.notes   || null,
         is_active:       true,
@@ -9012,7 +9093,8 @@ const HELP_PAGES = {
       { icon:'🎁', title:'Referral reward', body:'When a new customer was recommended by an existing one, put the existing customer\'s name in the <strong>Referred by</strong> field. It\'s flagged so you remember to thank the person who referred them with a free pack of sausages or bacon on their next delivery.' },
       { icon:'🏢', title:'Trade accounts', body:'Trade customers have a <strong>Trade</strong> badge. You can set their individual pricing, credit terms, and invoice details from their profile.' },
       { icon:'📍', title:'Delivery sites (customers with more than one address)', body:'Open a customer\'s <strong>Edit</strong> screen and look for <strong>Delivery sites</strong>. Add one row per extra address (e.g. two pub sites for the same business). Once any sites are listed: <strong>Log Order</strong> will ask which site each delivery is for, the delivery run and route show the right address, and — instead of a separate invoice per delivery — all their orders build up onto <strong>one running invoice</strong> with a subtotal per site, until you finalise and send it from the Invoices tab. No sites listed = nothing changes, it works exactly as before.' },
-      { icon:'➕', title:'Adding a new customer', body:'Press <strong>+ Add customer</strong>. Fill in their name, address, and type. You can add notes too — e.g. access instructions or preferred contact method.' },
+      { icon:'➕', title:'Adding a new customer', body:'Press <strong>+ Add customer</strong> and pick the type first. <strong>Trade</strong> just needs the business name (plus an optional contact person). <strong>Domestic</strong> asks for first and last name. Add a phone number and email if you have them — you can then ring, WhatsApp or email them straight from their record.' },
+      { icon:'📞', title:'Calling or messaging a customer', body:'Open any customer\'s record and use the <strong>Call</strong>, <strong>WhatsApp</strong> or <strong>Email</strong> buttons. On your phone, tapping the number rings them directly. Phone numbers in the customer list are tappable too.' },
       { icon:'⬆️', title:'Import lots of customers at once', body:'Got a list of customers in a spreadsheet? Press <strong>⬆ Import from spreadsheet</strong>. First press <strong>Download template</strong> and fill in one row per customer in Excel — only the <strong>Name</strong> is required, leave anything you don\'t have blank. In the <strong>Type</strong> column put "Domestic" or "Trade". Save the file, then drag it onto the box (or tap to choose it). You\'ll see a preview so you can check everything before saving — anyone already on your list, or with no name, is skipped automatically. Press <strong>Import</strong> and they\'re all added in one go.' },
     ]
   },
