@@ -597,6 +597,18 @@
     </div>
   </div>
 
+  <!-- New trade signups waiting for approval (migration 033) -->
+  <div id="tradePendingBanner" style="display:none;background:#fdf3e3;border:1px solid #fcd299;border-radius:12px;padding:16px 18px;margin-bottom:18px">
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      <span style="font-size:22px;flex-shrink:0;line-height:1">🤝</span>
+      <div style="flex:1">
+        <b style="font-size:14px;color:#b06000" id="tradePendingTitle">New trade account waiting for approval</b>
+        <p id="tradePendingText" style="font-size:12.5px;color:var(--ink-soft);line-height:1.55;margin-top:3px"></p>
+        <button class="btn-add" style="font-size:12px;padding:9px 14px;margin-top:11px" onclick="showPage('customers')">Review &amp; approve →</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Records-retention reminder (auto, plain English, one-tap clear) -->
   <div id="retentionBanner" style="display:none;background:#fff;border:1px solid var(--gold);border-radius:12px;padding:16px 18px;margin-bottom:18px">
     <div style="display:flex;gap:12px;align-items:flex-start">
@@ -2680,6 +2692,20 @@ function renderDashboard() {
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   const now = new Date();
   const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+
+  // ── New trade signups waiting for Jon's approval ──
+  const pendingTrade = sampleCustomers.filter(c => c.tradeStatus === 'pending');
+  const tpb = document.getElementById('tradePendingBanner');
+  if (tpb) {
+    if (pendingTrade.length) {
+      tpb.style.display = '';
+      set('tradePendingTitle', pendingTrade.length === 1
+        ? 'New trade account waiting for your approval'
+        : `${pendingTrade.length} new trade accounts waiting for your approval`);
+      set('tradePendingText', pendingTrade.map(c => c.name).join(', ')
+        + ' — approve them so they can see your trade range and start ordering.');
+    } else { tpb.style.display = 'none'; }
+  }
 
   // ── Header: live date + greeting + next-run line ──
   set('dashDate', now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
@@ -4991,9 +5017,17 @@ function simulateExtract(msg) {
 // ============ CUSTOMERS ============
 function renderCustomers(filter) {
   const list = document.getElementById('customerList');
-  const shown = filter && filter !== 'all'
+  let shown = filter && filter !== 'all'
     ? sampleCustomers.filter(c => c.type === filter)
     : sampleCustomers;
+  // Trade signups waiting for approval always float to the top so Jon
+  // never misses a potential customer
+  shown = [...shown].sort((a, b) => (b.tradeStatus === 'pending') - (a.tradeStatus === 'pending'));
+  const pendingCount = shown.filter(c => c.tradeStatus === 'pending').length;
+  const pendingBanner = pendingCount ? `
+    <div style="background:#fdf3e3;border:1px solid #fcd299;border-radius:11px;padding:12px 15px;font-size:12.5px;color:#b06000;font-weight:700">
+      🤝 ${pendingCount === 1 ? 'A new trade account is' : pendingCount + ' new trade accounts are'} waiting for your approval — shown at the top of the list. Tap the customer, then press <b>✓ Approve trade access</b>.
+    </div>` : '';
   if (shown.length === 0) {
     list.innerHTML = `<div style="text-align:center;padding:40px 20px;color:var(--ink-soft);">
       <p style="font-size:15px;margin:0 0 6px">No customers yet</p>
@@ -5001,8 +5035,8 @@ function renderCustomers(filter) {
     </div>`;
     return;
   }
-  list.innerHTML = shown.map(c => `
-    <div class="order-card">
+  list.innerHTML = pendingBanner + shown.map(c => `
+    <div class="order-card"${c.tradeStatus === 'pending' ? ' style="border:1.5px solid #fcd299;background:#fffdf8"' : ''}>
       <div class="oc-left" onclick="openCustomerDetail('${c.id}')" style="cursor:pointer">
         <div class="oc-name-row">
           <span class="oc-name">${c.name}</span>
@@ -5192,6 +5226,7 @@ async function approveTradeCustomer(id) {
   c.tradeStatus = 'approved';
   openCustomerDetail(id);   // refresh the modal
   renderCustomers();
+  if (typeof renderDashboard === 'function') renderDashboard();   // clear the dashboard alert
 }
 
 // ── Per-customer trade price list ──
@@ -9308,7 +9343,7 @@ const HELP_PAGES = {
       { icon:'📧', title:'Their account email', body:'Open a customer\'s <strong>Edit</strong> and you\'ll see their <strong>Account email</strong> — the address they signed up with on the website. It\'s shown for reference and can\'t be changed here (it\'s their login). Customers you added by hand show "No account".' },
       { icon:'⭐', title:'Exempt customers', body:'Family and friends who shouldn\'t be charged the £5 small-order fee can be marked as <strong>Exempt</strong> on their profile. Tick the box in their customer record.' },
       { icon:'🎁', title:'Referral reward', body:'When a new customer was recommended by an existing one, put the existing customer\'s name in the <strong>Referred by</strong> field. It\'s flagged so you remember to thank the person who referred them with a free pack of sausages or bacon on their next delivery.' },
-      { icon:'🏢', title:'Trade accounts', body:'Trade customers have a <strong>Trade</strong> badge. When a business creates a trade account on the website, they show here with a <strong>🕐 Approve login</strong> badge — open their profile and press <strong>✓ Approve trade access</strong>. Once approved, they see your trade-only items when they sign in.' },
+      { icon:'🏢', title:'Trade accounts', body:'Trade customers have a <strong>Trade</strong> badge. When a business creates a trade account on the website, you get an <strong>email straight away</strong>, an alert appears on your <strong>Dashboard</strong>, and they\'re pinned to the <strong>top of this list</strong> with a <strong>🕐 Approve login</strong> badge until you deal with them. Open their profile and press <strong>✓ Approve trade access</strong> — once approved, they see your trade-only items when they sign in. Your 5pm daily email also reminds you of any still waiting.' },
       { icon:'💷', title:'Trade prices (per customer)', body:'Every trade customer can have their own agreed prices. Open their profile and press <strong>💷 Set this customer\'s trade prices</strong> — you\'ll see your whole availability list (trade-only items first) with a price box for each. Fill in only what you\'ve agreed; leave the rest blank. By default they see <strong>no prices</strong> on the website, just "speak to Jon about pricing" — tick <strong>Show these prices to the customer</strong> when you\'re ready for them to see their agreed prices. Their orders and invoices use these prices automatically. Prices are always subject to the market — update them here whenever things change.' },
       { icon:'🏠', title:'A different address on their invoices', body:'If a customer wants a different address printed on their invoices (e.g. their home address rather than the delivery address), open their <strong>Edit</strong> screen and fill in <strong>Invoice address</strong>. Leave it blank and invoices use their normal address as always.' },
       { icon:'📍', title:'Delivery sites (customers with more than one address)', body:'Open a customer\'s <strong>Edit</strong> screen and look for <strong>Delivery sites</strong>. Add one row per extra address (e.g. two pub sites for the same business). Once any sites are listed: <strong>Log Order</strong> will ask which site each delivery is for, the delivery run and route show the right address, and — instead of a separate invoice per delivery — all their orders build up onto <strong>one running invoice</strong> with a subtotal per site, until you finalise and send it from the Invoices tab. No sites listed = nothing changes, it works exactly as before.' },

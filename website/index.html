@@ -2509,7 +2509,7 @@ async function upsertCustomerRecord(userId, p) {
       // Trade signups land as trade_status='pending' — a DB trigger (033)
       // enforces this server-side, so nobody can self-approve.
       const isTrade = p.type === 'trade';
-      await window.sbClient.from('customers').insert({
+      const { data: created } = await window.sbClient.from('customers').insert({
         user_id: userId, name: isTrade ? (p.business || p.name) : p.name, email: p.email || null,
         phone: p.phone || null, address_line_1: p.address || null, postcode: p.postcode || null,
         business_name: isTrade ? (p.business || null) : null,
@@ -2517,7 +2517,16 @@ async function upsertCustomerRecord(userId, p) {
         price_tier: isTrade ? 'trade' : 'standard',
         notes: isTrade && p.name ? `Contact: ${p.name}` : null,
         trade_status: isTrade ? 'pending' : null,
-      });
+      }).select('id').single();
+      // Give Jon a heads-up straight away so he never misses a trade lead.
+      // Fire-and-forget — signup still succeeds if the alert can't send.
+      if (isTrade && created?.id) {
+        fetch('https://admin.jgfoodsnorthwest.com/.netlify/functions/trade-alert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customer_id: created.id }),
+        }).catch(() => {});
+      }
     }
   } catch (e) { console.error('Customer record save failed:', e); }
 }

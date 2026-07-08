@@ -75,6 +75,16 @@ exports.handler = async (event) => {
   if (!r.ok) return json(502, { error: 'Supabase query failed: ' + (await r.text()) });
   const orders = (await r.json()).filter(o => o.status !== 'cancelled');
 
+  // Trade signups still waiting for approval — belt-and-braces reminder
+  // (Jon also gets an instant email when each one signs up)
+  let pendingTrade = [];
+  try {
+    const pr = await fetch(
+      `${SUPABASE_URL}/rest/v1/customers?customer_type=eq.trade&trade_status=eq.pending&select=name,phone`,
+      { headers: { apikey: SERVICE_KEY, authorization: `Bearer ${SERVICE_KEY}` } });
+    if (pr.ok) pendingTrade = await pr.json();
+  } catch (e) {}
+
   const isTrade = o => ['trade', 'commercial'].includes(o.customers?.customer_type);
   const domestic = orders.filter(o => !isTrade(o));
   const trade    = orders.filter(isTrade);
@@ -119,6 +129,12 @@ exports.handler = async (event) => {
       <h1 style="color:#fff;font-size:20px;margin:0">JG Foods — Daily order summary</h1>
       <p style="color:#e0bd72;font-size:13px;margin:6px 0 0">${dateNice}</p>
     </div>
+    ${pendingTrade.length ? `
+    <div style="background:#fdf3e3;border:1px solid #fcd299;border-radius:8px;padding:12px 15px;margin-bottom:14px;font-size:13px;color:#b06000">
+      🤝 <b>${pendingTrade.length === 1 ? 'A trade account is' : pendingTrade.length + ' trade accounts are'} still waiting for your approval:</b>
+      ${pendingTrade.map(p => esc(p.name) + (p.phone ? ' (' + esc(p.phone) + ')' : '')).join(', ')}.
+      Open your admin app → Customers to approve ${pendingTrade.length === 1 ? 'them' : 'each one'}.
+    </div>` : ''}
     ${orders.length === 0
       ? `<p style="font-size:14px;color:#5c5343">No orders came in today.</p>`
       : `
