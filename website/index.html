@@ -442,9 +442,10 @@
     <div class="hero-text">
       <div class="eyebrow">Mobile Butcher · North Liverpool, Ormskirk &amp; West Lancashire</div>
       <h1>Fresh meat,<br><em>delivered to your door.</em></h1>
-      <p class="hero-sub">Quality cuts and packs delivered across the North-west in our refrigerated van. Order online and we'll come to you.</p>
+      <p class="hero-sub">Quality cuts and packs delivered across the North-west in our refrigerated van — <b style="color:#fff;font-weight:700">home deliveries</b> for households and <b style="color:#fff;font-weight:700">trade supply</b> for pubs, restaurants and cafés. Order online and we'll come to you.</p>
       <div class="hero-btns">
         <button class="btn-primary" onclick="document.getElementById('shop').scrollIntoView({behavior:'smooth'})">Shop this week's selection</button>
+        <button class="btn-sec" onclick="document.getElementById('trade').scrollIntoView({behavior:'smooth'})">Trade customers</button>
         <button class="btn-sec" onclick="document.getElementById('how').scrollIntoView({behavior:'smooth'})">How it works</button>
       </div>
     </div>
@@ -483,7 +484,7 @@
     <div id="tradeNotice" style="background:#fff;border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:11px;padding:13px 16px;margin:0 0 18px;font-size:13px;color:var(--ink-soft);line-height:1.55">
       The prices shown are our <b style="color:var(--ink)">home delivery price list</b>.
       Run a pub, restaurant or shop? <button onclick="openTradeSignup()" style="color:var(--navy);font-weight:800;font-size:13px;text-decoration:underline">Create a trade account</button>
-      to order from Jon's trade range — pricing agreed directly with Jon.
+      to order from the full trade range at trade prices.
     </div>
 
     <!-- mobile filter chips -->
@@ -575,13 +576,25 @@
       <div class="sec-rule"></div>
     </div>
 
-    <p style="font-size:14px;color:var(--ink-soft);max-width:600px;line-height:1.65;margin-bottom:28px">If you run a food business, we can supply you directly — with pricing agreed per client, twice-weekly delivery and a daily reminder text so you never miss an order.</p>
+    <p style="font-size:14px;color:var(--ink-soft);max-width:600px;line-height:1.65;margin-bottom:22px">If you run a food business, we can supply you directly — trade pricing, refrigerated delivery on our regular runs, and you deal with Jon himself from day one.</p>
+
+    <!-- How a trade account works -->
+    <div style="background:linear-gradient(160deg,var(--navy-2),var(--navy));border-radius:16px;padding:22px 24px;margin-bottom:32px;border:1px solid rgba(224,189,114,.25)">
+      <h3 style="font-family:var(--display);font-size:17px;font-weight:600;color:#fff;margin-bottom:14px">Getting set up takes two minutes</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:16px">
+        <div style="font-size:12.5px;color:rgba(255,255,255,.85);line-height:1.55"><b style="color:var(--gold-bright);font-size:15px">1.</b>&nbsp; <b style="color:#fff">Create your trade account</b> — same Sign in button at the top of this page, choose "Trade" and add your business name.</div>
+        <div style="font-size:12.5px;color:rgba(255,255,255,.85);line-height:1.55"><b style="color:var(--gold-bright);font-size:15px">2.</b>&nbsp; <b style="color:#fff">Jon approves your account</b> and has a quick chat about what you need and your pricing.</div>
+        <div style="font-size:12.5px;color:rgba(255,255,255,.85);line-height:1.55"><b style="color:var(--gold-bright);font-size:15px">3.</b>&nbsp; <b style="color:#fff">Sign in and order online</b> — you'll see the full trade range alongside the weekly list, whenever suits you.</div>
+      </div>
+      <button onclick="openTradeSignup()" style="background:var(--gold);color:var(--navy-deep);font-weight:800;font-size:13.5px;padding:12px 22px;border-radius:10px;transition:.15s" onmouseover="this.style.background='var(--gold-bright)'" onmouseout="this.style.background='var(--gold)'">Create a trade account →</button>
+      <span style="font-size:12px;color:rgba(255,255,255,.65);margin-left:12px">Prefer a chat first? Use the enquiry form below and Jon will call you.</span>
+    </div>
 
     <!-- benefits -->
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-bottom:36px">
       <div style="background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:20px;display:flex;gap:13px">
         <span style="font-size:22px;flex-shrink:0">💷</span>
-        <div><h3 style="font-size:13.5px;font-weight:800;color:var(--ink);margin-bottom:4px">Trade pricing</h3><p style="font-size:12px;color:var(--ink-soft);line-height:1.5">Pricing agreed per client — not a fixed list. We work around your margins and your order volume.</p></div>
+        <div><h3 style="font-size:13.5px;font-weight:800;color:var(--ink);margin-bottom:4px">Trade pricing</h3><p style="font-size:12px;color:var(--ink-soft);line-height:1.5">Fair trade rates that track the meat market, so you're never paying yesterday's prices. Jon sorts your pricing when your account is set up.</p></div>
       </div>
       <div style="background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:20px;display:flex;gap:13px">
         <span style="font-size:22px;flex-shrink:0">🚚</span>
@@ -589,7 +602,7 @@
       </div>
       <div style="background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:20px;display:flex;gap:13px">
         <span style="font-size:22px;flex-shrink:0">📲</span>
-        <div><h3 style="font-size:13.5px;font-weight:800;color:var(--ink);margin-bottom:4px">Daily reminders</h3><p style="font-size:12px;color:var(--ink-soft);line-height:1.5">We text you the day before delivery to confirm your order. Quick reply and you're sorted — no chasing.</p></div>
+        <div><h3 style="font-size:13.5px;font-weight:800;color:var(--ink);margin-bottom:4px">Order online, any time</h3><p style="font-size:12px;color:var(--ink-soft);line-height:1.5">Sign in and place your order whenever suits — end of service, first thing, whenever. Add to it right up to the cut-off.</p></div>
       </div>
       <div style="background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:20px;display:flex;gap:13px">
         <span style="font-size:22px;flex-shrink:0">🤝</span>
@@ -1098,7 +1111,7 @@ function submitContactForm(form){
       </div>
       <div id="regBusinessField" style="display:none">
         <div class="field"><label>Business name</label><input type="text" id="reg-business" placeholder="The Red Lion, Ormskirk"></div>
-        <p style="font-size:11.5px;color:var(--ink-soft);background:var(--cream);border-radius:8px;padding:9px 11px;margin:-4px 0 12px;line-height:1.5">Trade accounts are approved by Jon. Once approved you'll see the full trade range when you sign in — pricing is agreed directly with Jon.</p>
+        <p style="font-size:11.5px;color:var(--ink-soft);background:var(--cream);border-radius:8px;padding:9px 11px;margin:-4px 0 12px;line-height:1.5">Trade accounts are approved by Jon. Once approved you'll see the full trade range when you sign in — Jon will sort your trade pricing when he sets you up.</p>
       </div>
       <div class="field-row">
         <div class="field"><label>First name</label><input type="text" id="reg-first" placeholder="Sarah"></div>
@@ -1307,7 +1320,7 @@ async function loadProducts() {
     card.dataset.img   = p.img_url || '';
     card.dataset.deal  = deal ? cat : '';
     const priceHtml = noPrice
-      ? `<span class="price" style="font-size:12px;color:var(--ink-soft);font-weight:700">Price agreed<br>with Jon</span>`
+      ? `<span class="price" style="font-size:12px;color:var(--ink-soft);font-weight:700">Trade price<br>on request</span>`
       : deal
       ? `<div><span class="price" style="font-size:15px">${deal.qty} for £${deal.price.toFixed(2)}</span><div style="font-size:10.5px;color:var(--ink-soft);margin-top:1px">£${deal.perUnit.toFixed(2)} each · mix &amp; match</div></div>`
       : `<span class="price">£${effPrice.toFixed(2)}</span>`;
@@ -1374,18 +1387,18 @@ function renderTradeNotice() {
   if (!currentUser || currentUser.type !== 'trade') {
     el.innerHTML = `The prices shown are our <b style="color:var(--ink)">home delivery price list</b>.
       Run a pub, restaurant or shop? <button onclick="openTradeSignup()" style="color:var(--navy);font-weight:800;font-size:13px;text-decoration:underline">Create a trade account</button>
-      to order from Jon's trade range — pricing agreed directly with Jon.`;
+      to order from the full trade range at trade prices.`;
   } else if (currentUser.tradeStatus === 'pending') {
     el.innerHTML = `🕐 <b style="color:var(--ink)">Your trade account is awaiting approval.</b>
       Jon will be in touch shortly — you can order from the home delivery list in the meantime.
       Need it sooner? Call Jon on <a href="tel:07702852704" style="color:var(--navy);font-weight:800">07702 852704</a>.`;
   } else if (tradePricesHidden()) {
     el.innerHTML = `🤝 <b style="color:var(--ink)">Trade account</b> — you're seeing the full trade range.
-      Add what you need and place your order; <b style="color:var(--ink)">prices are agreed directly with Jon</b>, so no prices are shown here.
-      Jon will confirm pricing with you. Trade prices are subject to change with the current market.`;
+      Add what you need and place your order — <b style="color:var(--ink)">trade prices aren't shown online</b>; Jon will confirm your order pricing with you.
+      Trade prices track the current meat market, so they can move week to week.`;
   } else {
-    el.innerHTML = `🤝 <b style="color:var(--ink)">Trade account</b> — your agreed prices are shown below.
-      Prices are subject to change with the current market — Jon will let you know before anything changes.`;
+    el.innerHTML = `🤝 <b style="color:var(--ink)">Trade account</b> — your trade prices are shown below.
+      Trade prices track the current meat market, so they can move week to week — Jon will let you know before anything changes.`;
   }
 }
 
@@ -1755,7 +1768,7 @@ function updateBasketUI() {
       <div class="bi-thumb ${item.img ? '' : item.cls}"${item.img ? ` style="background:url('${item.img}') center/cover;border:1px solid var(--line-soft)"` : ''}></div>
       <div class="bi-info">
         <h4>${item.name}</h4>
-        <span>${tbc ? 'Price agreed with Jon' : formatGBP(item.price) + ' each'}</span>
+        <span>${tbc ? 'Trade price on request' : formatGBP(item.price) + ' each'}</span>
       </div>
       <div class="qty">
         <button onclick="changeQty('${item.id}',-1)">−</button>
