@@ -64,7 +64,9 @@ CREATE POLICY "Public read available products"
 DROP POLICY IF EXISTS "Staff read all products" ON products;
 CREATE POLICY "Staff read all products"
   ON products FOR SELECT
-  USING (current_user_role() IN ('admin','driver'));
+  -- auth.uid() check matters: current_user_role() falls back to 'driver'
+  -- for callers with no profile, which includes ANONYMOUS visitors (034).
+  USING (auth.uid() IS NOT NULL AND current_user_role() IN ('admin','driver'));
 
 -- 4. Security fix: writes are admin-only (was: any signed-in user) -------
 DROP POLICY IF EXISTS "Admin full access to products" ON products;

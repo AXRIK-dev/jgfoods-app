@@ -317,6 +317,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 34. `034_fix_trade_only_visibility.sql`
+**What it does:** Fixes a bug found in testing: trade-only products showed to everyone, because `current_user_role()` falls back to `'driver'` for callers with **no profile — which includes anonymous website visitors** — and 033's "Staff read all products" policy accepted drivers. The policy now also requires the caller to be signed in.
+
+**When to run:** Straight after 033. Safe + idempotent — it's one policy swap.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app
