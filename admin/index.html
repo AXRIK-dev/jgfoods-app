@@ -1682,6 +1682,7 @@
       <div style="display:flex;gap:9px;margin-top:12px">
         <button class="btn-add" style="flex:1;justify-content:center;padding:12px" onclick="generateInvoicePreview()">Generate invoice</button>
         <button class="btn-navy" style="flex:1;justify-content:center;padding:12px" onclick="saveInvoice()">💾 Save invoice</button>
+        <button style="padding:12px 16px;border-radius:9px;font-weight:800;font-size:13px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft)" onclick="resetInvoiceBuilder()" title="Clear and start again">↺ Clear</button>
         <div class="actions-wrap" id="invActionsWrap">
           <button class="actions-btn" id="invActionsBtn" onclick="toggleActionsMenu('invActionsMenu','invActionsBtn')">
             Actions
@@ -7805,6 +7806,22 @@ function printInvoice() {
   window.print();
 }
 
+// Clear the invoice builder back to a blank slate (also runs after a save)
+function resetInvoiceBuilder() {
+  invItems = [];
+  currentInvoiceRef = null;
+  INV_TRADE_PRICES = {};
+  const sel = document.getElementById('inv-customer');
+  if (sel) sel.value = '';
+  renderInvItems();
+  const prev = document.getElementById('invoicePreview');
+  if (prev) prev.innerHTML = `
+      <div style="text-align:center;padding:40px 20px;color:var(--ink-soft)">
+        <p style="font-size:32px;margin-bottom:12px">📄</p>
+        <p style="font-size:13px">Select a customer and add items to generate an invoice preview.</p>
+      </div>`;
+}
+
 // ── Save the current invoice/receipt to Supabase ──
 // NOTE: vat_amount is stored as 0 for now. Jon is VAT registered, but most fresh
 // meat is zero-rated while some lines aren't — the correct VAT split needs a
@@ -7867,7 +7884,8 @@ async function saveInvoice() {
     renderInvoices();
     renderDashboard();
     currentInvoiceRef = null;  // next save = new number
-    alert(`Saved ${invType === 'receipt' ? 'receipt' : 'invoice'} ${invRef} for ${cust.name}. It's now in your invoice list.`);
+    alert(`Saved ${invType === 'receipt' ? 'receipt' : 'invoice'} ${invRef} for ${cust.name}.\n\nYou'll find it under "Saved invoices & receipts" below — use its Actions menu to send it, print it or download the PDF.`);
+    resetInvoiceBuilder();     // clear the form + preview, ready for the next one
   } catch (err) {
     console.error('saveInvoice error:', err);
     alert('Could not save to the database — ' + (err.message || err) + '\n\nThe preview, print and PDF still work; you can try saving again.');
