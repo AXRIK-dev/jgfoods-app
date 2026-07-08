@@ -479,6 +479,13 @@
       <div class="sec-rule"></div>
     </div>
 
+    <!-- Domestic / trade statement — content swaps based on who's signed in -->
+    <div id="tradeNotice" style="background:#fff;border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:11px;padding:13px 16px;margin:0 0 18px;font-size:13px;color:var(--ink-soft);line-height:1.55">
+      The prices shown are our <b style="color:var(--ink)">home delivery price list</b>.
+      Run a pub, restaurant or shop? <button onclick="openTradeSignup()" style="color:var(--navy);font-weight:800;font-size:13px;text-decoration:underline">Create a trade account</button>
+      to order from Jon's trade range — pricing agreed directly with Jon.
+    </div>
+
     <!-- mobile filter chips -->
     <div class="chips" id="mobileChips" style="display:none">
       <button class="chip on" data-cat="all" onclick="filterCategory(this,'all')">All</button>
@@ -1082,6 +1089,17 @@ function submitContactForm(form){
 
     <!-- Register tab -->
     <div class="sp-panel" id="sp-register">
+      <div class="field">
+        <label>Account type</label>
+        <select id="reg-type" onchange="regTypeChanged()" style="width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:9px;font-size:13.5px;font-family:inherit;color:var(--ink);background:#fff">
+          <option value="domestic">Home delivery</option>
+          <option value="trade">Trade — pub, restaurant or shop</option>
+        </select>
+      </div>
+      <div id="regBusinessField" style="display:none">
+        <div class="field"><label>Business name</label><input type="text" id="reg-business" placeholder="The Red Lion, Ormskirk"></div>
+        <p style="font-size:11.5px;color:var(--ink-soft);background:var(--cream);border-radius:8px;padding:9px 11px;margin:-4px 0 12px;line-height:1.5">Trade accounts are approved by Jon. Once approved you'll see the full trade range when you sign in — pricing is agreed directly with Jon.</p>
+      </div>
       <div class="field-row">
         <div class="field"><label>First name</label><input type="text" id="reg-first" placeholder="Sarah"></div>
         <div class="field"><label>Last name</label><input type="text" id="reg-last" placeholder="Taylor"></div>
@@ -1228,9 +1246,13 @@ async function loadProducts() {
   const grid    = document.getElementById('prodGrid');
   const loading = document.getElementById('prodLoading');
 
+  // Re-runnable: the catalogue reloads after sign-in/out because RLS returns
+  // extra trade-only items for approved trade accounts.
+  grid.querySelectorAll('.prod-card, .offer-card').forEach(c => c.remove());
+
   const { data, error } = await window.sbClient
     .from('products')
-    .select('id, name, category, price, description, img_url, unit, options, option_label')
+    .select('id, name, category, price, description, img_url, unit, options, option_label, trade_only')
     .eq('is_available', true)
     .order('sort_order', { ascending: true, nullsFirst: false })
     .order('name');
@@ -1258,12 +1280,24 @@ async function loadProducts() {
       return;
     }
 
-    const imgHtml = p.img_url
+    const tradeBadge = p.trade_only
+      ? `<span style="position:absolute;top:8px;left:8px;z-index:2;font-size:9px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;background:var(--navy);color:var(--gold-bright);padding:3px 8px;border-radius:8px">Trade</span>`
+      : '';
+    const imgHtml = (p.img_url
       ? `<img class="prod-photo" src="${p.img_url}" alt="${p.name}" loading="lazy" onerror="this.removeAttribute('src');this.alt=''">`
-      : `<div class="prod-img ${cat}"><span>${label}</span></div>`;
-    const effPrice = parseFloat(p.price);
+      : `<div class="prod-img ${cat}"><span>${label}</span></div>`) + tradeBadge;
+    // Trade accounts: prices only show once Jon has agreed them and switched
+    // them on for this customer. Until then everything is "agreed with Jon".
+    const tp = TRADE_PRICES[p.id];
+    const hidePrices = tradePricesHidden();
+    const effPrice = hidePrices ? 0
+      : (isTradeUser() && currentUser.showTradePrices)
+        ? (tp != null ? tp : (p.trade_only ? 0 : parseFloat(p.price)))
+        : parseFloat(p.price);
+    const noPrice = hidePrices || (isTradeUser() && currentUser.showTradePrices && tp == null && p.trade_only);
     const card = document.createElement('div');
     card.className = 'prod-card';
+    card.style.position = 'relative';
     card.dataset.id    = p.id;
     card.dataset.cat   = cat;
     card.dataset.name  = p.name;
@@ -1272,7 +1306,9 @@ async function loadProducts() {
     card.dataset.unit  = p.unit || 'pack';
     card.dataset.img   = p.img_url || '';
     card.dataset.deal  = deal ? cat : '';
-    const priceHtml = deal
+    const priceHtml = noPrice
+      ? `<span class="price" style="font-size:12px;color:var(--ink-soft);font-weight:700">Price agreed<br>with Jon</span>`
+      : deal
       ? `<div><span class="price" style="font-size:15px">${deal.qty} for £${deal.price.toFixed(2)}</span><div style="font-size:10.5px;color:var(--ink-soft);margin-top:1px">£${deal.perUnit.toFixed(2)} each · mix &amp; match</div></div>`
       : `<span class="price">£${effPrice.toFixed(2)}</span>`;
     // Customer-choice options (e.g. seasoning) — show a dropdown if set
@@ -1308,6 +1344,70 @@ async function loadProducts() {
   // Build the filter controls from the categories that have products
   renderCategoryFilters();
   renderOfferCards();
+  renderTradeNotice();
+}
+
+// ============ TRADE ACCOUNTS ============
+// Agreed per-client prices (product_id → price), loaded after sign-in when
+// Jon has switched "show prices" on for this customer. RLS only ever returns
+// the signed-in customer's own rows.
+let TRADE_PRICES = {};
+
+function isTradeUser() { return !!(currentUser && currentUser.type === 'trade'); }
+function isTradeApproved() { return isTradeUser() && currentUser.tradeStatus === 'approved'; }
+// True when a trade customer is browsing but Jon hasn't switched their prices on yet
+function tradePricesHidden() { return isTradeApproved() && !currentUser.showTradePrices; }
+
+async function loadTradePrices() {
+  TRADE_PRICES = {};
+  if (!isTradeApproved() || !currentUser.showTradePrices) return;
+  try {
+    const { data } = await window.sbClient.from('trade_prices').select('product_id, price');
+    (data || []).forEach(r => { TRADE_PRICES[r.product_id] = parseFloat(r.price); });
+  } catch (e) { console.error('Trade prices load failed:', e); }
+}
+
+// The statement above the product grid — swaps depending on who's signed in
+function renderTradeNotice() {
+  const el = document.getElementById('tradeNotice');
+  if (!el) return;
+  if (!currentUser || currentUser.type !== 'trade') {
+    el.innerHTML = `The prices shown are our <b style="color:var(--ink)">home delivery price list</b>.
+      Run a pub, restaurant or shop? <button onclick="openTradeSignup()" style="color:var(--navy);font-weight:800;font-size:13px;text-decoration:underline">Create a trade account</button>
+      to order from Jon's trade range — pricing agreed directly with Jon.`;
+  } else if (currentUser.tradeStatus === 'pending') {
+    el.innerHTML = `🕐 <b style="color:var(--ink)">Your trade account is awaiting approval.</b>
+      Jon will be in touch shortly — you can order from the home delivery list in the meantime.
+      Need it sooner? Call Jon on <a href="tel:07702852704" style="color:var(--navy);font-weight:800">07702 852704</a>.`;
+  } else if (tradePricesHidden()) {
+    el.innerHTML = `🤝 <b style="color:var(--ink)">Trade account</b> — you're seeing the full trade range.
+      Add what you need and place your order; <b style="color:var(--ink)">prices are agreed directly with Jon</b>, so no prices are shown here.
+      Jon will confirm pricing with you. Trade prices are subject to change with the current market.`;
+  } else {
+    el.innerHTML = `🤝 <b style="color:var(--ink)">Trade account</b> — your agreed prices are shown below.
+      Prices are subject to change with the current market — Jon will let you know before anything changes.`;
+  }
+}
+
+// "Create a trade account" → open the register tab preset to trade
+function openTradeSignup() {
+  openSignInPanel(currentUser ? undefined : 'register');
+  const sel = document.getElementById('reg-type');
+  if (sel && !currentUser) { sel.value = 'trade'; regTypeChanged(); }
+}
+
+function regTypeChanged() {
+  const isTrade = document.getElementById('reg-type').value === 'trade';
+  document.getElementById('regBusinessField').style.display = isTrade ? 'block' : 'none';
+  const addr = document.querySelector('label[for="reg-address"]');
+  const regAddr = document.getElementById('reg-address');
+  if (regAddr) regAddr.placeholder = isTrade ? 'Business delivery address' : '14 Any Street, Ormskirk';
+}
+
+// Reload the catalogue for the current signed-in state (trade items + prices)
+async function refreshCatalogueForUser() {
+  await loadTradePrices();
+  await loadProducts();
 }
 
 // Each offer shows as one compact card in the grid (same size as a product).
@@ -1512,7 +1612,8 @@ let deliveryChargeActive = false;
 
 function checkOrderRules() {
   const total = getBasketTotal();
-  const belowMin = total < ORDER_RULES.minOrderValue && total > 0;
+  // Trade accounts: no minimum-order charge — terms are agreed with Jon
+  const belowMin = !isTradeUser() && total < ORDER_RULES.minOrderValue && total > 0;
   deliveryChargeActive = belowMin;
 
   const notice = document.getElementById('deliveryChargeNotice');
@@ -1633,11 +1734,14 @@ function dealGroupsIncomplete() {
 function updateBasketUI() {
   const count = getBasketCount();
   const total = getBasketTotal();
+  // Trade accounts with no agreed prices yet: totals aren't meaningful,
+  // so show "TBC" — Jon confirms pricing after the order comes in.
+  const tbc = tradePricesHidden();
 
   // basket bar
   const bar = document.getElementById('basketBar');
   document.getElementById('bbCount').textContent = count;
-  document.getElementById('bbTotal').textContent = formatGBP(total);
+  document.getElementById('bbTotal').textContent = tbc ? 'TBC' : formatGBP(total);
   bar.classList.toggle('show', count > 0);
 
   // panel — items list
@@ -1651,21 +1755,21 @@ function updateBasketUI() {
       <div class="bi-thumb ${item.img ? '' : item.cls}"${item.img ? ` style="background:url('${item.img}') center/cover;border:1px solid var(--line-soft)"` : ''}></div>
       <div class="bi-info">
         <h4>${item.name}</h4>
-        <span>${formatGBP(item.price)} each</span>
+        <span>${tbc ? 'Price agreed with Jon' : formatGBP(item.price) + ' each'}</span>
       </div>
       <div class="qty">
         <button onclick="changeQty('${item.id}',-1)">−</button>
         <b>${item.qty}</b>
         <button onclick="changeQty('${item.id}',1)">+</button>
       </div>
-      <div class="bi-price">${formatGBP(item.price * item.qty)}</div>
+      <div class="bi-price">${tbc ? 'TBC' : formatGBP(item.price * item.qty)}</div>
     </div>
   `).join('');
 
   checkOrderRules();
   const orderTotal = getOrderTotal();
-  document.getElementById('osSub').textContent = formatGBP(total);
-  document.getElementById('osTotal').textContent = formatGBP(orderTotal);
+  document.getElementById('osSub').textContent = tbc ? 'TBC' : formatGBP(total);
+  document.getElementById('osTotal').textContent = tbc ? 'TBC — Jon will confirm' : formatGBP(orderTotal);
 
   // Editing an existing unpaid order: hide the new-order fields, show the banner
   const editing = !!editingOrder;
@@ -1946,6 +2050,14 @@ async function placeOrder() {
     const freq = document.getElementById('so-frequency')?.value === 'fortnightly' ? 'every two weeks' : 'every week';
     notesExtra = `⭐ STANDING ORDER REQUEST — repeat ${freq}. Customer to be contacted to confirm and arrange upfront payment.`;
   }
+  // Flag trade orders so Jon spots them; if prices weren't shown, the order
+  // arrives with £0 lines for Jon to price up on the invoice.
+  let tradeNote = '';
+  if (isTradeUser()) {
+    tradeNote = tradePricesHidden()
+      ? '🤝 TRADE ORDER — prices to be agreed with Jon (items came through unpriced).'
+      : '🤝 TRADE ORDER — agreed trade prices applied.';
+  }
 
   const di = dealGroupsIncomplete();
   if (di.length) {
@@ -1986,7 +2098,7 @@ async function placeOrder() {
       p_slot_id: selectedSlotId,
       p_items:   rpcItems,
       p_channel: 'website',
-      p_notes:   [notes, notesExtra].filter(Boolean).join(' — ') || null,
+      p_notes:   [tradeNote, notes, notesExtra].filter(Boolean).join(' — ') || null,
     });
 
     // Transport-level error, or a handled error returned from the function
@@ -2188,7 +2300,9 @@ function showSignedInState() {
 
   // Account type badge — set once (no appending, so it can't pile up)
   const badge = isTrade
-    ? `<span style="display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;background:var(--navy);color:var(--gold-bright);padding:3px 9px;border-radius:10px">Trade account</span>`
+    ? (currentUser.tradeStatus === 'pending'
+        ? `<span style="display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;background:#fdf3e3;color:#b06000;padding:3px 9px;border-radius:10px">Trade — awaiting Jon's approval</span>`
+        : `<span style="display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;background:var(--navy);color:var(--gold-bright);padding:3px 9px;border-radius:10px">Trade account</span>`)
     : `<span style="display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;background:var(--green-soft);color:var(--green);padding:3px 9px;border-radius:10px">Home delivery</span>`;
   const badgeEl = document.getElementById('siBadge');
   if (badgeEl) badgeEl.innerHTML = badge;
@@ -2324,6 +2438,12 @@ async function registerAccount() {
   if (!first || !last || !email || !password) { alert('Please fill in all required fields.'); return; }
   if (password.length < 8) { alert('Please choose a password of at least 8 characters.'); return; }
 
+  // Trade signup (pubs/restaurants/shops) — needs a business name and lands
+  // as 'pending' until Jon approves it in the admin app (migration 033)
+  const isTradeReg = document.getElementById('reg-type')?.value === 'trade';
+  const business   = isTradeReg ? document.getElementById('reg-business').value.trim() : '';
+  if (isTradeReg && !business) { alert('Please enter your business name for a trade account.'); return; }
+
   const fullName = `${first} ${last}`;
   // account_type flag routes the new profile to the 'customer' role (migration 019)
   const { data, error } = await window.sbClient.auth.signUp({
@@ -2337,6 +2457,8 @@ async function registerAccount() {
     phone:    document.getElementById('reg-phone').value.trim(),
     address:  document.getElementById('reg-address').value.trim(),
     postcode: document.getElementById('reg-postcode').value.trim(),
+    type:     isTradeReg ? 'trade' : 'domestic',
+    business: business || null,
   };
 
   if (data.session) {
@@ -2352,13 +2474,17 @@ async function registerAccount() {
 }
 
 async function signOut() {
+  const wasTrade = isTradeUser();
   await window.sbClient.auth.signOut();
   currentUser = null;
   editingOrder = null;
+  TRADE_PRICES = {};
   Object.keys(basket).forEach(k => delete basket[k]);
   updateBasketUI();
   updateNavForUser();
   closeSignInPanel();
+  if (wasTrade) await refreshCatalogueForUser();   // drop trade items/prices from the grid
+  renderTradeNotice();
 }
 
 // Create or update the customer's own linked record (RLS: user_id must be theirs)
@@ -2371,10 +2497,17 @@ async function upsertCustomerRecord(userId, p) {
         name: p.name, phone: p.phone || null, address_line_1: p.address || null, postcode: p.postcode || null, email: p.email || null
       }).eq('id', existing.id);
     } else {
+      // Trade signups land as trade_status='pending' — a DB trigger (033)
+      // enforces this server-side, so nobody can self-approve.
+      const isTrade = p.type === 'trade';
       await window.sbClient.from('customers').insert({
-        user_id: userId, name: p.name, email: p.email || null,
+        user_id: userId, name: isTrade ? (p.business || p.name) : p.name, email: p.email || null,
         phone: p.phone || null, address_line_1: p.address || null, postcode: p.postcode || null,
-        customer_type: 'domestic', price_tier: 'standard'
+        business_name: isTrade ? (p.business || null) : null,
+        customer_type: isTrade ? 'trade' : 'domestic',
+        price_tier: isTrade ? 'trade' : 'standard',
+        notes: isTrade && p.name ? `Contact: ${p.name}` : null,
+        trade_status: isTrade ? 'pending' : null,
       });
     }
   } catch (e) { console.error('Customer record save failed:', e); }
@@ -2392,7 +2525,7 @@ async function applyAuthedUser(session) {
 
   const { data: cust } = await window.sbClient
     .from('customers')
-    .select('name, customer_type, price_tier, business_name, phone, email, address_line_1, postcode')
+    .select('name, customer_type, price_tier, business_name, phone, email, address_line_1, postcode, trade_status, show_trade_prices')
     .eq('user_id', user.id).maybeSingle();
 
   const meta = user.user_metadata || {};
@@ -2403,9 +2536,16 @@ async function applyAuthedUser(session) {
     address: cust?.address_line_1 || '',
     postcode: cust?.postcode || '',
     businessName: cust?.business_name || '',
-    type:    (cust?.customer_type === 'commercial' || cust?.price_tier === 'trade') ? 'trade' : 'domestic',
+    type:    (cust?.customer_type === 'commercial' || cust?.customer_type === 'trade' || cust?.price_tier === 'trade') ? 'trade' : 'domestic',
+    tradeStatus:     cust?.trade_status || null,
+    showTradePrices: cust?.show_trade_prices === true,
     lastOrder: [],
   };
+
+  // Approved trade accounts see extra trade-only items (RLS), and their
+  // agreed prices once Jon switches them on — reload the catalogue for them.
+  if (currentUser.type === 'trade') await refreshCatalogueForUser();
+  renderTradeNotice();
 
   // Last order items (own orders are readable via RLS) for the reorder banner
   try {

@@ -310,6 +310,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 33. `033_trade_accounts.sql`
+**What it does:** Adds the **trade tier**. `products.trade_only` (Availability page toggle — hidden from the public site by RLS, shown to approved trade logins alongside the domestic list). `customers.trade_status` (website trade signups land `pending`; Jon approves from the customer profile), `customers.show_trade_prices` (per-client toggle — off = "speak to Jon about pricing" on the website), and `customers.invoice_address` (optional override printed on that customer's invoices, e.g. a home address). New `trade_prices` table for Jon's agreed per-client, per-product prices (a customer can only read their own, and only when show is on). A trigger stops self-service accounts granting themselves trade approval. **Also fixes a security gap:** the migration-002 "admin" write policies on `products` / `delivery_slots` / `invoices` / `invoice_items` / `weekly_sheets` still allowed **any signed-in user** to write — now admin-only, matching migration 012.
+
+**When to run:** After 012 (role helper) and 019 (customer accounts). Safe on the live database — idempotent. Run it **before** deploying the updated website/admin (the new columns must exist before the new code queries them).
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

@@ -22,6 +22,15 @@ A good place to start: log a test order, watch it create a receipt automatically
 
 **One optional extra — a branded email address.** If you'd like, I can set up **jon@jgfoodsnorthwest.com** for you. It would forward straight into your normal Gmail, and you'd be able to reply so it comes *from* that address — so receipts and emails to customers look that bit more professional. It's completely **free** to set up. Totally your call though — if you're happy using your current email, that's absolutely fine. Just let me know either way.
 
+**Getting you on Google.** I'd also love to get JG Foods showing up on Google — so when someone nearby searches "butcher" or "meat delivery near me", you come up on the map and in the results. It's free, and for a mobile butcher like you we can keep your home address private and just list the areas you cover instead. To set it up I'll need a few quick bits from you:
+
+- **An address to register the business** — Google needs one behind the scenes to verify it's really you (usually home or wherever you base yourself). It doesn't have to show to the public — we can keep it hidden and just show your delivery areas. Just let me know the address and whether you'd rather keep it private or have it shown.
+- **The areas you want to come up for** — the towns and villages you actually deliver to (Ormskirk, Skelmersdale, Burscough, Aughton, Maghull… whatever's right). These are what put you in front of local customers, so a good honest list of where you cover is spot on.
+- **The phone number** you want folks to ring or text.
+- **Rough hours** — when people can get hold of you or order.
+
+No rush — jot it down whenever suits and send it over, and I'll get you live on Google Maps and Search.
+
 When you're happy and ready for real customers, the last section of the worksheet shows you how to clear out all your practice data so you start with a clean slate.
 
 Anything that doesn't work how you'd expect, or any wording you'd like changed — just jot it down and send it over. That's exactly what this stage is for.

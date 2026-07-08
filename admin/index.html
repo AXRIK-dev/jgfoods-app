@@ -1917,6 +1917,13 @@
     </div>
     <div id="ep-deal-hint" style="display:none;background:var(--gold-soft,#f4ebd4);border:1px solid var(--gold,#b8924a);border-radius:9px;padding:9px 11px;font-size:12px;color:var(--navy);margin-bottom:4px"></div>
     <div class="field"><label>Description (shown on website)</label><textarea id="ep-desc" placeholder="Fresh skinless breast fillets" style="min-height:60px"></textarea></div>
+    <div class="field" style="display:flex;align-items:center;gap:10px;background:#eef2f7;border:1px solid #cdd8e6;border-radius:9px;padding:12px 14px">
+      <input type="checkbox" id="ep-trade" style="width:17px;height:17px;accent-color:var(--navy);cursor:pointer;flex-shrink:0">
+      <div>
+        <label for="ep-trade" style="font-weight:800;font-size:13px;cursor:pointer">Trade only</label>
+        <p style="font-size:11.5px;color:var(--ink-soft);margin-top:1px">Only your approved trade customers (pubs, restaurants, shops) see this when they sign in. It's hidden from everyone else on the website.</p>
+      </div>
+    </div>
     <div class="field" style="background:var(--cream);border:1px solid var(--line);border-radius:10px;padding:12px 13px">
       <label style="display:block;margin-bottom:2px">Customer choices <span style="font-weight:600;color:var(--ink-soft)">(optional — e.g. kebab seasoning)</span></label>
       <p style="font-size:11.5px;color:var(--ink-soft);margin:0 0 9px">Add options here and the website shows a dropdown on this product. The customer's choice is added to the order and your pick list. Leave blank for no choice.</p>
@@ -2035,6 +2042,10 @@
       <input id="ec-email" type="email" placeholder="name@example.com">
     </div>
     <div class="field"><label>Address</label><input id="ec-address" type="text" placeholder="14 Any Street, Ormskirk"></div>
+    <div class="field">
+      <label>Invoice address <span style="font-weight:400;color:var(--ink-soft)">(optional — only if their invoices need a different address, e.g. a home address)</span></label>
+      <input id="ec-invaddress" type="text" placeholder="Leave blank to use the address above">
+    </div>
     <div class="field" style="background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:12px 14px">
       <label style="font-weight:800;font-size:13px">Delivery sites <span style="font-weight:400;color:var(--ink-soft)">(optional — for customers with more than one address)</span></label>
       <p style="font-size:11.5px;color:var(--ink-soft);margin:2px 0 10px">Add extra sites if Jon delivers to more than one address for this customer (e.g. two pub sites). Once any sites are listed here, their invoice automatically shows a subtotal per site plus one grand total — and Log Order will ask which site each delivery is for.</p>
@@ -2056,6 +2067,33 @@
     <div style="display:flex;gap:9px;margin-top:6px">
       <button class="btn-add" style="flex:1;justify-content:center;padding:13px" onclick="saveEditCustomer()">Save changes</button>
       <button onclick="closeModal('editCustomerModal')" style="padding:13px 18px;border-radius:9px;font-weight:800;font-size:13px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft)">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TRADE PRICES MODAL ============ -->
+<div class="modal-overlay" id="tradePricesModal">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-head">
+      <div>
+        <h3>💷 Trade prices — <span id="tpCustName"></span></h3>
+        <p style="font-size:12px;color:var(--ink-soft);margin-top:3px">These are the prices you've agreed with this customer. Leave a box blank if you haven't agreed a price for that item — they'll see "price agreed with Jon" for it.</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('tradePricesModal')">✕</button>
+    </div>
+    <input type="hidden" id="tp-cust-id">
+    <div style="display:flex;align-items:center;gap:10px;background:#eef2f7;border:1px solid #cdd8e6;border-radius:9px;padding:12px 14px;margin-bottom:12px">
+      <input type="checkbox" id="tp-show" style="width:17px;height:17px;accent-color:var(--navy);cursor:pointer;flex-shrink:0">
+      <div>
+        <label for="tp-show" style="font-weight:800;font-size:13px;cursor:pointer">Show these prices to the customer on the website</label>
+        <p style="font-size:11.5px;color:var(--ink-soft);margin-top:1px">Off = they see no prices, just "speak to Jon about pricing". Turn on once you've agreed prices with them.</p>
+      </div>
+    </div>
+    <div id="tpList" style="display:flex;flex-direction:column;gap:6px;max-height:46vh;overflow-y:auto;margin-bottom:12px"><!-- populated by openTradePrices() --></div>
+    <p style="font-size:11.5px;color:var(--ink-soft);margin-bottom:12px">💡 Their invoices and any orders they place use these prices where set. Trade prices are always subject to the current market — you can update them here any time.</p>
+    <div style="display:flex;gap:9px">
+      <button class="btn-add" style="flex:1;justify-content:center;padding:13px" onclick="saveTradePrices(this)">Save trade prices</button>
+      <button onclick="closeModal('tradePricesModal')" style="padding:13px 18px;border-radius:9px;font-weight:800;font-size:13px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft)">Cancel</button>
     </div>
   </div>
 </div>
@@ -2380,12 +2418,12 @@ async function loadAppData() {
     const [productsRes, customersRes, ordersRes, invoicesRes, runSlotsRes, categoriesRes, sitesRes] = await Promise.all([
       supabase
         .from('products')
-        .select('id, name, category, price, description, is_available, img_url, sort_order, options, option_label')
+        .select('id, name, category, price, description, is_available, img_url, sort_order, options, option_label, trade_only')
         .order('sort_order').order('name'),
 
       supabase
         .from('customers')
-        .select('id, name, customer_type, phone, email, address_line_1, notes, cash_tab, tab_settle_day, is_vip')
+        .select('id, name, customer_type, phone, email, address_line_1, notes, cash_tab, tab_settle_day, is_vip, trade_status, show_trade_prices, invoice_address')
         .eq('is_active', true)
         .order('name'),
 
@@ -2447,6 +2485,7 @@ async function loadAppData() {
         img:   p.img_url || null,
         options: Array.isArray(p.options) ? p.options : [],
         optionLabel: p.option_label || '',
+        tradeOnly: p.trade_only === true,
       }));
     }
 
@@ -2464,6 +2503,9 @@ async function loadAppData() {
         cashTab:      c.cash_tab,
         tabSettleDay: c.tab_settle_day  || '',
         vip:          c.is_vip === true,
+        tradeStatus:     c.trade_status || null,
+        showTradePrices: c.show_trade_prices === true,
+        invoiceAddress:  c.invoice_address || '',
         orders:       0,
         total:        0,
         lastOrder:    '',
@@ -3023,7 +3065,7 @@ async function openOrderModal(id) {
   if (supabase && isOrderUUID(id)) {
     try {
       const { data: ord } = await supabase.from('orders')
-        .select('id, total_amount, channel, notes, status, payment_method, customer_id, customers(name,email,phone,address_line_1,postcode,customer_type), order_items(id, product_id, product_name, unit_price, quantity)')
+        .select('id, total_amount, channel, notes, status, payment_method, customer_id, customers(name,email,phone,address_line_1,postcode,customer_type,invoice_address), order_items(id, product_id, product_name, unit_price, quantity)')
         .eq('id', id).single();
       const invSelect = 'id, order_id, invoice_number, total_amount, status, invoice_type, invoice_payments(method, amount)';
       // Multi-site customers (migration 032): their invoice is shared across
@@ -3049,10 +3091,25 @@ async function openOrderModal(id) {
         } catch (e) { console.error('Invoice self-heal failed:', e); }
       }
       currentOrderFull = { ord, inv: invRes.data || null };
+
+      // Trade customer? Load their agreed prices so items added at the door
+      // (or in Edit items) come in at the right price automatically.
+      ORDER_TRADE_PRICES = {};
+      const ct = ord?.customers?.customer_type;
+      if (ord?.customer_id && (ct === 'trade' || ct === 'commercial')) {
+        try {
+          const { data: tps } = await supabase.from('trade_prices')
+            .select('product_id, price').eq('customer_id', ord.customer_id);
+          (tps || []).forEach(r => { ORDER_TRADE_PRICES[r.product_id] = parseFloat(r.price); });
+        } catch (e) { console.error('Trade prices load failed:', e); }
+      }
     } catch (e) { console.error('Order load failed:', e); }
   }
   renderOrderModalBody();
 }
+
+// Agreed trade prices for the order currently open in the modal
+let ORDER_TRADE_PRICES = {};
 
 function orderItemsArray() {
   const f = currentOrderFull;
@@ -3121,8 +3178,10 @@ function renderOrderModalBody() {
 }
 
 function renderOrderEditUI(items) {
+  // Use the customer's agreed trade price where one exists (migration 033)
+  const effP = p => ORDER_TRADE_PRICES[p.id] != null ? ORDER_TRADE_PRICES[p.id] : p.price;
   const opts = '<option value="">— add a product —</option>' + (sampleProducts||[]).filter(p=>p.live!==false)
-    .map(p=>`<option value="${p.id}" data-name="${ordEsc(p.name)}" data-price="${p.price}">${ordEsc(p.name)} — £${Number(p.price).toFixed(2)}</option>`).join('');
+    .map(p=>`<option value="${p.id}" data-name="${ordEsc(p.name)}" data-price="${effP(p)}">${ordEsc(p.name)} — £${Number(effP(p)).toFixed(2)}${ORDER_TRADE_PRICES[p.id] != null ? ' (trade)' : ''}</option>`).join('');
   const rows = items.map(orderEditRow).join('');
   return `
     <div id="orderEditRows">${rows}</div>
@@ -3265,12 +3324,12 @@ function orderPrintInvoice() {
   if (!f || !f.ord || !items || !items.length) { alert('No items to put on an invoice.'); return; }
   const cust = f.ord.customers || {};
   const o = sampleOrders.find(x => x.id === f.ord.id);
-  const isTrade = cust.customer_type === 'commercial';
+  const isTrade = cust.customer_type === 'commercial' || cust.customer_type === 'trade';
   const doc = buildInvoiceDoc({
     ref: (f.inv && f.inv.invoice_number) || ('ORD-' + String(f.ord.id).slice(0,8).toUpperCase()),
     type: isTrade ? 'invoice' : 'receipt',
     custName: cust.name || (o ? o.name : 'Customer'),
-    custAddress: [cust.address_line_1, cust.postcode].filter(Boolean).join(', '),
+    custAddress: cust.invoice_address || [cust.address_line_1, cust.postcode].filter(Boolean).join(', '),
     dateFmt: new Date().toLocaleDateString('en-GB'),
     items: items.map(i => ({ desc:i.name, qty:i.qty, price:i.price })),
     total: items.reduce((s,i)=>s+i.qty*i.price,0),
@@ -3626,7 +3685,7 @@ function productRowHtml(p) {
       </div>
       <div class="sr-main">
         <h4>${p.name}</h4>
-        <span class="cat-tag">${p.cat}</span>
+        <span class="cat-tag">${p.cat}</span>${p.tradeOnly ? ' <span style="display:inline-block;font-size:9px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;background:var(--navy);color:#e0bd72;padding:2px 7px;border-radius:7px;vertical-align:1px">Trade only</span>' : ''}
       </div>
       <div class="sr-price"><span class="sr-price-label">£</span><input type="number" min="0" step="0.50" value="${p.price.toFixed(2)}" oninput="updatePrice('${p.id}',this.value)" aria-label="Price for ${p.name}"></div>
       <span class="sr-state ${p.live ? 'live' : 'hidden'}" id="ss-${p.id}">${p.live ? 'Live' : 'Hidden'}</span>
@@ -4080,6 +4139,7 @@ async function savePrices() {
             price:        p.price || 0,
             description:  p.desc || null,
             is_available: p.live !== false,
+            trade_only:   p.tradeOnly === true,
           }))
         );
         if (error) throw error;
@@ -4093,6 +4153,7 @@ async function savePrices() {
             price:        p.price || 0,
             description:  p.desc || null,
             is_available: p.live !== false,
+            trade_only:   p.tradeOnly === true,
           }))
         ).select('id, name');
         if (error) throw error;
@@ -4137,6 +4198,7 @@ function addNewProduct() {
   document.getElementById('ep-desc').value = '';
   document.getElementById('ep-optlabel').value = '';
   document.getElementById('ep-options').value = '';
+  document.getElementById('ep-trade').checked = false;
   renderCategoryOptions();
   const sel = document.getElementById('ep-cat');
   if (sel.options.length) sel.selectedIndex = 0;
@@ -4345,6 +4407,7 @@ function openEditProduct(id) {
   document.getElementById('ep-desc').value = p.desc || '';
   document.getElementById('ep-optlabel').value = p.optionLabel || '';
   document.getElementById('ep-options').value = (p.options || []).join(', ');
+  document.getElementById('ep-trade').checked = p.tradeOnly === true;
   epCatChanged();
   document.getElementById('editProductModal').classList.add('show');
 }
@@ -4367,15 +4430,17 @@ async function saveEditProduct() {
 
   const isUUID = x => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
 
+  const tradeOnly = document.getElementById('ep-trade').checked;
+
   // ── New product ──────────────────────────────────────────
   if (!id) {
-    const local = { id:'sp'+Date.now(), name, cat, price, desc, live:true, img:null, options, optionLabel: optionLabel || '' };
+    const local = { id:'sp'+Date.now(), name, cat, price, desc, live:true, img:null, options, optionLabel: optionLabel || '', tradeOnly };
     sampleProducts.push(local);
     closeModal('editProductModal');
     renderStock();
     if (supabase) {
       const { data, error } = await supabase.from('products')
-        .insert({ name, category:cat, price, description:desc || null, is_available:true, options: optionsCol, option_label: optionLabel })
+        .insert({ name, category:cat, price, description:desc || null, is_available:true, options: optionsCol, option_label: optionLabel, trade_only: tradeOnly })
         .select('id').single();
       if (error) { console.error('Create product error:', error); }
       else if (data) { local.id = data.id; }   // swap temp id for real UUID
@@ -4386,13 +4451,13 @@ async function saveEditProduct() {
   // ── Existing product ─────────────────────────────────────
   const p = sampleProducts.find(x => x.id === id);
   if (!p) return;
-  p.name = name; p.cat = cat; p.price = price; p.desc = desc; p.options = options; p.optionLabel = optionLabel || '';
+  p.name = name; p.cat = cat; p.price = price; p.desc = desc; p.options = options; p.optionLabel = optionLabel || ''; p.tradeOnly = tradeOnly;
   closeModal('editProductModal');
   renderStock();
 
   if (supabase && isUUID(id)) {
     const { error } = await supabase.from('products').update({
-      name, category:cat, price, description: desc || null, options: optionsCol, option_label: optionLabel,
+      name, category:cat, price, description: desc || null, options: optionsCol, option_label: optionLabel, trade_only: tradeOnly,
     }).eq('id', id);
     if (error) console.error('Update product error:', error);
   }
@@ -4690,6 +4755,7 @@ function editCustomer(id) {
   document.getElementById('ec-phone').value = c.phone || '';
   document.getElementById('ec-email').value = c.email || '';
   document.getElementById('ec-address').value = c.address || '';
+  document.getElementById('ec-invaddress').value = c.invoiceAddress || '';
   document.getElementById('ec-type').value = c.type || 'domestic';
   toggleEcNameFields(c.type || 'domestic');
   document.getElementById('ec-type').onchange = function() { toggleEcNameFields(this.value); };
@@ -4773,6 +4839,7 @@ async function saveEditCustomer() {
   c.phone     = document.getElementById('ec-phone').value.trim();
   c.email     = document.getElementById('ec-email').value.trim();
   c.address   = document.getElementById('ec-address').value.trim();
+  c.invoiceAddress = document.getElementById('ec-invaddress').value.trim();
   c.type      = type;
   c.referredBy = document.getElementById('ec-referredby').value.trim();
   c.exempt    = document.getElementById('ec-exempt').checked;
@@ -4787,6 +4854,7 @@ async function saveEditCustomer() {
       phone:         c.phone         || null,
       email:         c.email         || null,
       address_line_1: c.address      || null,
+      invoice_address: c.invoiceAddress || null,
       customer_type: c.type          || 'domestic',
       notes:         c.notes         || null,
     }).eq('id', id);
@@ -4939,6 +5007,7 @@ function renderCustomers(filter) {
         <div class="oc-name-row">
           <span class="oc-name">${c.name}</span>
           <span class="badge ${c.type === 'trade' ? 'badge-trade' : 'badge-home'}">${c.type === 'trade' ? 'Trade' : 'Domestic'}</span>
+          ${c.tradeStatus === 'pending' ? '<span class="badge" style="background:#fdf3e3;color:#b06000">🕐 Approve login</span>' : ''}
           ${c.exempt ? '<span class="badge" style="background:#fdf0e0;color:#b06000">Exempt</span>' : ''}
           ${c.referredBy && c.orders <= 1 ? '<span class="badge" style="background:#f0e5f5;color:#6b21a8">🎁 Referral gift</span>' : ''}
         </div>
@@ -5019,6 +5088,7 @@ async function openCustomerDetail(id) {
     ${c.notes ? `<div class="modal-detail-row"><span>Notes</span><b>${c.notes}</b></div>` : ''}
     ${c.referredBy ? `<div class="modal-detail-row"><span>Referred by</span><b>${c.referredBy}</b></div>` : ''}
     ${c.exempt ? `<div style="background:#fdf3e3;border:1px solid #fcd299;border-radius:9px;padding:10px 13px;margin-top:10px;font-size:12.5px;color:#b06000;font-weight:700">✓ Exempt from £5 minimum order charge</div>` : ''}
+    ${c.type === 'trade' ? tradeSectionHtml(c) : ''}
     ${contactBtns}
     <div id="custOrderHistory" style="margin-top:14px">
       <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px">Order History</div>
@@ -5082,6 +5152,130 @@ async function openCustomerDetail(id) {
       <div style="font-size:11px;color:var(--ink-soft)">${orders.length} orders · <b style="color:var(--navy)">£${totalSpent.toFixed(2)}</b> total</div>
     </div>
     ${rows}`;
+}
+
+// ============ TRADE ACCOUNTS (migration 033) ============
+// The trade box on a trade customer's profile: website-login approval,
+// whether they can see their prices, and the button to set those prices.
+function tradeSectionHtml(c) {
+  let statusHtml = '';
+  if (c.tradeStatus === 'pending') {
+    statusHtml = `
+      <div style="background:#fdf3e3;border:1px solid #fcd299;border-radius:9px;padding:11px 13px;margin-bottom:8px">
+        <div style="font-size:12.5px;color:#b06000;font-weight:800">🕐 Trade website login — awaiting your approval</div>
+        <p style="font-size:11.5px;color:var(--ink-soft);margin:4px 0 9px">They've created a trade account on the website. Once you approve, they'll see your trade-only items when they sign in.</p>
+        <button class="btn-add" style="width:100%;font-size:12.5px;font-weight:800;padding:11px" onclick="approveTradeCustomer('${c.id}')">✓ Approve trade access</button>
+      </div>`;
+  } else if (c.tradeStatus === 'approved') {
+    statusHtml = `
+      <div style="background:#e8f3ec;border:1px solid #bfdccb;border-radius:9px;padding:10px 13px;margin-bottom:8px;font-size:12.5px;color:#1a6640;font-weight:700">
+        ✓ Trade website login approved — they see your trade range when signed in.<br>
+        <span style="font-weight:600;color:var(--ink-soft);font-size:11.5px">Prices on website: <b style="color:${c.showTradePrices ? '#1a6640' : '#b06000'}">${c.showTradePrices ? 'shown (their agreed prices)' : 'hidden — "speak to Jon about pricing"'}</b></span>
+      </div>`;
+  } else {
+    statusHtml = `<p style="font-size:11.5px;color:var(--ink-soft);margin-bottom:8px">No website trade login yet — if they create one, it'll appear here for your approval.</p>`;
+  }
+  return `
+    <div style="background:#eef2f7;border:1px solid #cdd8e6;border-radius:11px;padding:12px 13px;margin-top:12px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--navy);margin-bottom:8px">🤝 Trade account</div>
+      ${statusHtml}
+      <button class="btn-navy" style="width:100%;font-size:12.5px;font-weight:800;padding:11px" onclick="openTradePrices('${c.id}')">💷 Set this customer's trade prices</button>
+    </div>`;
+}
+
+async function approveTradeCustomer(id) {
+  const c = sampleCustomers.find(x => x.id === id);
+  if (!c || !supabase) return;
+  const { error } = await supabase.from('customers')
+    .update({ trade_status: 'approved' }).eq('id', id);
+  if (error) { alert('Could not approve — ' + error.message); return; }
+  c.tradeStatus = 'approved';
+  openCustomerDetail(id);   // refresh the modal
+  renderCustomers();
+}
+
+// ── Per-customer trade price list ──
+// Lists everything on the availability page (trade-only items first), with
+// the agreed price for THIS customer. Blank = no agreed price yet.
+async function openTradePrices(custId) {
+  const c = sampleCustomers.find(x => x.id === custId);
+  if (!c) return;
+  document.getElementById('tp-cust-id').value = custId;
+  document.getElementById('tpCustName').textContent = c.name;
+  document.getElementById('tp-show').checked = c.showTradePrices === true;
+
+  // Existing agreed prices for this customer
+  let existing = {};
+  if (supabase) {
+    const { data } = await supabase.from('trade_prices')
+      .select('product_id, price').eq('customer_id', custId);
+    (data || []).forEach(r => { existing[r.product_id] = parseFloat(r.price); });
+  }
+
+  const prods = [...sampleProducts]
+    .filter(p => /^[0-9a-f-]{36}$/i.test(p.id))
+    .sort((a, b) => (b.tradeOnly === true) - (a.tradeOnly === true) || (a.cat || '').localeCompare(b.cat || '') || a.name.localeCompare(b.name));
+
+  document.getElementById('tpList').innerHTML = prods.map(p => `
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line-soft)">
+      <div style="flex:1;min-width:0">
+        <span style="font-size:12.5px;font-weight:700;color:var(--ink)">${p.name}</span>
+        ${p.tradeOnly ? '<span style="font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;background:var(--navy);color:#e0bd72;padding:2px 6px;border-radius:6px;margin-left:5px">Trade</span>' : ''}
+        ${!p.live ? '<span style="font-size:10px;color:var(--ink-soft);margin-left:5px">(not live)</span>' : ''}
+        <div style="font-size:10.5px;color:var(--ink-soft)">${p.tradeOnly ? 'Trade-only item' : 'Standard price £' + Number(p.price || 0).toFixed(2)}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+        <span style="font-size:12px;color:var(--ink-soft);font-weight:700">£</span>
+        <input type="number" min="0" step="0.10" class="fin-input tp-price" data-pid="${p.id}"
+          value="${existing[p.id] != null ? existing[p.id].toFixed(2) : ''}" placeholder="—"
+          style="width:78px;font-size:12.5px;padding:7px 8px;text-align:right">
+      </div>
+    </div>`).join('');
+
+  document.getElementById('tradePricesModal').classList.add('show');
+}
+
+async function saveTradePrices(btn) {
+  const custId = document.getElementById('tp-cust-id').value;
+  const c = sampleCustomers.find(x => x.id === custId);
+  if (!custId || !supabase) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const rows = Array.from(document.querySelectorAll('#tpList .tp-price'));
+    const priced  = [];
+    const cleared = [];
+    rows.forEach(inp => {
+      const v = inp.value.trim();
+      if (v === '') { cleared.push(inp.dataset.pid); }
+      else {
+        const n = parseFloat(v);
+        if (n >= 0) priced.push({ customer_id: custId, product_id: inp.dataset.pid, price: n });
+      }
+    });
+    if (priced.length) {
+      const { error } = await supabase.from('trade_prices')
+        .upsert(priced, { onConflict: 'customer_id,product_id' });
+      if (error) throw error;
+    }
+    if (cleared.length) {
+      const { error } = await supabase.from('trade_prices')
+        .delete().eq('customer_id', custId).in('product_id', cleared);
+      if (error) throw error;
+    }
+    // The show/hide toggle
+    const show = document.getElementById('tp-show').checked;
+    const { error: e2 } = await supabase.from('customers')
+      .update({ show_trade_prices: show }).eq('id', custId);
+    if (e2) throw e2;
+    if (c) c.showTradePrices = show;
+
+    closeModal('tradePricesModal');
+    openCustomerDetail(custId);   // refresh the profile view
+  } catch (e) {
+    console.error('Save trade prices failed:', e);
+    alert('Could not save trade prices: ' + (e.message || e));
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Save trade prices'; }
 }
 
 // Show/hide the right name fields for the chosen account type.
@@ -5348,7 +5542,7 @@ async function custImportCommit() {
       // Reflect into the in-memory list so the page updates without a reload
       inserted.forEach(c => sampleCustomers.push({
         id: c.id, name: c.name,
-        type: c.customer_type === 'commercial' ? 'trade' : 'domestic',
+        type: (c.customer_type === 'commercial' || c.customer_type === 'trade') ? 'trade' : 'domestic',
         phone: c.phone || '', email: c.email || '', address: c.address_line_1 || '',
         notes: c.notes || '', cashTab: false, tabSettleDay: '',
         orders: 0, total: 0, lastOrder: '', exempt: false,
@@ -5675,7 +5869,7 @@ async function getSendData(invId, custName, invRef, amount) {
   if (invId && window.supabase) {
     const { data: inv, error } = await window.supabase
       .from('invoices')
-      .select('invoice_number, invoice_type, total_amount, customers(name, phone, email, address_line_1, customer_type), invoice_items(description, unit_price, quantity, site_label)')
+      .select('invoice_number, invoice_type, total_amount, customers(name, phone, email, address_line_1, invoice_address, customer_type), invoice_items(description, unit_price, quantity, site_label)')
       .eq('id', invId).single();
     if (!error && inv) {
       ref     = inv.invoice_number;
@@ -5684,7 +5878,9 @@ async function getSendData(invId, custName, invRef, amount) {
       name    = inv.customers?.name || custName || 'Customer';
       phone   = inv.customers?.phone || '';
       email   = inv.customers?.email || '';
-      address = inv.customers?.address_line_1 || '';
+      // invoice_address = optional override (e.g. the trade client who wants
+      // his home address printed on his invoices)
+      address = inv.customers?.invoice_address || inv.customers?.address_line_1 || '';
       items   = (inv.invoice_items || []).map(i => ({ desc: i.description, qty: i.quantity, price: parseFloat(i.unit_price) || 0, site_label: i.site_label || null }));
     }
   }
@@ -7293,7 +7489,8 @@ function rebuildInvoiceCustomers() {
     type:    c.type,
     phone:   c.phone   || '',
     email:   c.email   || '',
-    address: c.address || '',
+    // Invoices print the invoice-address override when Jon has set one
+    address: c.invoiceAddress || c.address || '',
     prefix:  c.name.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase(),
     nextInv: Math.floor(10000 + Math.random() * 90000),
     products: sampleProducts.map(p => ({ name: p.name, price: p.price })),
@@ -7378,12 +7575,21 @@ function groupInvoiceLines(lines) {
   return { groups, grandTotal };
 }
 
-// Build the product dropdown options from the live availability list
+// Build the product dropdown options from the live availability list.
+// If the selected customer has agreed trade prices (migration 033), those
+// prices are used instead of the standard ones.
+let INV_TRADE_PRICES = {};   // product_id → agreed price for the selected invoice customer
+
+function invEffectivePrice(p) {
+  const tp = INV_TRADE_PRICES[p.id];
+  return tp != null ? tp : (p.price || 0);
+}
+
 function invProductOptions(selectedId) {
   const prods = [...sampleProducts].sort((a, b) =>
     (a.cat || '').localeCompare(b.cat || '') || a.name.localeCompare(b.name));
   return prods.map(p =>
-    `<option value="${p.id}" ${String(selectedId) === String(p.id) ? 'selected' : ''}>${p.name} — £${(p.price || 0).toFixed(2)}${p.live ? '' : ' (not live)'}</option>`
+    `<option value="${p.id}" ${String(selectedId) === String(p.id) ? 'selected' : ''}>${p.name} — £${invEffectivePrice(p).toFixed(2)}${INV_TRADE_PRICES[p.id] != null ? ' (trade)' : ''}${p.live ? '' : ' (not live)'}</option>`
   ).join('');
 }
 
@@ -7437,7 +7643,7 @@ function pickInvProduct(id, value) {
     item.productId = null; item.desc = ''; item.price = 0;
   } else {
     const p = sampleProducts.find(pr => String(pr.id) === String(value));
-    if (p) { item.productId = p.id; item.desc = p.name; item.price = p.price; }
+    if (p) { item.productId = p.id; item.desc = p.name; item.price = invEffectivePrice(p); }
   }
   renderInvItems();
 }
@@ -7458,9 +7664,19 @@ function removeInvItem(id) {
 let currentInvoiceRef  = null;
 let currentInvoiceType = 'invoice';   // 'invoice' for trade, 'receipt' for domestic
 
-function loadInvoiceCustomer() {
+async function loadInvoiceCustomer() {
   invItems = [];
   currentInvoiceRef = null;   // new customer → fresh invoice number
+  // Pull this customer's agreed trade prices so the item dropdown uses them
+  INV_TRADE_PRICES = {};
+  const custId = document.getElementById('inv-customer')?.value;
+  if (supabase && custId && /^[0-9a-f-]{36}$/i.test(custId)) {
+    try {
+      const { data } = await supabase.from('trade_prices')
+        .select('product_id, price').eq('customer_id', custId);
+      (data || []).forEach(r => { INV_TRADE_PRICES[r.product_id] = parseFloat(r.price); });
+    } catch (e) { console.error('Trade prices load failed:', e); }
+  }
   addInvItem(); // start with one blank row
 }
 
@@ -9080,6 +9296,7 @@ const HELP_PAGES = {
       { icon:'🏷️', title:'Managing categories', body:'Press <strong>Manage categories</strong> to add, rename, reorder or hide the sections customers browse by on the website (Chicken, Steak & Beef, and so on). Add a new one any time — type the name and press <strong>Add</strong>. Rename one and every product in it updates automatically. Hide a category to take it off the website without losing it, or delete it (its products move to "Other"). The order you set here is the order customers see.' },
       { icon:'🏷️', title:'Special offers (e.g. Mix & Match — 3 for £15)', body:'Offers have their own home now — the <strong>🏷 Special offers</strong> button on the Availability page (separate from your everyday categories). <strong>1)</strong> Press it and <strong>Create a special offer</strong> — give it a name (e.g. "Mix &amp; Match"). <strong>2)</strong> In its editor set <strong>pick __ for £__</strong> (e.g. 3 for £15), tap the <strong>Offer photo</strong> box to add one picture (like your flyer), then add the packs — type each in the <strong>Add</strong> box, or press <strong>📋 Paste a list</strong> and paste your whole flyer (one per line) then <strong>Add all</strong> to load 20–30 at once. No prices on the packs — the offer sets them. Each offer collapses to a single tidy row, so your offers don\'t take over the page; press <strong>Manage</strong> to open one. On the website the offer shows as <strong>one normal-sized card</strong>; the customer clicks it, a picker opens with +/− on each pack (so they can choose any 3 — even more than one of the same), and the chosen packs drop into the basket. The exact packs come through on the order so you know what to deliver. Offers never clutter the everyday product list.' },
       { icon:'📷', title:'Adding a photo', body:'Tap the photo box on any product and choose a picture. You\'ll see it straight away. For a brand-new product, the photo is saved up to the website when you press <strong>Save changes</strong> — so always Save after adding a photo. For a product that\'s already saved, the photo uploads right away.' },
+      { icon:'🤝', title:'Trade-only items', body:'Adding something just for your pubs, restaurants and shops? Open the product\'s <strong>Edit</strong> screen and tick <strong>Trade only</strong>. It goes live like any other item but is <strong>hidden from the public website</strong> — only your approved trade customers see it when they sign in (alongside the normal domestic list). Trade customers don\'t see prices on the website unless you\'ve switched their agreed prices on — see the Customers help.' },
       { icon:'🌶️', title:'Customer choices (e.g. kebab seasoning)', body:'Some products come in a few varieties — like kebabs in different seasonings. Instead of a separate product for each one, open the product\'s <strong>Edit</strong> screen and use the <strong>Customer choices</strong> box: give it a label (e.g. "Seasoning") and type the options separated by commas (e.g. <em>Plain, Piri Piri, BBQ, Garlic</em>). On the website the customer picks their choice from a dropdown before adding to the basket, and their choice comes through on the order and your pick list — so you know exactly how many of each to make. Leave the box blank for products with no choice.' },
     ]
   },
@@ -9091,7 +9308,9 @@ const HELP_PAGES = {
       { icon:'📧', title:'Their account email', body:'Open a customer\'s <strong>Edit</strong> and you\'ll see their <strong>Account email</strong> — the address they signed up with on the website. It\'s shown for reference and can\'t be changed here (it\'s their login). Customers you added by hand show "No account".' },
       { icon:'⭐', title:'Exempt customers', body:'Family and friends who shouldn\'t be charged the £5 small-order fee can be marked as <strong>Exempt</strong> on their profile. Tick the box in their customer record.' },
       { icon:'🎁', title:'Referral reward', body:'When a new customer was recommended by an existing one, put the existing customer\'s name in the <strong>Referred by</strong> field. It\'s flagged so you remember to thank the person who referred them with a free pack of sausages or bacon on their next delivery.' },
-      { icon:'🏢', title:'Trade accounts', body:'Trade customers have a <strong>Trade</strong> badge. You can set their individual pricing, credit terms, and invoice details from their profile.' },
+      { icon:'🏢', title:'Trade accounts', body:'Trade customers have a <strong>Trade</strong> badge. When a business creates a trade account on the website, they show here with a <strong>🕐 Approve login</strong> badge — open their profile and press <strong>✓ Approve trade access</strong>. Once approved, they see your trade-only items when they sign in.' },
+      { icon:'💷', title:'Trade prices (per customer)', body:'Every trade customer can have their own agreed prices. Open their profile and press <strong>💷 Set this customer\'s trade prices</strong> — you\'ll see your whole availability list (trade-only items first) with a price box for each. Fill in only what you\'ve agreed; leave the rest blank. By default they see <strong>no prices</strong> on the website, just "speak to Jon about pricing" — tick <strong>Show these prices to the customer</strong> when you\'re ready for them to see their agreed prices. Their orders and invoices use these prices automatically. Prices are always subject to the market — update them here whenever things change.' },
+      { icon:'🏠', title:'A different address on their invoices', body:'If a customer wants a different address printed on their invoices (e.g. their home address rather than the delivery address), open their <strong>Edit</strong> screen and fill in <strong>Invoice address</strong>. Leave it blank and invoices use their normal address as always.' },
       { icon:'📍', title:'Delivery sites (customers with more than one address)', body:'Open a customer\'s <strong>Edit</strong> screen and look for <strong>Delivery sites</strong>. Add one row per extra address (e.g. two pub sites for the same business). Once any sites are listed: <strong>Log Order</strong> will ask which site each delivery is for, the delivery run and route show the right address, and — instead of a separate invoice per delivery — all their orders build up onto <strong>one running invoice</strong> with a subtotal per site, until you finalise and send it from the Invoices tab. No sites listed = nothing changes, it works exactly as before.' },
       { icon:'➕', title:'Adding a new customer', body:'Press <strong>+ Add customer</strong> and pick the type first. <strong>Trade</strong> just needs the business name (plus an optional contact person). <strong>Domestic</strong> asks for first and last name. Add a phone number and email if you have them — you can then ring, WhatsApp or email them straight from their record.' },
       { icon:'📞', title:'Calling or messaging a customer', body:'Open any customer\'s record and use the <strong>Call</strong>, <strong>WhatsApp</strong> or <strong>Email</strong> buttons. On your phone, tapping the number rings them directly. Phone numbers in the customer list are tappable too.' },
@@ -9136,7 +9355,8 @@ const HELP_PAGES = {
     sections: [
       { icon:'📄', title:'What is this page?', body:'Invoices is where all your invoices and receipts live, with their payment status. Most appear here on their own — see below — but you can also build one by hand any time.' },
       { icon:'⚡', title:'Created automatically from orders', body:'Every order now creates its own record for you — a <strong>receipt</strong> for domestic customers (marked paid) and an <strong>invoice</strong> for trade customers (30-day terms). Whether the order came from the website or you logged it yourself, the matching receipt/invoice lands here automatically. No need to type it out again.' },
-      { icon:'➕', title:'Building one by hand', body:'Need a one-off? Select the customer — their details fill in automatically. For each line, pick an item from the <strong>availability list</strong> (the price fills in) or choose <strong>✏️ Custom item</strong> for something you\'ve sourced specially. Press <strong>Generate invoice</strong> to preview, then <strong>Save invoice</strong>. It picks receipt or invoice automatically based on the customer.' },
+      { icon:'➕', title:'Building one by hand', body:'Need a one-off? Select the customer — their details fill in automatically. For each line, pick an item from the <strong>availability list</strong> (the price fills in — a trade customer\'s <strong>agreed trade price</strong> is used automatically where you\'ve set one) or choose <strong>✏️ Custom item</strong> for something you\'ve sourced specially, with its own description and price. Press <strong>Generate invoice</strong> to preview, then <strong>Save invoice</strong>. It picks receipt or invoice automatically based on the customer.' },
+      { icon:'🛒', title:'One-off items you\'ve sourced for a customer', body:'A trade customer asks you to get them something that\'s not on your list? Two easy ways to bill it: build an invoice by hand and use <strong>✏️ Custom item</strong> for each special line, or — if they\'ve already got an order that day — open the order on the delivery run, tap <strong>➕ Add an item</strong>, and type the one-off item with its price. Either way it lands on their invoice like anything else.' },
       { icon:'📄', title:'Download as PDF', body:'Open the <strong>Actions</strong> menu and choose <strong>Download PDF</strong> to save the invoice or receipt as a tidy PDF on your device — ready to email, print, or keep for your records.' },
       { icon:'📬', title:'Sending it to the customer', body:'Open the <strong>Actions</strong> menu and choose <strong>Send via WhatsApp</strong> or <strong>Send via email</strong>. It uses the customer\'s saved number or email and writes the whole message for you — the items, the total, and a link to the PDF copy. You don\'t attach anything (handy on your phone) — just check it and press send. WhatsApp opens ready to go; email opens your Gmail with everything filled in, you press send.' },
       { icon:'📱', title:'Works from your phone', body:'This is built for sending on the road. The receipt is written right into the message with a tap-to-open PDF link, so there\'s nothing to attach or fiddle with — open the order\'s receipt, tap WhatsApp or email, check it, send. Done in seconds at the van.' },

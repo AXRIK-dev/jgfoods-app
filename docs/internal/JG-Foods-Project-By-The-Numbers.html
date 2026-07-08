@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AXRIK — JG Foods: Project by the Numbers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  :root{ --dark:#0d1726; --dark-2:#111f33; --green:#15a36a; --green-soft:rgba(21,163,106,.12);
+    --green-border:rgba(21,163,106,.28); --white:#fff; --off:#f7f8fa; --line:#e2e6eb;
+    --text:#1c2635; --text-soft:#5a6a7a; --font:'Inter',-apple-system,sans-serif; --serif:'DM Serif Display',Georgia,serif; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--font);color:var(--text);background:var(--off);line-height:1.6;-webkit-font-smoothing:antialiased}
+  .sheet{max-width:880px;margin:0 auto;background:#fff;box-shadow:0 20px 60px -30px rgba(13,23,38,.5)}
+  .top{background:var(--dark);padding:0}
+  .topbar{padding:14px 48px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.06)}
+  .wordmark{font-size:20px;font-weight:800;letter-spacing:.38em;padding-left:.38em;color:#fff;text-transform:uppercase}
+  .wordmark .x{color:var(--green)}
+  .topbar .r{font-size:11px;color:rgba(255,255,255,.4);letter-spacing:.08em;text-transform:uppercase}
+  .head{padding:54px 48px 56px}
+  .pill{display:inline-flex;align-items:center;gap:8px;background:var(--green-soft);border:1px solid var(--green-border);border-radius:20px;padding:5px 14px;margin-bottom:22px}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+  .pill span{font-size:12px;font-weight:600;color:var(--green)}
+  .head h1{font-family:var(--serif);color:#fff;font-size:40px;font-weight:400;line-height:1.1;letter-spacing:-.01em}
+  .head h1 em{font-style:normal;color:var(--green)}
+  .head p{color:rgba(255,255,255,.66);font-size:15px;margin-top:16px;max-width:620px}
+  .green-rule{height:3px;background:var(--green);border:none}
+  .body{padding:44px 48px 52px}
+  .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:8px}
+  .stat{background:var(--off);border:1px solid var(--line);border-radius:12px;padding:18px 16px;text-align:center}
+  .stat b{display:block;font-family:var(--serif);font-size:30px;color:var(--dark);line-height:1}
+  .stat span{display:block;font-size:11.5px;color:var(--text-soft);margin-top:8px;font-weight:600}
+  h2{font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--green);margin:38px 0 14px}
+  .row{display:flex;gap:14px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .row .l{flex:0 0 230px;font-weight:700;color:var(--dark);font-size:14px}
+  .row .d{flex:1;color:var(--text-soft);font-size:13.5px}
+  .deliver{display:grid;grid-template-columns:1fr 1fr;gap:10px 26px;margin-top:4px}
+  .deliver div{font-size:13.5px;color:var(--text);padding:6px 0;border-bottom:1px solid var(--line)}
+  .deliver b{color:var(--dark)}
+  .value{background:var(--dark);border-radius:14px;padding:26px 28px;margin-top:34px}
+  .value h3{font-family:var(--serif);color:#fff;font-size:21px;font-weight:400;margin-bottom:8px}
+  .value h3 em{font-style:normal;color:var(--green)}
+  .value p{color:rgba(255,255,255,.72);font-size:14px}
+  .value p + p{margin-top:10px}
+  .foot{padding:20px 48px 30px;border-top:1px solid var(--line);color:var(--text-soft);font-size:12px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  .note{font-size:11.5px;color:#9aa5b4;margin-top:14px;font-style:italic}
+  @media print{body{background:#fff}.sheet{box-shadow:none}}
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="top">
+    <div class="topbar"><div class="wordmark">A<span class="x">X</span>RIK</div><div class="r">Web App Development · Project Summary</div></div>
+    <div class="head">
+      <div class="pill"><span class="dot"></span><span>JG Foods · Project by the numbers</span></div>
+      <h1>Built in weeks,<br>not <em>months.</em></h1>
+      <p>A full customer website and bespoke back-office system for JG Foods, a mobile butcher — designed, built and brought to go-live readiness by AXRIK between late May and mid-June 2026.</p>
+    </div>
+    <hr class="green-rule">
+  </div>
+
+  <div class="body">
+    <div class="stat-grid">
+      <div class="stat"><b>~35</b><span>HANDS-ON BUILD HOURS</span></div>
+      <div class="stat"><b>~4</b><span>WEEKS, END TO END</span></div>
+      <div class="stat"><b>7</b><span>FOCUSED BUILD SESSIONS</span></div>
+      <div class="stat"><b>2</b><span>APPS — SITE + ADMIN</span></div>
+    </div>
+    <div class="stat-grid" style="margin-top:14px">
+      <div class="stat"><b>16</b><span>DATABASE MIGRATIONS</span></div>
+      <div class="stat"><b>3</b><span>SERVERLESS FUNCTIONS</span></div>
+      <div class="stat"><b>3</b><span>LIVE AI FEATURES</span></div>
+      <div class="stat"><b>£0</b><span>MONTHLY RUNNING COST*</span></div>
+    </div>
+
+    <h2>How the time broke down</h2>
+    <div class="row"><div class="l">Discovery, pitch &amp; prototype</div><div class="d">Understanding Jon's business from his spreadsheets and workflow, the pitch, and the prototype design that set the look and feel. (~5–7h)</div></div>
+    <div class="row"><div class="l">Website &amp; admin build-out</div><div class="d">The customer site and the deep admin app — every screen, built to match the agreed design. (~10–12h)</div></div>
+    <div class="row"><div class="l">Database &amp; order pipeline</div><div class="d">Supabase schema, migrations, row-level security and the secure order function. (~4–5h)</div></div>
+    <div class="row"><div class="l">Online ordering &amp; scheduling</div><div class="d">Live end-to-end ordering and flexible delivery days. (~3–4h)</div></div>
+    <div class="row"><div class="l">AI, invoicing &amp; go-live</div><div class="d">Social posts, order parsing, auto-invoicing with PDF + WhatsApp/email send, finance import, self-service user management, security hardening and the full handover pack. (~10–14h)</div></div>
+
+    <h2>What was delivered</h2>
+    <div class="deliver">
+      <div><b>Customer website</b> — responsive, online ordering, trade section</div>
+      <div><b>Admin web app</b> — 11 working sections, mobile-ready</div>
+      <div><b>Auto receipts &amp; invoices</b> — branded PDF, WhatsApp/email send</div>
+      <div><b>Finance suite</b> — daily/weekly/monthly + spreadsheet import</div>
+      <div><b>Live AI</b> — social posts, order parsing, VIP messages</div>
+      <div><b>Delivery tools</b> — runs, scheduling, route, temperature log</div>
+      <div><b>Self-service access</b> — Jon manages his own logins/passwords</div>
+      <div><b>Security</b> — admin-only data, role-based access</div>
+      <div><b>Website contact form</b> — enquiries emailed automatically</div>
+      <div><b>Full handover pack</b> — testing worksheet, build summary, guides</div>
+    </div>
+
+    <div class="value">
+      <h3>The <em>real</em> headline</h3>
+      <p>The scope here — a custom web app, a customer website, a database, live AI, authentication and a payments-ready foundation — is the kind of project a small agency would normally scope as a multi-week, five-figure build.</p>
+      <p>Delivered in roughly 35 focused hours. That gap between effort and output — made possible by an AI-accelerated workflow — is the AXRIK proposition in one line: agency-grade software, for niche businesses, at a fraction of the time and cost.</p>
+    </div>
+
+    <p class="note">* Free stack — Supabase, Netlify, Cloudflare, WhatsApp and Gmail — beyond the domain and a small AI credit. Build hours are an informed estimate from the session log and commit history, not a clocked figure.</p>
+  </div>
+
+  <div class="foot"><span>AXRIK · Web App Development</span><span>JG Foods · first portfolio build · phil@axrik.com</span></div>
+</div>
+</body>
+</html>

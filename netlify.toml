@@ -1,0 +1,12 @@
+# JG Foods — Netlify config
+# Only used for the scheduled function; build/publish settings stay in the
+# Netlify UI. The cron fires at 16:05 AND 17:05 UTC — the function itself
+# checks UK time and only sends the one that lands at 5pm Europe/London,
+# so the summary arrives at 5pm all year round (BST and GMT).
+#
+# NOTE: if the website and admin app deploy from this same repo as two
+# Netlify sites, set RESEND_API_KEY on ONE site only — otherwise the
+# summary sends twice. The function exits quietly where the key isn't set.
+
+[functions."daily-summary"]
+  schedule = "5 16,17 * * *"

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AXRIK — Prompt Library</title>
+<style>
+  :root{
+    /* AXRIK brand: black + white + green (#18a06b). Navy/gold are JG Foods', never AXRIK. */
+    --navy:#000000; --navy-2:#101417; --gold:#18a06b;
+    --gold-soft:rgba(24,160,107,.14); --gold-border:rgba(24,160,107,.4);
+    --off:#f6f7f9; --line:#e3e7ec; --text:#1a1a1a; --soft:#5a6a5f;
+    --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --serif:'DM Serif Display',Georgia,serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--font);color:var(--text);background:var(--off);line-height:1.6;-webkit-font-smoothing:antialiased}
+  .sheet{max-width:880px;margin:0 auto;background:#fff;box-shadow:0 24px 70px -34px rgba(13,23,38,.55)}
+  .topbar{background:var(--navy);padding:14px 50px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.07)}
+  .wordmark{font-size:19px;font-weight:800;letter-spacing:.36em;padding-left:.36em;color:#fff;text-transform:uppercase}
+  .wordmark .x{color:var(--gold)}
+  .topbar .r{font-size:10.5px;color:rgba(255,255,255,.42);letter-spacing:.1em;text-transform:uppercase}
+  .head{background:var(--navy);padding:42px 50px 46px;color:#fff}
+  .pill{display:inline-flex;align-items:center;gap:8px;background:var(--gold-soft);border:1px solid var(--gold-border);border-radius:20px;padding:5px 14px;margin-bottom:16px}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--gold)}
+  .pill span{font-size:11.5px;font-weight:600;color:var(--gold);letter-spacing:.04em}
+  .head h1{font-family:var(--serif);font-size:36px;font-weight:400;line-height:1.08}
+  .head h1 em{font-style:normal;color:var(--gold)}
+  .head p{color:rgba(255,255,255,.7);font-size:14.5px;margin-top:14px;max-width:600px}
+  .gold-rule{height:3px;background:var(--gold);border:none}
+  .body{padding:38px 50px 8px}
+  .intro{font-size:14px;color:var(--soft);margin-bottom:8px}
+  .p{border:1px solid var(--line);border-radius:10px;margin:18px 0;overflow:hidden}
+  .p .bar{display:flex;align-items:center;gap:12px;background:var(--off);padding:12px 16px;border-bottom:1px solid var(--line)}
+  .p .num{flex:0 0 28px;height:28px;border-radius:7px;background:var(--navy);color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}
+  .p .ttl{font-weight:700;color:var(--navy);font-size:14.5px}
+  .p .when{margin-left:auto;font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.05em}
+  .p .prompt{padding:14px 18px;font-size:14px;font-style:italic;color:#33414f}
+  .p .prompt b{font-style:normal;color:var(--navy)}
+  .p .note{padding:0 18px 14px;font-size:12.5px;color:var(--soft)}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;background:#eef1f4;padding:1px 6px;border-radius:5px;color:var(--navy-2);font-style:normal}
+  .foot{padding:22px 50px 32px;border-top:1px solid var(--line);color:var(--soft);font-size:12px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:26px}
+  @media print{body{background:#fff}.sheet{box-shadow:none}}
+  @media(max-width:640px){.body,.head,.topbar,.foot{padding-left:22px;padding-right:22px}.head h1{font-size:27px}.p .when{display:none}}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <div class="topbar">
+    <div class="wordmark">A<span class="x">X</span>RIK</div>
+    <div class="r">Prompt Library</div>
+  </div>
+
+  <div class="head">
+    <div class="pill"><span class="dot"></span><span>COPY-PASTE PROMPTS</span></div>
+    <h1>The nine moments of <em>every build</em>.</h1>
+    <p>Copy-paste prompts for the recurring points in an AXRIK build. They assume the skills are installed and the starter kit is cloned. Replace the <b>[bracketed]</b> bits.</p>
+  </div>
+  <hr class="gold-rule">
+
+  <div class="body">
+
+    <div class="p">
+      <div class="bar"><div class="num">1</div><div class="ttl">New project kickoff</div><div class="when">Project start</div></div>
+      <div class="prompt">New AXRIK client: <b>[name]</b>, a [type of business] in [location]. Here are their current order messages / spreadsheets / invoice format [attach]. Following the kickoff workflow, propose the data model first (start from the starter kit and tell me what to customise), then the build phases. Don't write screens yet — confirm the schema with me first.</div>
+    </div>
+
+    <div class="p">
+      <div class="bar"><div class="num">2</div><div class="ttl">Stand up the backend</div><div class="when">Day one</div></div>
+      <div class="prompt">Clone the starter-kit migrations for <b>[client]</b>. Customise the <code>&gt;&gt;&gt;</code>-marked CHECK constraints: delivery days are [days], order channels are [channels], reference prefix [XX]. [Keep / drop] invoicing. Give me the final 001 / 002 / 003 SQL ready to run, the run order, and the exact "promote owner to admin" snippet with [owner email].</div>
+    </div>
+
+    <div class="p">
+      <div class="bar"><div class="num">3</div><div class="ttl">Customer website</div><div class="when">Phase 1</div></div>
+      <div class="prompt">Build the <b>[client]</b> customer website as a single responsive HTML file in their branding [colours/logo]. Lead with the business problem and outcomes, not tech. Sections: hero, about, how it works, product showcase pulled live from Supabase <code>products</code>, trade/wholesale path, contact form (EmailJS). Wire the order form to the <code>place_order</code> RPC with the slot picker.</div>
+    </div>
+
+    <div class="p">
+      <div class="bar"><div class="num">4</div><div class="ttl">Admin app screen</div><div class="when">Phase 2 · repeat</div></div>
+      <div class="prompt">Add a <b>[feature]</b> page to the <b>[client]</b> admin app, following the existing <code>showPage()</code> shell. It should render from a single live Supabase fetch on open, respect the admin/staff RLS roles, and read any config from <code>app_settings</code>. Match the look of the existing pages. Also add a matching entry to the in-admin HELP_PAGES guide.</div>
+    </div>
+
+    <div class="p">
+      <div class="bar"><div class="num">5</div><div class="ttl">Add an AI feature</div><div class="when">Phase 3</div></div>
+      <div class="prompt">Add an AI <b>[order-parse / message-redraft / social-post / summary]</b> feature to <b>[client]</b>, following the AI-features pattern. Route it through the existing <code>/.netlify/functions/ai</code> proxy, and build a non-AI fallback so the button always works if the key is missing. Keep the client in control — AI drafts, they confirm before send/save.</div>
+    </div>
+
+    <div class="p">
+      <div class="bar"><div class="num">6</div><div class="ttl">Update the build summary</div><div class="when">End of session</div></div>
+      <div class="prompt">Update build summary: <b>[what was done this session]</b>.</div>
+      <div class="note">Replaces the build summary in place AND posts to the AXRIK portal via the portal-update script — same filenames, never numbered versions.</div>
+    </div>
+
+    <div class="p">
+      <div class="bar"><div class="num">7</div><div class="ttl">Go-live &amp; handover pack</div><div class="when">Launch</div></div>
+      <div class="prompt"><b>[Client]</b> is ready for go-live. Following the deliverables pattern, produce: the go-live checklist (DNS, Supabase auth invite + admin promotion, storage buckets, Netlify env vars, EmailJS IDs, data cleanup, smoke tests), a client-runnable testing worksheet, and refresh the build summary. AXRIK navy/gold branding, first-person as me, UK English.</div>
+    </div>
+
+    <div class="p">
+      <div class="bar"><div class="num">8</div><div class="ttl">Client update email</div><div class="when">Any time</div></div>
+      <div class="prompt">Draft a short update email to <b>[client]</b> about [what's new]. First person as me, warm, UK English, lead with the outcome, flag anything I need from them, end with what's next. No jargon.</div>
+    </div>
+
+    <div class="p">
+      <div class="bar"><div class="num">9</div><div class="ttl">End-of-session hygiene</div><div class="when">Every session</div></div>
+      <div class="prompt">Before we finish: scan the build for leftover placeholders or stale integration notes (e.g. unconfigured providers), confirm every table has RLS, confirm every AI feature has a fallback, and list anything still stubbed so it doesn't surprise me next session.</div>
+      <div class="note">This is the one that kills the "fix" commits that ate time on the first build.</div>
+    </div>
+
+  </div>
+
+  <div class="foot">
+    <span>AXRIK · Web App Development · Prompt Library</span>
+    <span>17 June 2026</span>
+  </div>
+
+</div>
+</body>
+</html>
