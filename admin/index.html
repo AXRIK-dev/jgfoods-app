@@ -3187,6 +3187,11 @@ function renderOrderModalBody() {
     <div class="modal-detail-row"><span>Channel</span><b>${ordEsc(ord.channel || '')}</b></div>
     <div class="modal-detail-row"><span>Payment</span><b style="color:${isPaid?'#1a6640':'var(--oxblood)'}">${isPaid ? '✓ Paid ('+methodLabel+')' : 'Awaiting payment'}</b></div>
 
+    ${(cust.customer_type === 'trade' || cust.customer_type === 'commercial') && items.some(i => !(i.price > 0)) ? `
+    <div style="background:#fdf3e3;border:1px solid #fcd299;border-radius:9px;padding:11px 13px;margin-top:12px;font-size:12.5px;color:#b06000">
+      💷 <b>Trade order — some items have no price yet.</b> Press <b>✏️ Edit items</b> and type the agreed price next to each line. The total, the invoice and your figures all update when you save.
+    </div>` : ''}
+
     <button class="btn-add" style="width:100%;margin-top:14px;font-size:13.5px;font-weight:800;padding:12px" onclick="orderQuickAdd()">➕ Add an item (at the door)</button>
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px">
       <button class="btn-navy" style="font-size:12px;padding:9px 13px" onclick="orderStartEdit()">✏️ Edit items</button>
@@ -3232,10 +3237,13 @@ function renderOrderEditUI(items) {
 }
 
 function orderEditRow(i) {
-  return `<div class="order-edit-row" data-pid="${i.product_id||''}" data-name="${ordEsc(i.name)}" data-price="${i.price}" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line-soft)">
+  // Price is editable — essential for trade orders that arrive at £0
+  // ("price to be agreed"): Jon types the agreed price straight in.
+  return `<div class="order-edit-row" data-pid="${i.product_id||''}" data-name="${ordEsc(i.name)}" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line-soft)">
     <span style="flex:1;font-size:13px">${ordEsc(i.name)}</span>
-    <span style="font-size:12px;color:var(--ink-soft);white-space:nowrap">£${i.price.toFixed(2)}</span>
-    <input type="number" min="1" value="${i.qty}" class="oe-qty gfx-in" style="width:56px" oninput="orderRecalcEdit()">
+    <span style="font-size:12px;color:var(--ink-soft)">£</span>
+    <input type="number" min="0" step="0.10" value="${i.price.toFixed(2)}" class="oe-price gfx-in" style="width:70px;text-align:right${i.price > 0 ? '' : ';border-color:#fcd299;background:#fffdf8'}" oninput="orderRecalcEdit()" aria-label="Price for ${ordEsc(i.name)}">
+    <input type="number" min="1" value="${i.qty}" class="oe-qty gfx-in" style="width:56px" oninput="orderRecalcEdit()" aria-label="Quantity for ${ordEsc(i.name)}">
     <button title="Remove" onclick="this.parentNode.remove();orderRecalcEdit()" style="background:#fff0f0;border:1px solid #fcc;color:#c0392b;border-radius:7px;width:28px;height:28px;cursor:pointer;flex-shrink:0">✕</button>
   </div>`;
 }
@@ -3278,7 +3286,7 @@ function orderAddItemRow() {
 function orderRecalcEdit() {
   let total = 0;
   document.querySelectorAll('#orderEditRows .order-edit-row').forEach(r => {
-    const price = parseFloat(r.dataset.price)||0;
+    const price = parseFloat(r.querySelector('.oe-price')?.value)||0;
     const qty = Math.max(0, parseInt(r.querySelector('.oe-qty').value,10)||0);
     total += price*qty;
   });
@@ -3292,7 +3300,7 @@ async function orderSaveItems(btn) {
   const items = rows.map(r => ({
     product_id: r.dataset.pid || null,
     name: r.dataset.name,
-    price: parseFloat(r.dataset.price)||0,
+    price: parseFloat(r.querySelector('.oe-price')?.value)||0,
     qty: Math.max(1, parseInt(r.querySelector('.oe-qty').value,10)||1),
   })).filter(i => i.name);
   if (!items.length) { alert('Add at least one item — or use Delete if you want to remove the whole order.'); return; }
@@ -9308,7 +9316,8 @@ const HELP_PAGES = {
       { icon:'✅', title:'Marking as delivered', body:'Open an order card and change the status to <strong>Delivered</strong> once you\'ve dropped it off. It then asks for the <strong>fridge/cool-box temperature</strong> — pop the reading in and tap <strong>Save &amp; mark delivered</strong>, and it\'s saved straight to your Temperature Log for you. Not got it to hand? Tap <strong>Skip</strong> and add it later on the Temperature Log page.' },
       { icon:'🧾', title:'Invoice — print or email', body:'Open an order and tap <strong>Print invoice</strong> to print a paper copy (before you set off, or at the door), or <strong>Email invoice</strong> to send it straight to the customer if they\'re on the system. Going paperless? Ask the customer at the door whether they\'d like paper or email.' },
       { icon:'💷', title:'Recording payment', body:'When a customer pays, open their order and press <strong>Cash</strong> or <strong>Bank transfer</strong> under "Mark as paid". The order shows ✓ Paid and it feeds straight into your finances.' },
-      { icon:'✏️', title:'Changing an order', body:'Customer wants to add or drop something? Open the order, tap <strong>Edit items</strong>, change the quantities or add/remove products, then <strong>Save changes</strong>. The total, the invoice and your financials all update — print a fresh invoice afterwards.' },
+      { icon:'✏️', title:'Changing an order', body:'Customer wants to add or drop something? Open the order, tap <strong>Edit items</strong>, change the prices, quantities or add/remove products, then <strong>Save changes</strong>. The total, the invoice and your financials all update — print a fresh invoice afterwards.' },
+      { icon:'💷', title:'Pricing up a trade order', body:'Trade customers order online <strong>without prices</strong> — their order arrives flagged "TRADE ORDER" with every line at £0, and an amber note on the order reminds you it needs pricing. Tap <strong>✏️ Edit items</strong> and type the agreed price into the box next to each line (unpriced ones are highlighted), then <strong>Save changes</strong>. The order total, the invoice and your finance figures all update automatically — then send the invoice as usual. If you\'ve set that customer\'s trade prices on their profile, their orders arrive already priced and there\'s nothing to do.' },
       { icon:'➕', title:'Selling extras at the door', body:'Got spare eggs, sausage or bacon in the van and the customer wants some? Open their order and tap the big <strong>➕ Add an item</strong> button, pick the product (or type a <strong>one-off item</strong> with its own price if it\'s not on your list), set the quantity and <strong>Save</strong>. The order, invoice and takings all update — then print/email the new invoice and take the payment.' },
       { icon:'🗑️', title:'Deleting an order', body:'<strong>Delete this order</strong> removes the order and its invoice for good — use it for mistakes or test orders. It can\'t be undone.' },
       { icon:'💬', title:'Quick temps', body:'The 🌡️ button lets you log delivery temperatures on the go without leaving this page — useful when you\'re out on the road.' },
