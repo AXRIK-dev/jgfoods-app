@@ -324,6 +324,13 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 35. `035_trade_delivery_days.sql`
+**What it does:** Gives trade customers their **own delivery days**, separate from the home-delivery days (fixes the 13 Jul incident where domestic customers booked a Tuesday Jon had opened for trade). Every delivery day now has an **audience** — home, trade, or both. Jon sets two usual-day lists on the Delivery Days page (🏠 home + 🍺 trade); a weekday on both lists becomes a "both" day. `ensure_delivery_slots()` generates and **realigns** days from the lists, and `place_order()` rejects bookings from the wrong audience server-side, so the split holds even if someone tampers with the page. One-off days get an audience picker in the admin.
+
+**When to run:** After 033 (needs `is_approved_trade()`). Safe on the live database — idempotent. Run it **before** deploying the updated website/admin. Existing future days start as "home"; the first page load realigns any weekday on Jon's lists.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

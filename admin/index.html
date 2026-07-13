@@ -911,11 +911,14 @@
     <div id="affectedList"></div>
   </div>
 
-  <!-- Usual days editor -->
+  <!-- Usual days editor: home + trade lists -->
   <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:18px">
     <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:4px">Your usual days</div>
-    <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px">These appear automatically each week. You can still close any single day below.</p>
+    <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px">These appear automatically each week. Home days show to home customers; trade days show only to your approved trade accounts. Pick the same day on both if a round covers both.</p>
+    <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:6px">🏠 Home delivery days</div>
     <div id="usualDayChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+    <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:6px">🍺 Trade delivery days <span style="font-weight:600;color:var(--ink-soft)">(pubs, restaurants, shops)</span></div>
+    <div id="tradeDayChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
     <button class="btn-add" style="padding:9px 16px;font-size:12.5px" onclick="saveUsualDays()">Save usual days</button>
     <span id="usualSaveMsg" style="margin-left:10px;font-size:12px;color:var(--green);font-weight:700;display:none">✓ Saved</span>
   </div>
@@ -923,9 +926,14 @@
   <!-- Add a one-off day -->
   <div style="background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:18px">
     <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:4px">Add a one-off delivery day</div>
-    <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px">Delivering on a day you don't usually? Add it here — any day of the week.</p>
+    <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px">Delivering on a day you don't usually? Add it here — any day of the week — and choose who can book it.</p>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <input type="date" id="oneOffDate" style="background:#fff;border:1.5px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px;color:var(--ink)">
+      <select id="oneOffAudience" style="background:#fff;border:1.5px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px;color:var(--ink)">
+        <option value="both">Home + trade</option>
+        <option value="domestic">Home customers only</option>
+        <option value="trade">Trade customers only</option>
+      </select>
       <button class="btn-navy" style="padding:10px 16px;font-size:12.5px" onclick="addOneOffDay()">+ Add this day</button>
     </div>
   </div>
@@ -6463,11 +6471,24 @@ const WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','S
 const SCHEDULE_HORIZON_DAYS = 21;
 let SCHEDULE = {
   usualDays: ['Monday','Wednesday','Thursday'],
+  tradeDays: [],      // usual days for approved trade accounts (migration 035)
   capacity:  50,
   cutoff:    { days_before: 1, hour: 17, minute: 0 },
   holiday:   null,    // { from:'YYYY-MM-DD', until:'YYYY-MM-DD' } — until = return date
   slots:     [],
 };
+
+// Who a weekday is for, from the two usual-day lists
+function audienceForDay(dayName) {
+  const dom = SCHEDULE.usualDays.includes(dayName);
+  const tr  = SCHEDULE.tradeDays.includes(dayName);
+  return dom && tr ? 'both' : dom ? 'domestic' : tr ? 'trade' : null;
+}
+function audienceChip(aud) {
+  if (aud === 'trade') return `<span style="font-size:10.5px;font-weight:800;background:#eef3fb;color:#2b4a7d;border:1px solid #ccd9ef;border-radius:9px;padding:2px 8px">🍺 Trade only</span>`;
+  if (aud === 'both')  return `<span style="font-size:10.5px;font-weight:800;background:#eefaf2;color:#1c6e45;border:1px solid #c4e8d2;border-radius:9px;padding:2px 8px">🏠+🍺 Home & trade</span>`;
+  return `<span style="font-size:10.5px;font-weight:800;background:var(--cream);color:var(--ink-soft);border:1px solid var(--line);border-radius:9px;padding:2px 8px">🏠 Home</span>`;
+}
 
 function toDateStr(d) {
   const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), da = String(d.getDate()).padStart(2,'0');
@@ -6492,10 +6513,11 @@ async function loadSchedule() {
 
     const { data: settings } = await supabase
       .from('app_settings').select('key, value')
-      .in('key', ['usual_days','default_capacity','default_cutoff','holiday']);
+      .in('key', ['usual_days','trade_days','default_capacity','default_cutoff','holiday']);
     SCHEDULE.holiday = null;
     (settings || []).forEach(s => {
       if (s.key === 'usual_days' && Array.isArray(s.value?.days)) SCHEDULE.usualDays = s.value.days;
+      if (s.key === 'trade_days' && Array.isArray(s.value?.days)) SCHEDULE.tradeDays = s.value.days;
       if (s.key === 'default_capacity' && s.value?.value != null)  SCHEDULE.capacity  = s.value.value;
       if (s.key === 'default_cutoff' && s.value)                   SCHEDULE.cutoff    = s.value;
       if (s.key === 'holiday' && s.value?.from && s.value?.until)   SCHEDULE.holiday   = s.value;
@@ -6504,7 +6526,7 @@ async function loadSchedule() {
     const today = toDateStr(new Date());
     const { data: slots } = await supabase
       .from('delivery_slots')
-      .select('id, delivery_date, day_label, capacity, orders_count, cutoff_at, is_open')
+      .select('id, delivery_date, day_label, capacity, orders_count, cutoff_at, is_open, audience')
       .gte('delivery_date', today)
       .order('delivery_date', { ascending: true });
     SCHEDULE.slots = slots || [];
@@ -6601,17 +6623,21 @@ async function clearHoliday() {
 }
 
 function renderUsualChips() {
-  const wrap = document.getElementById('usualDayChips');
-  if (!wrap) return;
   const order = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-  wrap.innerHTML = order.map(d => {
-    const on = SCHEDULE.usualDays.includes(d);
-    return `<button type="button" data-day="${d}" onclick="toggleUsualChip(this)"
-      style="padding:8px 14px;border-radius:20px;font-size:12.5px;font-weight:700;cursor:pointer;
-      border:1.5px solid ${on ? 'var(--navy)' : 'var(--line)'};
-      background:${on ? 'var(--navy)' : '#fff'};color:${on ? '#fff' : 'var(--ink-soft)'}"
-      data-on="${on ? '1' : '0'}">${d.slice(0,3)}</button>`;
-  }).join('');
+  const chipRow = (elId, activeDays) => {
+    const wrap = document.getElementById(elId);
+    if (!wrap) return;
+    wrap.innerHTML = order.map(d => {
+      const on = activeDays.includes(d);
+      return `<button type="button" data-day="${d}" onclick="toggleUsualChip(this)"
+        style="padding:8px 14px;border-radius:20px;font-size:12.5px;font-weight:700;cursor:pointer;
+        border:1.5px solid ${on ? 'var(--navy)' : 'var(--line)'};
+        background:${on ? 'var(--navy)' : '#fff'};color:${on ? '#fff' : 'var(--ink-soft)'}"
+        data-on="${on ? '1' : '0'}">${d.slice(0,3)}</button>`;
+    }).join('');
+  };
+  chipRow('usualDayChips', SCHEDULE.usualDays);
+  chipRow('tradeDayChips', SCHEDULE.tradeDays);
 }
 
 function toggleUsualChip(btn) {
@@ -6623,17 +6649,24 @@ function toggleUsualChip(btn) {
 }
 
 async function saveUsualDays() {
-  const chips = document.querySelectorAll('#usualDayChips button');
-  const days = Array.from(chips).filter(c => c.dataset.on === '1').map(c => c.dataset.day);
+  const pick = sel => Array.from(document.querySelectorAll(sel))
+    .filter(c => c.dataset.on === '1').map(c => c.dataset.day);
+  const days      = pick('#usualDayChips button');
+  const tradeDays = pick('#tradeDayChips button');
   if (!supabase) return;
   try {
-    const { error } = await supabase.from('app_settings')
-      .upsert({ key: 'usual_days', value: { days } }, { onConflict: 'key' });
+    const { error } = await supabase.from('app_settings').upsert([
+      { key: 'usual_days', value: { days } },
+      { key: 'trade_days', value: { days: tradeDays } },
+    ], { onConflict: 'key' });
     if (error) throw error;
     SCHEDULE.usualDays = days;
+    SCHEDULE.tradeDays = tradeDays;
+    // Realign already-generated days with the new lists straight away
+    try { await supabase.rpc('ensure_delivery_slots'); } catch (e) {}
     const msg = document.getElementById('usualSaveMsg');
     if (msg) { msg.style.display = 'inline'; setTimeout(() => { msg.style.display = 'none'; }, 1800); }
-    renderScheduleList();
+    await loadSchedule();
   } catch (err) {
     console.error('saveUsualDays error:', err);
     alert('Could not save your usual days. Please try again.');
@@ -6653,11 +6686,12 @@ function buildUpcomingDates() {
     const d = new Date(today); d.setDate(today.getDate() + i);
     const name = WEEKDAYS[d.getDay()];
     const ds = toDateStr(d);
-    if (SCHEDULE.usualDays.includes(name) && !isHolidayDate(ds)) {
-      map[ds] = { date: ds, day: name, slot: null };
+    const aud = audienceForDay(name);
+    if (aud && !isHolidayDate(ds)) {
+      map[ds] = { date: ds, day: name, slot: null, audience: aud };
     }
   }
-  SCHEDULE.slots.forEach(s => { map[s.delivery_date] = { date: s.delivery_date, day: s.day_label, slot: s }; });
+  SCHEDULE.slots.forEach(s => { map[s.delivery_date] = { date: s.delivery_date, day: s.day_label, slot: s, audience: s.audience || 'domestic' }; });
   return Object.values(map).sort((a, b) => a.date < b.date ? -1 : 1);
 }
 
@@ -6677,20 +6711,20 @@ function renderScheduleList() {
 
     if (!s) {
       statusChip = `<span style="font-size:11.5px;font-weight:700;color:var(--ink-soft)">Not opened yet</span>`;
-      actionBtn  = `<button class="btn-add" style="padding:8px 14px;font-size:12px" onclick="openDay('${r.date}','${r.day}')">Open this day</button>`;
+      actionBtn  = `<button class="btn-add" style="padding:8px 14px;font-size:12px" onclick="openDay('${r.date}','${r.day}','${r.audience}')">Open this day</button>`;
     } else if (open) {
       statusChip = `<span style="font-size:11.5px;font-weight:800;color:var(--green)">● Open${count ? ` · ${count} order${count===1?'':'s'}` : ''}</span>`;
       actionBtn  = `<button class="btn-navy" style="padding:8px 14px;font-size:12px;background:#fbeaea;color:#a12020;border:1px solid #f0c0c0" onclick="closeDay('${s.id}')">Take day off</button>`;
     } else {
       statusChip = `<span style="font-size:11.5px;font-weight:800;color:#a12020">● Closed (day off)</span>`;
-      actionBtn  = `<button class="btn-add" style="padding:8px 14px;font-size:12px" onclick="openDay('${r.date}','${r.day}')">Re-open</button>`;
+      actionBtn  = `<button class="btn-add" style="padding:8px 14px;font-size:12px" onclick="openDay('${r.date}','${r.day}','${r.audience}')">Re-open</button>`;
       if (count > 0) warn = `<div style="font-size:11px;color:#a12020;font-weight:700;margin-top:3px">⚠️ ${count} order${count===1?'':'s'} still booked — see banner above</div>`;
     }
 
     return `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff;border:1px solid var(--line);border-radius:11px;padding:13px 15px;margin-bottom:9px">
         <div>
-          <div style="font-size:14px;font-weight:800;color:var(--navy)">${prettyDate(r.date)}</div>
+          <div style="font-size:14px;font-weight:800;color:var(--navy)">${prettyDate(r.date)} &nbsp;${audienceChip(r.audience)}</div>
           <div style="margin-top:3px">${statusChip}</div>
           ${warn}
         </div>
@@ -6699,18 +6733,21 @@ function renderScheduleList() {
   }).join('');
 }
 
-async function openDay(dateStr, dayName) {
+async function openDay(dateStr, dayName, audience) {
   if (!supabase) return;
+  // Fall back to what the usual-day lists say, then 'both' (a one-off
+  // day Jon is out delivering anyway — anyone can book unless he says otherwise)
+  const aud = (audience && audience !== 'null') ? audience : (audienceForDay(dayName) || 'both');
   try {
     const existing = SCHEDULE.slots.find(s => s.delivery_date === dateStr);
     if (existing) {
       const { error } = await supabase.from('delivery_slots')
-        .update({ is_open: true, cutoff_at: existing.cutoff_at || cutoffISOFor(dateStr) })
+        .update({ is_open: true, cutoff_at: existing.cutoff_at || cutoffISOFor(dateStr), audience: aud })
         .eq('id', existing.id);
       if (error) throw error;
     } else {
       const { error } = await supabase.from('delivery_slots')
-        .insert({ delivery_date: dateStr, day_label: dayName, capacity: SCHEDULE.capacity, cutoff_at: cutoffISOFor(dateStr), is_open: true });
+        .insert({ delivery_date: dateStr, day_label: dayName, capacity: SCHEDULE.capacity, cutoff_at: cutoffISOFor(dateStr), is_open: true, audience: aud });
       if (error) throw error;
     }
     await loadSchedule();
@@ -6740,7 +6777,8 @@ async function addOneOffDay() {
   const dateStr = input.value;
   if (!dateStr) { alert('Please pick a date first.'); return; }
   const dayName = WEEKDAYS[new Date(dateStr + 'T00:00:00').getDay()];
-  await openDay(dateStr, dayName);
+  const audSel = document.getElementById('oneOffAudience');
+  await openDay(dateStr, dayName, audSel ? audSel.value : 'both');
   input.value = '';
 }
 
@@ -6770,7 +6808,7 @@ async function renderAffected() {
     const name = o.customers?.name || 'Customer';
     const phone = o.customers?.phone || '';
     const moveOpts = openSlots.length
-      ? openSlots.map(s => `<option value="${s.id}">${prettyDate(s.delivery_date)}</option>`).join('')
+      ? openSlots.map(s => `<option value="${s.id}">${prettyDate(s.delivery_date)}${s.audience === 'trade' ? ' (trade day)' : s.audience === 'both' ? ' (home + trade)' : ''}</option>`).join('')
       : '<option value="">No open days</option>';
     return `
       <div style="background:#fff;border:1px solid #f0c0c0;border-radius:9px;padding:11px 13px;margin-bottom:8px">
@@ -9327,9 +9365,10 @@ const HELP_PAGES = {
     label: 'Delivery Days',
     sections: [
       { icon:'🗓️', title:'What is this page?', body:'This is where you decide which days you\'re delivering. Your usual days appear automatically, but you\'re in charge — take a day off whenever you need, or add a one-off day. Nothing is fixed.' },
-      { icon:'📌', title:'Your usual days', body:'Set the days you normally deliver (Monday and Thursday, say). Tap the day buttons to turn them on or off, then press <strong>Save usual days</strong>. That\'s a one-time job — from then on those days appear on the website <strong>automatically, every week, for ever</strong>. You never have to "open" each week\'s days by hand.' },
+      { icon:'📌', title:'Your usual days', body:'There are now <strong>two rows of day buttons</strong>: <strong>🏠 Home delivery days</strong> for your home customers, and <strong>🍺 Trade delivery days</strong> for your approved trade accounts (pubs, restaurants, shops). Tap the days in each row and press <strong>Save usual days</strong>. That\'s a one-time job — those days then appear <strong>automatically, every week, for ever</strong>. You never have to "open" each week\'s days by hand.' },
+      { icon:'🍺', title:'Home days vs trade days', body:'Home customers only ever see (and can only book) your home days. Trade customers who\'ve signed in only see your trade days. Want one round to serve both — say a Monday? Turn Monday on in <strong>both rows</strong> and it becomes a "Home &amp; trade" day anyone can book. Each day in the Upcoming runs list has a little tag showing who it\'s for.' },
       { icon:'🌴', title:'Taking a day off', body:'In the <strong>Upcoming runs</strong> list, press <strong>Take day off</strong> on any single day. That day instantly disappears from the website so no new orders can come in for it. Changed your mind? Press <strong>Re-open</strong>.' },
-      { icon:'➕', title:'Adding a one-off day', body:'Delivering on a day you don\'t normally — say a Friday? Pick the date under <strong>Add a one-off delivery day</strong> and press <strong>Add this day</strong>. Any day of the week works.' },
+      { icon:'➕', title:'Adding a one-off day', body:'Delivering on a day you don\'t normally — say a Friday? Pick the date under <strong>Add a one-off delivery day</strong>, choose who can book it (home, trade, or both), and press <strong>Add this day</strong>. Any day of the week works.' },
       { icon:'🏖', title:'Going on holiday', body:'Off for a week or two? Under <strong>Holiday / time off</strong> pick your <strong>first day off</strong> and the <strong>day you\'re back</strong>, then press <strong>Set holiday</strong>. The website automatically stops taking orders across those dates and starts again on your return — no need to close each day. A banner shows you\'re away and when you\'re back; press <strong>Cancel holiday</strong> to undo it. If any days in your holiday already had orders, you\'ll be warned so you can call those customers to rebook.' },
       { icon:'⚠️', title:'Orders need rebooking', body:'If you take a day off (or set a holiday) that already has orders on it, a red banner appears listing those customers with their phone number. Give them a quick call to rebook, then use <strong>Move</strong> to shift their order to another day, or <strong>Cancel</strong> if needed. Their orders are never lost without you deciding.' },
       { icon:'🌐', title:'The website follows you', body:'Customers always see the next couple of delivery days you\'ve got open — it keeps itself up to date on its own. Your usual days roll forward automatically; take a day off or set a holiday and it disappears; add a one-off and it appears. You never have to tell anyone.' },
@@ -9585,7 +9624,8 @@ function gfxLiveData() {
     const today = new Date(); today.setHours(0,0,0,0);
     const slots = (typeof SCHEDULE !== 'undefined' && SCHEDULE.slots) ? SCHEDULE.slots : [];
     const seen = new Set();
-    slots.filter(s => s.is_open && new Date(s.delivery_date + 'T00:00:00') >= today)
+    // Social graphics are customer-facing — leave trade-only days out
+    slots.filter(s => s.is_open && s.audience !== 'trade' && new Date(s.delivery_date + 'T00:00:00') >= today)
       .sort((a,b) => a.delivery_date < b.delivery_date ? -1 : 1)
       .forEach(s => { const n = new Date(s.delivery_date + 'T00:00:00').toLocaleDateString('en-GB',{weekday:'long'}); if(!seen.has(n)){seen.add(n);days.push(n);} });
     if (!days.length && SCHEDULE && SCHEDULE.usualDays) days = SCHEDULE.usualDays.slice();

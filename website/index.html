@@ -1571,13 +1571,16 @@ async function loadDeliveryBanner() {
   const horizon = new Date(today); horizon.setDate(today.getDate() + 8);
   const iso = d => d.toISOString().slice(0, 10);
 
-  const { data, error } = await window.sbClient
+  const { data: rawDays, error } = await window.sbClient
     .from('delivery_slots')
-    .select('delivery_date, day_label, is_open')
+    .select('delivery_date, day_label, is_open, audience')
     .eq('is_open', true)
     .gte('delivery_date', iso(today))
     .lte('delivery_date', iso(horizon))
     .order('delivery_date', { ascending: true });
+
+  // The banner is home-delivery marketing — trade-only days stay out of it
+  const data = (rawDays || []).filter(s => s.audience !== 'trade');
 
   if (error || !data || data.length === 0) {
     el.innerHTML = `Home delivery across North Liverpool, Ormskirk &amp; West Lancashire — see this week's list to order. &nbsp;${TRADE_NOTE}`;
@@ -1814,14 +1817,21 @@ async function loadSlots() {
   const today = new Date().toISOString().slice(0, 10);
   const { data, error } = await window.sbClient
     .from('delivery_slots')
-    .select('id, delivery_date, day_label, capacity, orders_count, cutoff_at, is_open')
+    .select('id, delivery_date, day_label, capacity, orders_count, cutoff_at, is_open, audience')
     .eq('is_open', true)
     .gte('delivery_date', today)
     .order('delivery_date', { ascending: true });
 
-  // Keep only slots that aren't past cut-off and aren't full
+  // Keep only slots that aren't past cut-off, aren't full, and are for
+  // THIS customer: approved trade accounts see trade + both days;
+  // everyone else (guests + domestic) sees domestic + both days.
+  // place_order() enforces the same rule server-side (migration 035).
   const now = Date.now();
+  const forMe = s => isTradeApproved()
+    ? (s.audience === 'trade'    || s.audience === 'both' || !s.audience)
+    : (s.audience === 'domestic' || s.audience === 'both' || !s.audience);
   availableSlots = (data || []).filter(s =>
+    forMe(s) &&
     (!s.cutoff_at || new Date(s.cutoff_at).getTime() > now) &&
     (s.orders_count < s.capacity)
   );
@@ -2493,6 +2503,7 @@ async function signOut() {
   updateNavForUser();
   closeSignInPanel();
   if (wasTrade) await refreshCatalogueForUser();   // drop trade items/prices from the grid
+  if (wasTrade) await loadSlots();                 // back to the home-delivery days
   renderTradeNotice();
 }
 
@@ -2564,6 +2575,10 @@ async function applyAuthedUser(session) {
   // agreed prices once Jon switches them on — reload the catalogue for them.
   if (currentUser.type === 'trade') await refreshCatalogueForUser();
   renderTradeNotice();
+
+  // Approved trade accounts get their own delivery days (migration 035)
+  // — reload the picker so it shows trade days, not the home-delivery days.
+  if (isTradeApproved()) await loadSlots();
 
   // Last order items (own orders are readable via RLS) for the reorder banner
   try {
