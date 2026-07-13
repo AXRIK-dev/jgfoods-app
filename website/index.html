@@ -2268,6 +2268,7 @@ function prefillOrderForm() {
     document.getElementById('f-last').value = parts.slice(1).join(' ') || '';
   }
   if (currentUser.phone) document.getElementById('f-phone').value = currentUser.phone;
+  if (currentUser.email) document.getElementById('f-email').value = currentUser.email;
   if (currentUser.address) document.getElementById('f-address').value = currentUser.address;
   const pc = document.getElementById('f-postcode');
   if (pc && currentUser.postcode) pc.value = currentUser.postcode;
@@ -2596,7 +2597,12 @@ async function applyAuthedUser(session) {
   await loadMyPendingOrder();
   if (editingOrder) enterOrderEditMode();
 
-  showSignedInState();
+  // Straight back to the website after signing in — the account details
+  // are still one tap away via "My account" if they want to edit them.
+  closeSignInPanel();
+
+  // If the order form is open, fill in their saved details right away
+  prefillOrderForm();
 }
 
 // ── Forgot password: send the reset email ──
