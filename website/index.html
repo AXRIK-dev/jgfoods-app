@@ -6,6 +6,15 @@
 <title>JG Foods — Fresh Meat Delivered to Your Door</title>
 <meta name="description" content="JG Foods — Mobile butcher delivering fresh meat across North Liverpool, Ormskirk and West Lancashire. Order online for home delivery to your door.">
 
+<!-- PWA — installable app -->
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#16273f">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="JG Foods">
+
 <!-- Open Graph — WhatsApp, Facebook, iMessage, Twitter/X previews -->
 <meta property="og:type"        content="website">
 <meta property="og:url"         content="https://jgfoodsnorthwest.com/">
@@ -2737,5 +2746,15 @@ function reorderUsual() {
   </div>
 </div>
 
+<!-- PWA — register the service worker so the app can install -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js').catch(function (err) {
+        console.warn('Service worker registration failed:', err);
+      });
+    });
+  }
+</script>
 </body>
 </html>

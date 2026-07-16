@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>JG Foods — Admin</title>
 
+<!-- PWA — installable app -->
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#16273f">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="JG Admin">
+
 <!-- Open Graph — WhatsApp, iMessage, social previews -->
 <meta property="og:type"         content="website">
 <meta property="og:url"          content="https://admin.jgfoodsnorthwest.com/">
@@ -9871,5 +9880,15 @@ function gfxLoadGraphic(id) {
 }
 </script>
 <script src="js/pie-alert.js"></script>
+<!-- PWA — register the service worker so the app can install -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js').catch(function (err) {
+        console.warn('Service worker registration failed:', err);
+      });
+    });
+  }
+</script>
 </body>
 </html>

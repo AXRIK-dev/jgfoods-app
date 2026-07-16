@@ -1,0 +1,5 @@
+# Keep the PWA plumbing fresh so updates reach installed apps immediately.
+/sw.js
+  Cache-Control: no-cache
+/site.webmanifest
+  Cache-Control: no-cache
