@@ -524,13 +524,45 @@
     border:1px solid #f5c6c2;border-radius:6px;
     padding:9px 12px;margin-top:12px;display:none;text-align:left;
   }
+  .login-note{
+    font-size:12px;color:#1a6640;background:#eaf6ef;
+    border:1px solid #c3e3d1;border-radius:6px;
+    padding:9px 12px;margin-top:12px;display:none;text-align:left;
+  }
+  .login-link{
+    background:none;border:none;padding:0;margin-top:14px;
+    font-family:var(--body);font-size:12px;font-weight:600;
+    color:var(--ink-soft);text-decoration:underline;cursor:pointer;
+  }
+  .login-link:hover{color:var(--navy)}
+  .login-link:disabled{opacity:.5;cursor:default;text-decoration:none}
+  /* "Check your email" confirmation state */
+  .login-tick{
+    width:52px;height:52px;border-radius:50%;
+    background:#eaf6ef;border:1.5px solid #c3e3d1;
+    display:flex;align-items:center;justify-content:center;
+    font-size:24px;margin:0 auto 16px;
+  }
+  .login-steps{
+    text-align:left;font-size:12.5px;color:var(--ink-soft);
+    line-height:1.7;margin:0 0 4px;padding-left:18px;
+  }
+  .login-steps li{margin-bottom:4px}
+  .login-steps b{color:var(--ink)}
+  .login-show{
+    display:flex;align-items:center;gap:7px;
+    font-size:11.5px;color:var(--ink-soft);font-weight:600;
+    margin:-4px 0 4px;cursor:pointer;user-select:none;
+  }
+  .login-show input{width:14px;height:14px;accent-color:var(--navy);cursor:pointer}
 </style>
 </head>
 <body>
 
 <!-- ============ LOGIN SCREEN ============ -->
 <div id="login-screen">
-  <div class="login-card">
+  <!-- STATE 1 — normal sign in -->
+  <div class="login-card" id="signin-card">
     <div class="login-seal"><b>JG</b><span>Foods</span></div>
     <h2>Admin Login</h2>
     <p>JG Foods management portal</p>
@@ -544,7 +576,45 @@
         onkeydown="if(event.key==='Enter') signIn()">
     </div>
     <button class="login-btn" id="login-btn" onclick="signIn()">Sign in</button>
+    <button class="login-link" id="forgot-link" onclick="adminForgotPassword()">Forgot your password?</button>
     <div class="login-error" id="login-error"></div>
+    <div class="login-note" id="login-note"></div>
+  </div>
+
+  <!-- STATE 2 — reset email sent -->
+  <div class="login-card" id="sent-card" style="display:none">
+    <div class="login-tick">✉️</div>
+    <h2>Check your email</h2>
+    <p>We've sent a reset link to<br><b id="sent-email" style="color:var(--navy)"></b></p>
+    <ol class="login-steps">
+      <li>Open the email from us — it may take a minute to arrive.</li>
+      <li>Tap the <b>Reset password</b> link inside it.</li>
+      <li>It brings you back here to choose a new password.</li>
+    </ol>
+    <div class="login-note" style="display:block;margin-top:16px">
+      Can't see it? Have a look in your <b>spam</b> or <b>junk</b> folder. The link works once and runs out after an hour.
+    </div>
+    <button class="login-link" onclick="backToSignIn()">← Back to sign in</button>
+  </div>
+
+  <!-- STATE 3 — set a new password (after following the emailed link) -->
+  <div class="login-card" id="reset-card" style="display:none">
+    <div class="login-seal"><b>JG</b><span>Foods</span></div>
+    <h2>Set a new password</h2>
+    <p>Choose a new password for your admin login</p>
+    <div class="login-field">
+      <label>New password</label>
+      <input type="password" id="reset-pass1" placeholder="At least 8 characters" autocomplete="new-password">
+    </div>
+    <div class="login-field">
+      <label>Confirm new password</label>
+      <input type="password" id="reset-pass2" placeholder="Type it again" autocomplete="new-password"
+        onkeydown="if(event.key==='Enter') submitAdminNewPassword()">
+    </div>
+    <label class="login-show"><input type="checkbox" id="reset-show" onchange="toggleResetPasswords(this.checked)"> Show passwords</label>
+    <button class="login-btn" id="reset-btn" onclick="submitAdminNewPassword()">Save new password</button>
+    <div class="login-error" id="reset-error"></div>
+    <div class="login-note" id="reset-note"></div>
   </div>
 </div>
 
@@ -2194,6 +2264,10 @@ const SUPABASE_URL = 'https://hnkidhqjsitrqhsxghjd.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhua2lkaHFqc2l0cnFoc3hnaGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NDI2NjMsImV4cCI6MjA5NjUxODY2M30.LI1QzERO5WMB2h9v2lUFIxN_NoEzCf8F6Q4tN1Jaq5A';
 window.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// True while someone is part-way through a password reset (see the forgot-password
+// section below). Declared here so it exists before any auth callback can fire.
+var adminRecoveryMode = false;
+
 // ============ EMAILJS (invoice / receipt email) ============
 // Fill these in from your EmailJS dashboard to send invoices/receipts by
 // email directly. Until they're set, "Send by email" falls back to opening
@@ -2216,7 +2290,7 @@ async function loadUserRole() {
   if (!supabase) { hideLoginScreen(); return; }
 
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) { showLoginScreen(); return; }
+  if (!user) { showLoginState('signin'); return; }
 
   // Update nav with user's email initial
   const initial = (user.email || 'J')[0].toUpperCase();
@@ -2237,7 +2311,7 @@ async function loadUserRole() {
   // fall through into the dashboard — sign them straight back out.
   if (profile?.role !== 'admin' && profile?.role !== 'driver') {
     await supabase.auth.signOut();
-    showLoginScreen();
+    showLoginState('signin');
     const errEl = document.getElementById('login-error');
     if (errEl) {
       errEl.textContent = 'This account doesn\'t have access to the admin app. Please sign in with a staff account.';
@@ -2257,6 +2331,10 @@ function showLoginScreen() {
 }
 
 function hideLoginScreen() {
+  // Never uncover the dashboard while someone is part-way through a password
+  // reset — the recovery link creates a real session, so loadUserRole() would
+  // otherwise happily let them in without them ever setting a new password.
+  if (adminRecoveryMode) return;
   const screen = document.getElementById('login-screen');
   if (screen) screen.classList.add('hidden');
 }
@@ -2292,9 +2370,126 @@ async function signIn() {
   await loadAppData();
 }
 
+// ============ FORGOT PASSWORD (admin app) ============
+// Jon (or a driver) can reset their own login without ringing Phil.
+// Supabase emails a one-time link back to admin.jgfoodsnorthwest.com with
+// #type=recovery in the URL; initAdminRecovery() below catches that and
+// shows the "Set a new password" card instead of the dashboard.
+// (adminRecoveryMode is declared up with the Supabase client so it exists
+//  before any auth callback can fire.)
+
+// The login screen has three states — only ever show one at a time.
+function showLoginState(which) {   // 'signin' | 'sent' | 'reset'
+  showLoginScreen();
+  ['signin', 'sent', 'reset'].forEach(k => {
+    const card = document.getElementById(k + '-card');
+    if (card) card.style.display = (k === which) ? 'block' : 'none';
+  });
+}
+
+function backToSignIn() {
+  adminRecoveryMode = false;
+  const err = document.getElementById('login-error');
+  const note = document.getElementById('login-note');
+  if (err)  err.style.display = 'none';
+  if (note) note.style.display = 'none';
+  showLoginState('signin');
+}
+
+async function adminForgotPassword() {
+  const errEl  = document.getElementById('login-error');
+  const noteEl = document.getElementById('login-note');
+  const link   = document.getElementById('forgot-link');
+  const emailInput = document.getElementById('login-email');
+  const fail = t => { if (errEl) { errEl.textContent = t; errEl.style.display = 'block'; } };
+  if (errEl)  errEl.style.display = 'none';
+  if (noteEl) noteEl.style.display = 'none';
+
+  const email = (emailInput.value || '').trim();
+  if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+    emailInput.focus();
+    return fail('Type the email address you sign in with in the box above, then tap this again.');
+  }
+
+  if (link) { link.disabled = true; link.textContent = 'Sending…'; }
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + '/'
+  });
+  if (link) { link.disabled = false; link.textContent = 'Forgot your password?'; }
+
+  if (error) {
+    // Supabase rate-limits reset emails — say so in plain English rather than raw error text
+    const msg = /rate|too many|seconds/i.test(error.message || '')
+      ? "We've just sent one — please wait a minute before asking for another."
+      : "Couldn't send the reset email: " + error.message;
+    return fail(msg);
+  }
+
+  document.getElementById('sent-email').textContent = email;
+  showLoginState('sent');
+}
+
+function toggleResetPasswords(show) {
+  const type = show ? 'text' : 'password';
+  const a = document.getElementById('reset-pass1');
+  const b = document.getElementById('reset-pass2');
+  if (a) a.type = type;
+  if (b) b.type = type;
+}
+
+function showAdminResetCard() {
+  adminRecoveryMode = true;
+  showLoginState('reset');
+}
+
+async function submitAdminNewPassword() {
+  const p1 = document.getElementById('reset-pass1').value;
+  const p2 = document.getElementById('reset-pass2').value;
+  const btn   = document.getElementById('reset-btn');
+  const errEl = document.getElementById('reset-error');
+  const noteEl= document.getElementById('reset-note');
+  const fail  = t => { errEl.textContent = t; errEl.style.display = 'block'; };
+  errEl.style.display = 'none'; noteEl.style.display = 'none';
+
+  if (!p1 || p1.length < 8) return fail('Password must be at least 8 characters.');
+  if (p1 !== p2)            return fail("The two passwords don't match.");
+
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const { error } = await supabase.auth.updateUser({ password: p1 });
+  if (error) {
+    btn.disabled = false; btn.textContent = 'Save new password';
+    return fail("Couldn't update your password: " + error.message + ' — the link may have expired. Request a new one.');
+  }
+
+  noteEl.textContent = '✓ Password saved. Signing you in…';
+  noteEl.style.display = 'block';
+  btn.textContent = 'Saved';
+  // Strip the one-time token out of the address bar
+  history.replaceState(null, '', window.location.origin + '/');
+  adminRecoveryMode = false;
+  setTimeout(async () => {
+    document.getElementById('reset-pass1').value = '';
+    document.getElementById('reset-pass2').value = '';
+    const showBox = document.getElementById('reset-show');
+    if (showBox) { showBox.checked = false; toggleResetPasswords(false); }
+    noteEl.style.display = 'none';
+    btn.disabled = false; btn.textContent = 'Save new password';
+    showLoginState('signin');
+    await loadUserRole();   // enforces the staff-only role check; hides the login screen on success
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) await loadAppData();
+  }, 1400);
+}
+
+// Catch the recovery link as early as possible — registered at load, before
+// the dashboard boots, so a recovery session can never fall through into the app.
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'PASSWORD_RECOVERY') showAdminResetCard();
+});
+
 async function signOut() {
   await supabase.auth.signOut();
-  showLoginScreen();
+  showLoginState('signin');
   document.getElementById('login-email').value = '';
   document.getElementById('login-password').value = '';
   document.getElementById('login-btn').textContent = 'Sign in';
@@ -2820,7 +3015,25 @@ function renderDashboard() {
 // Call on page load
 // loadAppData is called by loadUserRole after confirming a valid session
 document.addEventListener('DOMContentLoaded', async () => {
+  // Arrived from a password-reset email? Show the "set a new password" card
+  // and stop — never boot the dashboard on a recovery session.
+  if (adminRecoveryMode || /type=recovery/.test(window.location.hash) || /[?&]type=recovery/.test(window.location.search)) {
+    showAdminResetCard();
+    return;
+  }
+  // Expired or already-used reset link — say so plainly instead of failing silently
+  if (/error_code=otp_expired|error=access_denied/.test(window.location.hash)) {
+    history.replaceState(null, '', window.location.origin + '/');
+    showLoginState('signin');
+    const errEl = document.getElementById('login-error');
+    if (errEl) {
+      errEl.textContent = 'That reset link has expired or has already been used. Tap "Forgot your password?" to get a new one.';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
   await loadUserRole();
+  if (adminRecoveryMode) return;
   // If a session exists, load data; if not, login screen is already showing
   const { data: { user } } = await supabase.auth.getUser();
   if (user) loadAppData();
@@ -9481,6 +9694,7 @@ const HELP_PAGES = {
     sections: [
       { icon:'👤', title:'What is this page?', body:'Tap your name (top right) to open this page. Here you can change your own password, and — as an admin — give other people access or take it away.' },
       { icon:'🔑', title:'Change your password', body:'Type a new password twice under <strong>My password</strong> and press <strong>Update my password</strong>. That\'s it — use the new one next time you sign in.' },
+      { icon:'📧', title:'Forgotten your password?', body:'You don\'t need to ring anyone. On the sign-in screen, type your email address, tap <strong>Forgot your password?</strong> and we\'ll email you a link. Open the email on your phone or computer, tap the link, and it brings you straight back here to set a new password. The link only works once and expires after an hour — if it stops working, just ask for another. If the email hasn\'t arrived after a minute or two, check your spam folder.' },
       { icon:'➕', title:'Add someone (e.g. your driver)', body:'Under <strong>Add a login</strong>, enter their email and a password and pick a role: <strong>Driver</strong> (deliveries, runs and customers only — no money) or <strong>Admin</strong> (everything). Press <strong>Create login</strong> and tell them the email and password — they sign in here.' },
       { icon:'🛟', title:'Reset or remove access', body:'Under <strong>People with access</strong> you can switch someone between Driver and Admin, <strong>Reset password</strong> if they\'re locked out, or <strong>Remove</strong> their login entirely. You can\'t remove your own login.' },
       { icon:'🗂️', title:'Records cleanup', body:'You must keep invoices and financial records for <strong>6 years</strong> (the VAT rule) — but you don\'t have to track this yourself. When anything becomes older than 6 years, a reminder appears automatically on your <strong>Dashboard</strong> telling you what can be cleared; you just press <strong>Delete them</strong> (or <strong>Remind me next month</strong>). You can also check any time here under <strong>Records cleanup</strong>. Nothing is ever deleted until you confirm, and it can\'t be undone — if in doubt, check with your accountant first.' },
