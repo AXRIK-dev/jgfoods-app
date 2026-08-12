@@ -346,6 +346,23 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 37. `037_payments_to_finances.sql`
+**What it does:** Fixes the last link in the chain — money reaching the books.
+
+`recompute_daily_sales` (migration 022) found an order's money with `JOIN invoices i ON i.order_id = o.id`. That only holds for one-invoice-per-order. On a **weekly or multi-site invoice** `invoices.order_id` is NULL and the orders point at the invoice instead, so the moment a customer moved to weekly billing **their payments stopped counting towards Daily Sales entirely**. Separately, an invoice raised by hand with no order behind it had no delivery date to attach money to, so it counted for nothing anywhere — which is exactly what Jon has been doing while learning the system.
+
+Adds one internal view, `daily_payment_allocations`, that decides which day any payment belongs to:
+
+- invoice covers **one** delivery → that delivery's date (unchanged)
+- invoice covers **several** → split across those dates in proportion to what each delivery was worth
+- invoice covers **no orders** → the day the money was received
+
+`recompute_daily_sales` now reads from it, and a new `recompute_daily_sales_for_invoice(uuid)` refreshes every day a given invoice touches (one payment on a weekly invoice can affect four). Includes a one-off catch-up that rebuilds every day already holding a payment, so Jon's existing takings appear immediately.
+
+**When to run:** After 022 and 036. Safe on the live database — no data is altered, it replaces a function and adds a view. Per-delivery figures come out identical.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

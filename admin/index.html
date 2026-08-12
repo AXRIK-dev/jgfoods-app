@@ -2038,7 +2038,7 @@
         <label>Note <span style="font-weight:400;color:var(--ink-soft)">(optional)</span></label>
         <input type="text" id="pm-note" placeholder="e.g. paid on doorstep">
       </div>
-      <button class="btn-add" style="width:100%;justify-content:center;padding:12px;margin-top:4px" onclick="addPaymentEntry()">+ Add this payment</button>
+      <button class="btn-add" id="pmAddBtn" style="width:100%;justify-content:center;padding:12px;margin-top:4px" onclick="addPaymentEntry()">+ Add this payment</button>
     </div>
 
     <div style="margin-top:14px;display:flex;gap:10px">
@@ -2723,7 +2723,7 @@ async function loadAppData() {
 
       supabase
         .from('invoices')
-        .select('id, order_id, invoice_number, invoice_type, total_amount, status, created_at, week_start, week_end, customer_id, customers (name, customer_type, billing_mode), invoice_payments (method, amount, created_at)')
+        .select('id, order_id, invoice_number, invoice_type, total_amount, status, created_at, week_start, week_end, customer_id, customers (name, customer_type, billing_mode), invoice_payments (id, method, amount, note, paid_at, created_at)')
         .order('created_at', { ascending: false })
         .limit(200),
 
@@ -2857,7 +2857,13 @@ async function loadAppData() {
           created:  inv.created_at,
           amount:   parseFloat(inv.total_amount),
           status:   inv.status,
-          payments: (inv.invoice_payments || []).map(p => ({ method: p.method, amount: parseFloat(p.amount) || 0, at: p.created_at || inv.created_at })),
+          payments: (inv.invoice_payments || []).map(p => ({
+            id: p.id, method: p.method, amount: parseFloat(p.amount) || 0,
+            note: p.note || '',
+            at: p.created_at || inv.created_at,
+            date: new Date(p.paid_at || p.created_at || inv.created_at)
+              .toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }),
+          })),
         });
       });
     }
@@ -3712,7 +3718,10 @@ async function orderMarkPaid(method) {
     if (res.error) throw res.error;
     await supabase.from('invoices').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', f.inv.id);
     await supabase.from('orders').update({ payment_method: method }).eq('id', f.ord.id);
-    await syncDailySalesForOrder(f.ord.id);                       // auto-fill Daily Sales
+    // Weekly/multi-site invoices cover several delivery days, so let the
+    // database work out which days this money belongs to (migration 037)
+    // rather than assuming it's all this one order's date.
+    await syncDailySalesForInvoice(f.inv.id);                     // auto-fill Daily Sales
     if (typeof loadAppData === 'function') await loadAppData();   // refresh Finance/dashboard
     await openOrderModal(f.ord.id);
   } catch (e) {
@@ -6274,7 +6283,12 @@ function pmUpdateBalance() {
   document.getElementById('pmBalance').textContent = '£' + remaining.toFixed(2);
 }
 
-function addPaymentEntry() {
+// Logging a payment here used to change the screen only — nothing was ever
+// written to the database, so the money vanished on the next refresh and
+// never reached Daily Sales. It now saves, updates the invoice status, and
+// refreshes the takings for every day that invoice touches (a weekly invoice
+// can cover four).
+async function addPaymentEntry() {
   const inv = sampleInvoices.find(i => i.id === currentPaymentInvId);
   if (!inv) return;
   const method = document.getElementById('pm-method').value;
@@ -6283,22 +6297,91 @@ function addPaymentEntry() {
   if (!amount || amount <= 0) { alert('Enter a valid amount.'); return; }
   const bal = invBalance(inv);
   if (amount > bal + 0.001) { alert(`Amount exceeds remaining balance of £${bal.toFixed(2)}.`); return; }
-  const today = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
-  inv.payments.push({method, amount, note, date: today});
-  if (invBalance(inv) <= 0.001) { inv.status = 'paid'; }
-  renderPaymentModal(inv);
-  document.getElementById('pm-amount').value = '';
-  document.getElementById('pm-note').value = '';
-  renderInvoices();
+
+  if (!window.supabase) { alert('Not connected to the database — please refresh and try again.'); return; }
+
+  const btn = document.getElementById('pmAddBtn');
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  try {
+    const { data: row, error } = await window.supabase
+      .from('invoice_payments')
+      .insert({ invoice_id: inv.id, method, amount, note: note || null })
+      .select('id, method, amount, note, paid_at').single();
+    if (error) throw error;
+
+    inv.payments.push({
+      id: row.id, method: row.method, amount: parseFloat(row.amount) || 0,
+      note: row.note || '',
+      date: new Date(row.paid_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }),
+    });
+
+    // Settled in full? Close it off. A weekly invoice still collecting
+    // deliveries stays a draft — paying it early shouldn't stop Thursday's
+    // order landing on it.
+    if (invBalance(inv) <= 0.001 && inv.status !== 'draft') {
+      await window.supabase.from('invoices')
+        .update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', inv.id);
+      inv.status = 'paid';
+    }
+
+    await syncDailySalesForInvoice(inv.id);
+
+    renderPaymentModal(inv);
+    document.getElementById('pm-amount').value = '';
+    document.getElementById('pm-note').value = '';
+    renderInvoices();
+    renderDashboard();
+  } catch (err) {
+    console.error('addPaymentEntry error:', err);
+    alert('Could not save that payment — ' + (err.message || err));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label || 'Add this payment'; }
+  }
 }
 
-function removePaymentEntry(idx) {
+async function removePaymentEntry(idx) {
   const inv = sampleInvoices.find(i => i.id === currentPaymentInvId);
   if (!inv) return;
-  inv.payments.splice(idx, 1);
-  if (inv.status === 'paid' && invBalance(inv) > 0) inv.status = 'unpaid';
-  renderPaymentModal(inv);
-  renderInvoices();
+  const p = inv.payments[idx];
+  if (!p) return;
+  if (!confirm(`Remove this £${(Number(p.amount)||0).toFixed(2)} ${p.method === 'cash' ? 'cash' : 'bank'} payment?\n\nThe day's takings will be adjusted to match.`)) return;
+
+  try {
+    if (p.id && window.supabase) {
+      const { error } = await window.supabase.from('invoice_payments').delete().eq('id', p.id);
+      if (error) throw error;
+    }
+    inv.payments.splice(idx, 1);
+
+    if (inv.status === 'paid' && invBalance(inv) > 0 && window.supabase) {
+      await window.supabase.from('invoices')
+        .update({ status: 'sent', paid_at: null }).eq('id', inv.id);
+      inv.status = 'sent';
+    }
+
+    await syncDailySalesForInvoice(inv.id);
+
+    renderPaymentModal(inv);
+    renderInvoices();
+    renderDashboard();
+  } catch (err) {
+    console.error('removePaymentEntry error:', err);
+    alert('Could not remove that payment — ' + (err.message || err));
+  }
+}
+
+// Refresh the takings for every delivery day an invoice's money belongs to.
+// Migration 037 works those days out server-side, because one payment on a
+// weekly invoice is split across several of them.
+async function syncDailySalesForInvoice(invoiceId) {
+  if (!window.supabase || !invoiceId) return;
+  try {
+    await window.supabase.rpc('recompute_daily_sales_for_invoice', { p_invoice_id: invoiceId });
+  } catch (e) {
+    console.error('Daily sales sync failed:', e);
+  }
 }
 
 function exportMonth() {
