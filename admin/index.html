@@ -190,10 +190,17 @@
   .field textarea{min-height:60px;resize:vertical}
   .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .log-items{display:flex;flex-direction:column;gap:8px;margin:12px 0}
-  .log-item-row{display:flex;gap:9px;align-items:center}
-  .log-item-row select{flex:2}
-  .log-item-row input{flex:1}
-  .log-item-row button{flex-shrink:0;width:28px;height:28px;border-radius:7px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);font-size:16px;display:flex;align-items:center;justify-content:center}
+  /* Grid rather than flex: the qty box and the remove button get fixed
+     widths so the × can never be squeezed off the edge of the card. */
+  .log-item-row{display:grid;grid-template-columns:minmax(0,1fr) 62px 32px;gap:7px;align-items:center;margin-bottom:6px}
+  .log-item-row select,.log-item-row input{min-width:0;padding:9px 10px;font-size:12.5px}
+  .log-item-row .item-qty{text-align:center;padding-left:4px;padding-right:4px}
+  .log-item-row button{flex-shrink:0;width:32px;height:34px;border-radius:7px;background:var(--cream);border:1px solid var(--line);color:var(--oxblood);font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+  .log-item-row button:hover{background:#f7e3e3;border-color:#e4bcbc}
+  /* Custom (off-list) item: name + price appear under the dropdown */
+  .log-custom-row{display:grid;grid-template-columns:minmax(0,1fr) 62px 32px;gap:7px;margin:-2px 0 8px}
+  .log-custom-row input{min-width:0;padding:8px 10px;font-size:12.5px}
+  .log-custom-row .lc-price{grid-column:2}
   .add-item-btn{font-size:12px;font-weight:700;color:var(--navy-2);border:1px dashed var(--line);border-radius:8px;padding:8px 14px;width:100%;text-align:left;transition:.14s}
   .add-item-btn:hover{background:var(--cream)}
 
@@ -5308,18 +5315,26 @@ function fillLogFromExtract(ex) {
     document.getElementById('logItemsList').innerHTML = '';
     logItemCount = 0;
     items.forEach(item => {
-      addLogItem();
-      const rows = document.querySelectorAll('.log-item-row');
-      const lastRow = rows[rows.length - 1];
-      const sel = lastRow.querySelector('.item-product');
-      const qtyInput = lastRow.querySelector('.item-qty');
+      const wrap = addLogItem();
+      const sel = wrap.querySelector('.item-product');
       const wanted = (item.product || '').toLowerCase();
+      let hit = false;
       if (wanted) {
         for (const opt of sel.options) {
-          if (opt.value && opt.text.toLowerCase().includes(wanted)) { sel.value = opt.value; break; }
+          if (opt.value && opt.value !== '__custom__' && opt.text.toLowerCase().includes(wanted)) {
+            sel.value = opt.value; hit = true; break;
+          }
         }
       }
-      if (item.qty) qtyInput.value = item.qty;
+      if (hit) {
+        if (item.qty) wrap.querySelector('.item-qty').value = item.qty;
+      } else if (item.product) {
+        // The AI read something that isn't on the product list — hand it over
+        // as a custom line so Jon can price it rather than losing it.
+        wrap.remove();
+        logItemCount--;
+        addLogItem(item.product, item.price ?? '', item.qty || 1);
+      }
     });
     updateLogTotal();
   }
@@ -6914,26 +6929,23 @@ function usePreviousOrder(orderId) {
   logItemCount = 0;
 
   items.forEach(it => {
-    addLogItem();
-    const rows = document.querySelectorAll('.log-item-row');
-    const row  = rows[rows.length - 1];
-    const sel  = row.querySelector('.item-product');
-    const qty  = row.querySelector('.item-qty');
-
+    // Try the product list first. Anything not on it — a one-off Jon sourced
+    // specially, or a line typed onto an invoice by hand — comes back as an
+    // editable custom item rather than a dead entry he can't change.
+    const probe = addLogItem();
+    const sel   = probe.querySelector('.item-product');
     const wanted = `${it.name}|${it.price}`;
-    let match = [...sel.options].find(o => o.value === wanted)
-             || [...sel.options].find(o => o.value.split('|')[0] === it.name);
+    const match = [...sel.options].find(o => o.value === wanted)
+               || [...sel.options].find(o => o.value.split('|')[0] === it.name);
 
-    if (!match) {
-      // Discontinued or one-off line — keep it rather than lose it
-      const opt = document.createElement('option');
-      opt.value = wanted;
-      opt.textContent = `${it.name} — £${it.price.toFixed(2)} (no longer on the list)`;
-      sel.appendChild(opt);
-      match = opt;
+    if (match) {
+      sel.value = match.value;
+      probe.querySelector('.item-qty').value = it.qty;
+    } else {
+      probe.remove();
+      logItemCount--;
+      addLogItem(it.name, it.price, it.qty);
     }
-    sel.value = match.value;
-    qty.value = it.qty;
   });
 
   updateLogTotal();
@@ -6970,13 +6982,9 @@ let logItemCount = 1;
 
 function updateLogTotal() {
   let total = 0;
-  document.querySelectorAll('.log-item-row').forEach(row => {
-    const sel = row.querySelector('.item-product');
-    const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
-    if (sel.value) {
-      const price = parseFloat(sel.value.split('|')[1]) || 0;
-      total += price * qty;
-    }
+  document.querySelectorAll('.log-item-wrap').forEach(wrap => {
+    const it = readLogItemRow(wrap);
+    if (it) total += it.price * it.qty;
   });
 
   // Check if selected customer is exempt before applying the small-order charge
@@ -7018,31 +7026,76 @@ function refreshLogProductOptions() {
   });
 }
 
-function addLogItem() {
+// A row is a wrapper holding the dropdown line and, for a custom item, a
+// second line with its own description and price. Wrapping them keeps the
+// pair together when a row is removed.
+function addLogItem(desc = '', price = null, qty = 1) {
   const list = document.getElementById('logItemsList');
-  const div = document.createElement('div');
-  div.className = 'log-item-row';
-  div.id = 'item-row-' + (++logItemCount);
+  const wrap = document.createElement('div');
+  wrap.className = 'log-item-wrap';
+  wrap.id = 'item-row-' + (++logItemCount);
 
   // Build from live products — fall back to a basic sample list only if nothing loaded
   const opts = logProductOptionsHtml()
     || `<option value="5kg Chicken Fillets|34">5kg Chicken Fillets — £34.00</option>
        <option value="Lean Mince 1kg|12">Lean Mince 1kg — £12.00</option>`;
 
-  div.innerHTML = `
-    <select class="item-product" onchange="updateLogTotal()">
-      <option value="">— select product —</option>
-      ${opts}
-    </select>
-    <input type="number" min="1" value="1" class="item-qty" placeholder="Qty" onchange="updateLogTotal()">
-    <button onclick="removeLogItem(this)">×</button>
+  wrap.innerHTML = `
+    <div class="log-item-row">
+      <select class="item-product" onchange="onLogProductChange(this)">
+        <option value="">— select product —</option>
+        ${opts}
+        <option value="__custom__">✏️ Something else (type it in)</option>
+      </select>
+      <input type="number" min="1" value="${qty}" class="item-qty" placeholder="Qty" onchange="updateLogTotal()">
+      <button type="button" title="Remove this item" onclick="removeLogItem(this)">×</button>
+    </div>
+    <div class="log-custom-row lc-wrap" style="display:none">
+      <input type="text" class="lc-desc" placeholder="What is it? e.g. TBF Select Bacon (Case)" oninput="updateLogTotal()">
+      <input type="number" class="lc-price" min="0" step="0.01" placeholder="£" oninput="updateLogTotal()">
+    </div>
   `;
-  list.appendChild(div);
+  list.appendChild(wrap);
+
+  // Pre-filled custom line (used when copying a past order that had one)
+  if (desc) {
+    const sel = wrap.querySelector('.item-product');
+    sel.value = '__custom__';
+    wrap.querySelector('.lc-wrap').style.display = 'grid';
+    wrap.querySelector('.lc-desc').value  = desc;
+    wrap.querySelector('.lc-price').value = (price == null ? '' : price);
+  }
+  return wrap;
+}
+
+// Show the description/price boxes only when "Something else" is chosen.
+function onLogProductChange(sel) {
+  const wrap = sel.closest('.log-item-wrap');
+  const cw   = wrap?.querySelector('.lc-wrap');
+  if (cw) cw.style.display = (sel.value === '__custom__') ? 'grid' : 'none';
+  updateLogTotal();
+}
+
+// What's on this row: either the chosen product, or the typed-in custom item.
+function readLogItemRow(wrap) {
+  const sel = wrap.querySelector('.item-product');
+  const qty = parseInt(wrap.querySelector('.item-qty')?.value, 10) || 1;
+  if (!sel) return null;
+
+  if (sel.value === '__custom__') {
+    const name  = (wrap.querySelector('.lc-desc')?.value || '').trim();
+    const price = parseFloat(wrap.querySelector('.lc-price')?.value);
+    if (!name) return null;
+    return { product: name, price: isNaN(price) ? 0 : price, qty };
+  }
+  if (!sel.value) return null;
+  const [product, price] = sel.value.split('|');
+  return { product, price: parseFloat(price) || 0, qty };
 }
 
 function removeLogItem(btn) {
-  const rows = document.querySelectorAll('.log-item-row');
-  if (rows.length > 1) { btn.closest('.log-item-row').remove(); updateLogTotal(); }
+  const rows = document.querySelectorAll('.log-item-wrap');
+  if (rows.length > 1) { btn.closest('.log-item-wrap').remove(); updateLogTotal(); }
 }
 
 async function saveLogOrder() {
@@ -7051,12 +7104,14 @@ async function saveLogOrder() {
   if (!name || !address) { alert('Please enter customer name and address.'); return; }
 
   const items = [];
-  document.querySelectorAll('.log-item-row').forEach(row => {
-    const val = row.querySelector('.item-product').value;
-    const qty = parseInt(row.querySelector('.item-qty').value) || 1;
-    if (val) items.push({ product: val.split('|')[0], qty, price: parseFloat(val.split('|')[1]) });
+  document.querySelectorAll('.log-item-wrap').forEach(wrap => {
+    const it = readLogItemRow(wrap);
+    if (it) items.push(it);
   });
-  if (items.length === 0) { alert('Please add at least one item.'); return; }
+  if (items.length === 0) {
+    alert('Please add at least one item.\n\nIf you picked "Something else", make sure you\'ve typed what it is.');
+    return;
+  }
 
   // Multi-site customers: which address is this drop going to? Getting this
   // wrong puts the delivery under the wrong heading on their invoice, so it's
@@ -10333,7 +10388,8 @@ const HELP_PAGES = {
       { icon:'✏️', title:'What is this page?', body:'Use Log Order to record any order that came in by phone, text, or social media — so everything ends up in one place.' },
       { icon:'📋', title:'Paste a message (AI fills it in)', body:'Got an order in a WhatsApp or Facebook message? Tap <strong>📋 Paste a message</strong>, paste the whole thing in, and press <strong>✦ Extract details</strong>. The AI reads it and fills in the customer, address, day and items for you. Always give it a quick check before saving — then it\'s saved like any other order (and a receipt/invoice is created automatically).' },
       { icon:'👤', title:'Customer lookup', body:'Or enter it manually: start typing a customer\'s name in the search box. If they\'ve ordered before, they\'ll appear in the list and their address fills in automatically.' },
-      { icon:'🛒', title:'Adding items', body:'Select a product from the dropdown, enter the quantity, and press <strong>Add item</strong>. Repeat for each product in the order. The total updates automatically.' },
+      { icon:'🛒', title:'Adding items', body:'Select a product from the dropdown, enter the quantity, and press <strong>+ Add another item</strong>. Repeat for each product in the order. The total updates automatically. The <strong>×</strong> next to a line removes it.' },
+      { icon:'✏️', title:'Something that\'s not on the list', body:'Sourced something specially, or selling something you haven\'t added to your products yet? Pick <strong>✏️ Something else (type it in)</strong> at the bottom of the product dropdown — a box appears for what it is and what you\'re charging. It goes on the order and their invoice exactly like anything else. Handy for one-offs you don\'t want cluttering up your product list.' },
       { icon:'📅', title:'Delivery day', body:'The delivery day list shows the days you\'ve opened on the <strong>Schedule</strong> page, each with its date. Pick the one the customer wants and the order lands in that day\'s run. If a day you need isn\'t listed, open it first on the Schedule page.' },
       { icon:'📍', title:'Customers with more than one address', body:'If a customer has extra delivery sites set up (Customers page → Edit → <strong>Delivery sites</strong>) — e.g. a business with two locations — a <strong>Delivery site</strong> box appears once you pick them from the lookup. You must choose which address this delivery is going to: their <strong>main address</strong> or one of the extra sites. It shows on the delivery run pick list and route so you go to the right place, and it decides which section of their invoice the items appear under.' },
       { icon:'🔁', title:'Order the same again (big time saver)', body:'Most trade customers order the same thing every drop. As soon as the customer is filled in, an <strong>Order the same again</strong> panel appears listing what they\'ve had recently — the date, the site it went to and what was on it. Tap <strong>Use this</strong> and every item loads into the form, then just change what\'s different: bump a quantity, add a line, remove one. Nothing is saved until you press Save order, so you can\'t break anything by having a look. It lists <strong>invoices you\'ve raised by hand</strong> as well as orders you\'ve logged, marked with an <strong>invoice</strong> tag — so anything already on the system can be copied.' },
