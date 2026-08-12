@@ -902,6 +902,14 @@
       </div>
     </div>
 
+    <!-- Repeat orders: most trade customers order the same thing every drop.
+         Loads a previous order's items in one tap so Jon only edits what changed. -->
+    <div id="lo-repeat-wrap" style="display:none;background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:14px">
+      <label style="font-weight:800;font-size:13px">Order the same again</label>
+      <p style="font-size:11.5px;color:var(--ink-soft);margin:2px 0 10px">Tap one of their recent orders to load it in, then change whatever's different. Nothing is saved until you press Save order.</p>
+      <div id="lo-repeat-list" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+
     <!-- Backdating (migration 036): Jon needs to enter deliveries he has
          already done, to catch the system up with the week he's just worked. -->
     <div class="field" id="lo-pastdate-wrap" style="display:none;background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:12px 14px">
@@ -1763,6 +1771,13 @@
         <input type="date" id="inv-date" style="background:var(--paper);border:1.5px solid var(--line);border-radius:9px;padding:11px 13px;font-size:13px;width:100%">
         <p id="inv-week-note" style="font-size:11.5px;color:var(--ink-soft);margin-top:6px;display:none"></p>
       </div>
+      <!-- Same repeat shortcut as Log Order — Jon re-types these lines too -->
+      <div id="inv-repeat-wrap" style="display:none;background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-top:14px">
+        <label style="font-weight:800;font-size:13px">Copy a recent order</label>
+        <p style="font-size:11.5px;color:var(--ink-soft);margin:2px 0 10px">Loads that order's items in as invoice lines. Add or remove whatever's different.</p>
+        <div id="inv-repeat-list" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
+
       <div style="margin-top:14px">
         <p style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Order items</p>
         <div id="invItemsList" style="display:flex;flex-direction:column;gap:7px"></div>
@@ -1811,12 +1826,35 @@
       <h2 style="font-family:var(--display);font-size:20px;font-weight:600;color:var(--navy);margin:0">Saved invoices &amp; receipts</h2>
       <div style="display:flex;gap:6px">
         <button class="btn-add" style="font-size:12px;padding:7px 13px" onclick="renderInvoices('all')">All</button>
-        <button class="btn-add" style="font-size:12px;padding:7px 13px" onclick="renderInvoices('draft')" title="Multi-site customers' running tabs, not yet sent">Running</button>
+        <button class="btn-add" style="font-size:12px;padding:7px 13px" onclick="renderInvoices('draft')" title="Running weekly invoices, not yet sent">Running</button>
         <button class="btn-add" style="font-size:12px;padding:7px 13px" onclick="renderInvoices('sent')">Unpaid</button>
         <button class="btn-add" style="font-size:12px;padding:7px 13px" onclick="renderInvoices('paid')">Paid</button>
         <button class="btn-add" style="font-size:12px;padding:7px 13px" onclick="renderInvoices('overdue')">Overdue</button>
       </div>
     </div>
+
+    <!-- Search & date range — Jon shouldn't have to scroll to find an invoice -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;background:#fff;border:1px solid var(--line-soft);border-radius:11px;padding:12px 14px">
+      <div style="flex:2;min-width:190px">
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Search</label>
+        <input type="search" id="inv-search" placeholder="Customer name or invoice number"
+          oninput="renderInvoices()" style="width:100%;background:var(--paper);border:1.5px solid var(--line);border-radius:9px;padding:10px 12px;font-size:13px">
+      </div>
+      <div style="flex:1;min-width:135px">
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">From</label>
+        <input type="date" id="inv-from" onchange="renderInvoices()"
+          style="width:100%;background:var(--paper);border:1.5px solid var(--line);border-radius:9px;padding:10px 12px;font-size:13px">
+      </div>
+      <div style="flex:1;min-width:135px">
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">To</label>
+        <input type="date" id="inv-to" onchange="renderInvoices()"
+          style="width:100%;background:var(--paper);border:1.5px solid var(--line);border-radius:9px;padding:10px 12px;font-size:13px">
+      </div>
+      <button onclick="clearInvoiceSearch()" title="Clear the search and dates"
+        style="padding:10px 14px;border-radius:9px;font-weight:800;font-size:12.5px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer">Clear</button>
+    </div>
+
+    <div id="invoiceCount" style="font-size:11.5px;color:var(--ink-soft);margin-bottom:9px"></div>
     <div id="invoiceList" style="display:flex;flex-direction:column;gap:9px"></div>
   </div>
 </div>
@@ -5943,14 +5981,70 @@ function renderFinance() {
   if (typeof loadDailySales === 'function') loadDailySales();
 }
 
+// Remembered so typing in the search box doesn't lose the status filter
+// (and so the payment/split/merge actions can re-render without resetting it).
+let invoiceStatusFilter = 'all';
+
+function clearInvoiceSearch() {
+  ['inv-search', 'inv-from', 'inv-to'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  renderInvoices();
+}
+
+// The date an invoice is filtered and searched on: the week it covers for a
+// weekly invoice, otherwise the day it was raised.
+function invoiceDateKey(inv) {
+  if (inv.weekStart) return inv.weekStart;
+  if (inv.created) return String(inv.created).slice(0, 10);
+  return '';
+}
+
 function renderInvoices(filter) {
   const list = document.getElementById('invoiceList');
   if (!list) return;
-  const shown = filter && filter !== 'all'
-    ? sampleInvoices.filter(i => i.status === filter)
-    : sampleInvoices;
+
+  if (filter !== undefined) invoiceStatusFilter = filter || 'all';
+  const status = invoiceStatusFilter;
+
+  const q    = (document.getElementById('inv-search')?.value || '').trim().toLowerCase();
+  const from = document.getElementById('inv-from')?.value || '';
+  const to   = document.getElementById('inv-to')?.value   || '';
+
+  let shown = status && status !== 'all'
+    ? sampleInvoices.filter(i => i.status === status)
+    : sampleInvoices.slice();
+
+  if (q) {
+    shown = shown.filter(i =>
+      String(i.name || '').toLowerCase().includes(q) ||
+      String(i.ref  || '').toLowerCase().includes(q)
+    );
+  }
+  if (from) shown = shown.filter(i => { const d = invoiceDateKey(i); return d && d >= from; });
+  if (to)   shown = shown.filter(i => { const d = invoiceDateKey(i); return d && d <= to;   });
+
+  // Running total of what's on screen — handy when Jon filters to one
+  // customer or one week and wants to know what they owe.
+  const countEl = document.getElementById('invoiceCount');
+  if (countEl) {
+    const isFiltered = q || from || to || (status && status !== 'all');
+    if (!isFiltered) {
+      countEl.textContent = '';
+    } else {
+      const sum = shown.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+      countEl.innerHTML = `Showing <strong>${shown.length}</strong> of ${sampleInvoices.length} · total <strong>£${sum.toFixed(2)}</strong>`;
+    }
+  }
+
   if (!shown.length) {
-    list.innerHTML = `<div style="text-align:center;padding:34px 20px;color:var(--ink-soft);font-size:13px;background:#fff;border:1px solid var(--line-soft);border-radius:11px">No invoices or receipts yet. They appear here automatically when an order comes in — or build one above.</div>`;
+    const searching = q || from || to;
+    list.innerHTML = `<div style="text-align:center;padding:34px 20px;color:var(--ink-soft);font-size:13px;background:#fff;border:1px solid var(--line-soft);border-radius:11px">${
+      searching
+        ? 'Nothing matches that search. Try a different name, or press <strong>Clear</strong> to see everything again.'
+        : 'No invoices or receipts yet. They appear here automatically when an order comes in — or build one above.'
+    }</div>`;
     return;
   }
   list.innerHTML = shown.map(inv => {
@@ -6512,6 +6606,7 @@ async function selectCustomer(id) {
   closeLookup();
   updateLogTotal();
   renderLogSitePicker(c.id);
+  loadRecentOrders(c.id);
 
   const nameField = document.getElementById('lo-name');
   nameField.style.borderColor = 'var(--green)';
@@ -6550,6 +6645,115 @@ function escapeHtmlAttr(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ── Repeat orders ──────────────────────────────────────────────
+// Jon's trade customers take the same delivery two, three or four times a
+// week, often identical or near enough. Re-keying every line each time is
+// the single most time-consuming thing on this screen, so once a customer
+// is chosen we offer their recent orders to copy in and adjust.
+// orderId → { items:[{name, price, qty}], siteLabel }
+// Shared by the Log Order and invoice-builder panels so a tapped order
+// behaves the same in both, and so labels never have to be squeezed
+// through an inline onclick attribute.
+let recentOrdersCache = {};
+
+async function loadRecentOrders(custId) {
+  const wrap = document.getElementById('lo-repeat-wrap');
+  const list = document.getElementById('lo-repeat-list');
+  if (!wrap || !list) return;
+  wrap.style.display = 'none';
+  list.innerHTML = '';
+  if (!custId || !supabase) return;
+
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id, created_at, total_amount, site_id, delivery_slots(delivery_date, day_label), customer_sites(label), order_items(product_name, unit_price, quantity)')
+      .eq('customer_id', custId)
+      .neq('status', 'cancelled')
+      .order('created_at', { ascending: false })
+      .limit(8);
+    if (error) throw error;
+
+    const orders = (data || []).filter(o => (o.order_items || []).length);
+    if (!orders.length) return;
+
+    list.innerHTML = orders.map(o => {
+      const items = (o.order_items || []).map(i => ({
+        name:  i.product_name,
+        price: parseFloat(i.unit_price) || 0,
+        qty:   parseInt(i.quantity, 10) || 1,
+      }));
+      recentOrdersCache[o.id] = { items, siteLabel: o.customer_sites?.label || '' };
+
+      const when = o.delivery_slots?.delivery_date
+        ? new Date(o.delivery_slots.delivery_date + 'T12:00:00')
+            .toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' })
+        : new Date(o.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+      const site  = o.customer_sites?.label ? ' · ' + o.customer_sites.label : '';
+      const total = items.reduce((s, i) => s + i.price * i.qty, 0);
+      const summary = items.map(i => `${i.name} ×${i.qty}`).join(', ');
+
+      return `
+        <div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 11px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:800;color:var(--ink)">${escapeHtmlAttr(when + site)}</div>
+            <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtmlAttr(summary)}</div>
+          </div>
+          <div style="font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy);white-space:nowrap">£${total.toFixed(2)}</div>
+          <button type="button" onclick="usePreviousOrder('${o.id}')"
+            style="padding:7px 12px;border-radius:7px;font-weight:800;font-size:11.5px;background:var(--navy);color:#fff;border:none;cursor:pointer;white-space:nowrap">Use this</button>
+        </div>`;
+    }).join('');
+
+    wrap.style.display = 'block';
+  } catch (err) {
+    console.error('loadRecentOrders error:', err);   // never blocks logging an order
+  }
+}
+
+// Load a previous order's lines into the form. Anything no longer on the
+// product list is still added, at the price it was sold for, so a one-off
+// item Jon sourced specially isn't silently dropped.
+function usePreviousOrder(orderId) {
+  const items = recentOrdersCache[orderId]?.items;
+  if (!items || !items.length) return;
+
+  document.getElementById('logItemsList').innerHTML = '';
+  logItemCount = 0;
+
+  items.forEach(it => {
+    addLogItem();
+    const rows = document.querySelectorAll('.log-item-row');
+    const row  = rows[rows.length - 1];
+    const sel  = row.querySelector('.item-product');
+    const qty  = row.querySelector('.item-qty');
+
+    const wanted = `${it.name}|${it.price}`;
+    let match = [...sel.options].find(o => o.value === wanted)
+             || [...sel.options].find(o => o.value.split('|')[0] === it.name);
+
+    if (!match) {
+      // Discontinued or one-off line — keep it rather than lose it
+      const opt = document.createElement('option');
+      opt.value = wanted;
+      opt.textContent = `${it.name} — £${it.price.toFixed(2)} (no longer on the list)`;
+      sel.appendChild(opt);
+      match = opt;
+    }
+    sel.value = match.value;
+    qty.value = it.qty;
+  });
+
+  updateLogTotal();
+
+  const wrap = document.getElementById('lo-repeat-wrap');
+  if (wrap) {
+    wrap.style.borderColor = 'var(--green)';
+    setTimeout(() => { wrap.style.borderColor = ''; }, 1200);
+  }
+  document.getElementById('logItemsList')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function closeLookup() {
@@ -6856,6 +7060,10 @@ function clearLogForm() {
   if (siteWrap) siteWrap.style.display = 'none';
   const siteSel = document.getElementById('lo-site');
   if (siteSel) siteSel.innerHTML = '';
+  const repeatWrap = document.getElementById('lo-repeat-wrap');
+  if (repeatWrap) repeatWrap.style.display = 'none';
+  const repeatList = document.getElementById('lo-repeat-list');
+  if (repeatList) repeatList.innerHTML = '';
   // Keep the chosen date when catching up several past orders in a row —
   // Jon is usually entering a whole Monday's worth at once.
   const slotSel = document.getElementById('lo-slot');
@@ -8232,7 +8440,97 @@ async function loadInvoiceCustomer() {
     } catch (e) { console.error('Trade prices load failed:', e); }
   }
   renderInvWeekNote();
+  loadInvoiceRecentOrders(custId);
   addInvItem(); // start with one blank row
+}
+
+// Recent orders offered on the invoice builder, same idea as Log Order.
+// Reuses recentOrdersCache so an order tapped in either place behaves alike.
+async function loadInvoiceRecentOrders(custId) {
+  const wrap = document.getElementById('inv-repeat-wrap');
+  const list = document.getElementById('inv-repeat-list');
+  if (!wrap || !list) return;
+  wrap.style.display = 'none';
+  list.innerHTML = '';
+  if (!custId || !supabase || !/^[0-9a-f-]{36}$/i.test(custId)) return;
+
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id, created_at, site_id, delivery_slots(delivery_date), customer_sites(label), order_items(product_name, unit_price, quantity)')
+      .eq('customer_id', custId)
+      .neq('status', 'cancelled')
+      .order('created_at', { ascending: false })
+      .limit(8);
+    if (error) throw error;
+
+    const orders = (data || []).filter(o => (o.order_items || []).length);
+    if (!orders.length) return;
+
+    list.innerHTML = orders.map(o => {
+      const items = (o.order_items || []).map(i => ({
+        name:  i.product_name,
+        price: parseFloat(i.unit_price) || 0,
+        qty:   parseInt(i.quantity, 10) || 1,
+      }));
+      recentOrdersCache[o.id] = { items, siteLabel: o.customer_sites?.label || '' };
+
+      const when = o.delivery_slots?.delivery_date
+        ? new Date(o.delivery_slots.delivery_date + 'T12:00:00')
+            .toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' })
+        : new Date(o.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+      const site  = o.customer_sites?.label ? ' · ' + o.customer_sites.label : '';
+      const total = items.reduce((s, i) => s + i.price * i.qty, 0);
+
+      return `
+        <div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 11px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:800;color:var(--ink)">${escapeHtmlAttr(when + site)}</div>
+            <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtmlAttr(items.map(i => i.name + ' ×' + i.qty).join(', '))}</div>
+          </div>
+          <div style="font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy);white-space:nowrap">£${total.toFixed(2)}</div>
+          <button type="button" onclick="useOrderOnInvoice('${o.id}')"
+            style="padding:7px 12px;border-radius:7px;font-weight:800;font-size:11.5px;background:var(--navy);color:#fff;border:none;cursor:pointer;white-space:nowrap">Use this</button>
+        </div>`;
+    }).join('');
+
+    wrap.style.display = 'block';
+  } catch (err) {
+    console.error('loadInvoiceRecentOrders error:', err);
+  }
+}
+
+// Append a past order's lines to the invoice being built. Appends rather than
+// replaces, so Jon can stack Monday's and Thursday's onto one weekly invoice.
+// If that order went to a named site, a site header goes in above its lines.
+function useOrderOnInvoice(orderId) {
+  const entry = recentOrdersCache[orderId];
+  const items = entry?.items;
+  const siteLabel = entry?.siteLabel || '';
+  if (!items || !items.length) return;
+
+  // Drop the blank starter row so the first copy doesn't leave a gap
+  invItems = invItems.filter(r => r.type === 'header' || r.desc);
+
+  if (siteLabel) {
+    const id = Date.now() + Math.floor(Math.random() * 1000);
+    invItems.push({ id, type: 'header', label: siteLabel });
+  }
+  items.forEach((it, n) => {
+    invItems.push({
+      id: Date.now() + n + Math.floor(Math.random() * 1000),
+      type: 'item', productId: null,
+      desc: it.name, qty: it.qty, price: it.price,
+    });
+  });
+
+  renderInvItems();
+  currentInvoiceRef = null;   // contents changed — regenerate the preview
+  const wrap = document.getElementById('inv-repeat-wrap');
+  if (wrap) {
+    wrap.style.borderColor = 'var(--green)';
+    setTimeout(() => { wrap.style.borderColor = ''; }, 1200);
+  }
 }
 
 // Tell Jon which week a weekly-billed customer's invoice will land in — the
@@ -8348,6 +8646,12 @@ function resetInvoiceBuilder() {
   INV_TRADE_PRICES = {};
   const sel = document.getElementById('inv-customer');
   if (sel) sel.value = '';
+  const rWrap = document.getElementById('inv-repeat-wrap');
+  if (rWrap) rWrap.style.display = 'none';
+  const rList = document.getElementById('inv-repeat-list');
+  if (rList) rList.innerHTML = '';
+  const wkNote = document.getElementById('inv-week-note');
+  if (wkNote) wkNote.style.display = 'none';
   renderInvItems();
   const prev = document.getElementById('invoicePreview');
   if (prev) prev.innerHTML = `
@@ -9882,6 +10186,7 @@ const HELP_PAGES = {
       { icon:'🛒', title:'Adding items', body:'Select a product from the dropdown, enter the quantity, and press <strong>Add item</strong>. Repeat for each product in the order. The total updates automatically.' },
       { icon:'📅', title:'Delivery day', body:'The delivery day list shows the days you\'ve opened on the <strong>Schedule</strong> page, each with its date. Pick the one the customer wants and the order lands in that day\'s run. If a day you need isn\'t listed, open it first on the Schedule page.' },
       { icon:'📍', title:'Customers with more than one address', body:'If a customer has extra delivery sites set up (Customers page → Edit → <strong>Delivery sites</strong>) — e.g. a business with two locations — a <strong>Delivery site</strong> box appears once you pick them from the lookup. You must choose which address this delivery is going to: their <strong>main address</strong> or one of the extra sites. It shows on the delivery run pick list and route so you go to the right place, and it decides which section of their invoice the items appear under.' },
+      { icon:'🔁', title:'Order the same again (big time saver)', body:'Most trade customers order the same thing every drop. As soon as you pick the customer, an <strong>Order the same again</strong> panel appears listing their recent orders with the date, the site it went to and what was on it. Tap <strong>Use this</strong> and every item loads into the form — then just change what\'s different: bump a quantity, add a line, remove one. Nothing is saved until you press Save order, so you can\'t break anything by having a look.' },
       { icon:'⏪', title:'Entering an order you\'ve already delivered', body:'Catching the system up with deliveries you\'ve already done? In the <strong>Delivery slot</strong> list choose <strong>📅 A delivery I\'ve already done</strong> at the bottom, then pick the date it went out. It\'s saved as already delivered, so it won\'t appear on your run sheet or pick list — it just goes on the books, into that day\'s takings, and onto the customer\'s invoice for that week. The form stays open so you can enter the next one straight away.' },
       { icon:'💬', title:'Notes', body:'Use the notes box for anything special — e.g. "leave by back gate" or "call on arrival". Jon will see this on the order card.' },
       { icon:'💰', title:'Minimum order', body:'Orders under £20 will automatically have the £5 small-order charge added. Customers marked as exempt (family/friends) won\'t see this charge.' },
@@ -9960,6 +10265,8 @@ const HELP_PAGES = {
       { icon:'⚡', title:'Created automatically from orders', body:'Every order now creates its own record for you — a <strong>receipt</strong> for domestic customers (marked paid) and an <strong>invoice</strong> for trade customers (30-day terms). Whether the order came from the website or you logged it yourself, the matching receipt/invoice lands here automatically. No need to type it out again.' },
       { icon:'➕', title:'Building one by hand', body:'Need a one-off? Select the customer — their details fill in automatically. For each line, pick an item from the <strong>availability list</strong> (the price fills in — a trade customer\'s <strong>agreed trade price</strong> is used automatically where you\'ve set one) or choose <strong>✏️ Custom item</strong> for something you\'ve sourced specially, with its own description and price. Press <strong>Generate invoice</strong> to preview, then <strong>Save invoice</strong>. It picks receipt or invoice automatically based on the customer.' },
       { icon:'🛒', title:'One-off items you\'ve sourced for a customer', body:'A trade customer asks you to get them something that\'s not on your list? Two easy ways to bill it: build an invoice by hand and use <strong>✏️ Custom item</strong> for each special line, or — if they\'ve already got an order that day — open the order on the delivery run, tap <strong>➕ Add an item</strong>, and type the one-off item with its price. Either way it lands on their invoice like anything else.' },
+      { icon:'🔍', title:'Finding an invoice', body:'Don\'t scroll — use the <strong>Search</strong> box above the list. Type any part of a customer\'s name or an invoice number and the list narrows as you type. Use <strong>From</strong> and <strong>To</strong> to pull up a particular week or month, on their own or alongside the search. It shows how many match and what they add up to, so you can see at a glance what one customer owes for a week. Press <strong>Clear</strong> to go back to everything. The All / Running / Unpaid / Paid / Overdue buttons still work on top of the search.' },
+      { icon:'🔁', title:'Copying a recent order onto an invoice', body:'Building an invoice by hand for a regular? Pick the customer and a <strong>Copy a recent order</strong> panel appears. Tap <strong>Use this</strong> and that order\'s items drop straight in as invoice lines at the prices they were charged. Tap a second one to add it underneath — handy for putting Monday\'s and Thursday\'s deliveries on one weekly invoice. If the order went to a named site, its heading goes in automatically.' },
       { icon:'🗓️', title:'Weekly invoices', body:'A customer set to <strong>one invoice a week</strong> gets a single running invoice instead of one per delivery. It shows here marked <strong>this week</strong> with the dates it covers, and every order you log for them that week is added to it. Each delivery gets its own heading and subtotal so they can see exactly what came when, with one grand total at the bottom. It closes on its own each Monday — or press <strong>Finalise &amp; send</strong> to send it early.' },
       { icon:'✂️', title:'Splitting a weekly invoice up', body:'Customer changed their mind and wants each delivery billed separately? Open the <strong>Actions</strong> menu on the running invoice and choose <strong>Split into one per delivery</strong>. Each delivery becomes its own invoice, dated the day it went out. Nothing is sent to the customer — the new invoices just appear in this list for you to check.' },
       { icon:'🧾', title:'Combining a week onto one invoice', body:'The other way round: if you\'ve logged a week\'s deliveries separately and want to send one bill, open <strong>Actions</strong> on any of them and choose <strong>Combine this week onto one</strong>. Every unpaid invoice for that customer that week is brought together, grouped by delivery and by site. Anything already marked paid is left exactly as it is.' },
