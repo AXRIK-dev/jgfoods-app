@@ -331,6 +331,21 @@ Depends on `current_user_role()` (migrations 006/012), so run those first.
 
 ---
 
+### 36. `036_weekly_invoicing.sql`
+**What it does:** Lets a customer be billed **once a week instead of once per delivery**, and lets Jon enter orders and invoices for **dates that have already passed**.
+
+- `customers.billing_mode` — `per_delivery` (default, unchanged for everyone) or `weekly`. On weekly, every delivery in the same **Monday–Sunday** week collects onto one invoice, which closes automatically at the week boundary. This finally separates "how many addresses has this customer got" (`customer_sites`) from "how often do they want a bill" — migration 032 tangled the two together, so a single-site customer like Tasty Bites couldn't have weekly billing at all.
+- `invoices.week_start` / `week_end` + a partial unique index, so there's only ever **one open weekly invoice per customer per week**. Once finalised, a late order for that week correctly starts a fresh invoice rather than reopening one already sent.
+- `invoice_items.delivery_date` — lets a weekly invoice print a heading and subtotal **per drop**, so a customer taking four deliveries can check it against their own paperwork. Backfilled for existing lines.
+- `ensure_delivery_slot(date)` — returns the slot for any date, creating past ones **closed and confirmed** so they never appear as a bookable day or clutter the runs page.
+- `split_invoice_by_delivery(invoice_id)` — breaks a weekly invoice back into one invoice per delivery. Refuses if payments are already logged against it.
+- `merge_week_invoices(customer_id, week_start)` — the reverse. Refuses to touch anything already **paid**, and carries part-payments across rather than letting them cascade-delete.
+- Backfill: existing multi-site customers are moved to `weekly`, so Billy Bunters carries on exactly as he was.
+
+**When to run:** After 032 (needs `customer_sites`, `orders.invoice_id`, `recalc_invoice_totals`) and 033. Safe on the live database — idempotent and additive. Run it **before** deploying the updated admin, since the new columns must exist before the new code queries them.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

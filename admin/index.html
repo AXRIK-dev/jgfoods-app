@@ -887,7 +887,7 @@
     <div class="field-row">
       <div class="field">
         <label>Delivery slot *</label>
-        <select id="lo-slot">
+        <select id="lo-slot" onchange="onLogSlotChange()">
           <option value="mon">Monday</option>
           <option value="wed">Wednesday</option>
           <option value="thu">Thursday</option>
@@ -900,6 +900,14 @@
           <option value="trade">Trade / Commercial</option>
         </select>
       </div>
+    </div>
+
+    <!-- Backdating (migration 036): Jon needs to enter deliveries he has
+         already done, to catch the system up with the week he's just worked. -->
+    <div class="field" id="lo-pastdate-wrap" style="display:none;background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:12px 14px">
+      <label style="font-weight:800;font-size:13px">Date this was delivered *</label>
+      <p style="font-size:11.5px;color:var(--ink-soft);margin:2px 0 8px">Pick the day it actually went out. It'll be saved as already delivered, so it won't show up on your run sheet or pick list — it just goes on the books and on their invoice for that week.</p>
+      <input type="date" id="lo-pastdate">
     </div>
 
     <div class="field">
@@ -1751,8 +1759,9 @@
         </select>
       </div>
       <div class="field">
-        <label>Invoice date</label>
+        <label>Invoice date <span style="font-weight:400;color:var(--ink-soft)">(set it back to write up a past week)</span></label>
         <input type="date" id="inv-date" style="background:var(--paper);border:1.5px solid var(--line);border-radius:9px;padding:11px 13px;font-size:13px;width:100%">
+        <p id="inv-week-note" style="font-size:11.5px;color:var(--ink-soft);margin-top:6px;display:none"></p>
       </div>
       <div style="margin-top:14px">
         <p style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Order items</p>
@@ -2154,6 +2163,15 @@
         <input id="ec-site-label" type="text" placeholder="Site name / address, e.g. 4a Russell Road, Birkenhead" style="flex:1">
         <button onclick="addCustomerSite()" style="padding:0 14px;border-radius:8px;font-weight:800;font-size:12.5px;background:var(--navy);color:#fff;border:none;cursor:pointer;white-space:nowrap">+ Add site</button>
       </div>
+    </div>
+    <div class="field" style="background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:12px 14px">
+      <label style="font-weight:800;font-size:13px">How this customer is invoiced</label>
+      <p style="font-size:11.5px;color:var(--ink-soft);margin:2px 0 10px">Most customers want an invoice for every delivery. Switch to weekly for the ones who take several deliveries a week and want one bill for the lot.</p>
+      <select id="ec-billing">
+        <option value="per_delivery">An invoice for every delivery</option>
+        <option value="weekly">One invoice a week (all that week's deliveries together)</option>
+      </select>
+      <p id="ec-billing-note" style="font-size:11.5px;color:var(--ink-soft);margin-top:8px"></p>
     </div>
     <div class="field"><label>Referred by <span style="font-weight:400;color:var(--ink-soft)">(optional)</span></label><input id="ec-referredby" type="text" placeholder="e.g. Sarah Taylor"></div>
     <div class="field" style="display:flex;align-items:center;gap:10px;background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:12px 14px">
@@ -2648,7 +2666,7 @@ async function loadAppData() {
 
       supabase
         .from('customers')
-        .select('id, name, customer_type, phone, email, address_line_1, notes, cash_tab, tab_settle_day, is_vip, trade_status, show_trade_prices, invoice_address')
+        .select('id, name, customer_type, phone, email, address_line_1, notes, cash_tab, tab_settle_day, is_vip, trade_status, show_trade_prices, invoice_address, billing_mode')
         .eq('is_active', true)
         .order('name'),
 
@@ -2666,7 +2684,7 @@ async function loadAppData() {
 
       supabase
         .from('invoices')
-        .select('id, order_id, invoice_number, invoice_type, total_amount, status, created_at, customers (name, customer_type), invoice_payments (method, amount, created_at)')
+        .select('id, order_id, invoice_number, invoice_type, total_amount, status, created_at, week_start, week_end, customer_id, customers (name, customer_type, billing_mode), invoice_payments (method, amount, created_at)')
         .order('created_at', { ascending: false })
         .limit(200),
 
@@ -2731,6 +2749,7 @@ async function loadAppData() {
         tradeStatus:     c.trade_status || null,
         showTradePrices: c.show_trade_prices === true,
         invoiceAddress:  c.invoice_address || '',
+        billingMode:     c.billing_mode || 'per_delivery',   // migration 036 — 'per_delivery' or 'weekly'
         orders:       0,
         total:        0,
         lastOrder:    '',
@@ -2784,8 +2803,13 @@ async function loadAppData() {
         sampleInvoices.push({
           id:       inv.id,
           orderId:  inv.order_id || null,
+          custId:   inv.customer_id || null,
           ref:      inv.invoice_number || '',
           name:     inv.customers?.name || '',
+          // migration 036 — weekly invoicing
+          weekStart:   inv.week_start || null,
+          weekEnd:     inv.week_end   || null,
+          billingMode: inv.customers?.billing_mode || 'per_delivery',
           custType: inv.customers?.customer_type === 'commercial' ? 'trade' : (inv.customers?.customer_type || (ord?.type) || 'domestic'),
           invType:  inv.invoice_type || 'invoice',   // 'invoice' or 'receipt' — decides how "Finalise" closes a running draft
           dayLabel: ord?.dayLabel || '',
@@ -5027,8 +5051,33 @@ function editCustomer(id) {
   document.getElementById('ec-referredby').value = c.referredBy || '';
   document.getElementById('ec-exempt').checked = c.exempt || false;
   document.getElementById('ec-notes').value = c.notes || '';
+  const billSel = document.getElementById('ec-billing');
+  if (billSel) {
+    billSel.value = c.billingMode || 'per_delivery';
+    billSel.onchange = renderEcBillingNote;
+  }
+  renderEcBillingNote();
   renderEcSites();
   document.getElementById('editCustomerModal').classList.add('show');
+}
+
+// Plain-English explanation of what the chosen invoicing setting means for
+// THIS customer — the wording changes depending on whether they have sites.
+function renderEcBillingNote() {
+  const note = document.getElementById('ec-billing-note');
+  const sel  = document.getElementById('ec-billing');
+  if (!note || !sel) return;
+  const custId   = document.getElementById('ec-id').value;
+  const siteCount = (customerSitesByCustomer[custId] || []).length;
+  if (sel.value === 'weekly') {
+    note.innerHTML = siteCount
+      ? `✅ Every delivery Monday to Sunday goes onto <strong>one invoice</strong>, with a subtotal for each of their ${siteCount + 1} addresses and one grand total. A new invoice starts automatically each Monday.`
+      : '✅ Every delivery Monday to Sunday goes onto <strong>one invoice</strong>. A new invoice starts automatically each Monday. You can still send it early from the Invoices page.';
+  } else {
+    note.innerHTML = siteCount
+      ? 'Each delivery gets its own invoice, with the site it went to printed at the top.'
+      : 'Each delivery gets its own invoice or receipt, as normal.';
+  }
 }
 
 // ── Delivery sites (migration 032) — manage a customer's extra addresses ──
@@ -5109,6 +5158,7 @@ async function saveEditCustomer() {
   c.referredBy = document.getElementById('ec-referredby').value.trim();
   c.exempt    = document.getElementById('ec-exempt').checked;
   c.notes     = document.getElementById('ec-notes').value.trim();
+  c.billingMode = document.getElementById('ec-billing')?.value || 'per_delivery';
   closeModal('editCustomerModal');
   renderCustomers();
 
@@ -5121,6 +5171,7 @@ async function saveEditCustomer() {
       address_line_1: c.address      || null,
       invoice_address: c.invoiceAddress || null,
       customer_type: c.type          || 'domestic',
+      billing_mode:  c.billingMode   || 'per_delivery',
       notes:         c.notes         || null,
     }).eq('id', id);
     if (error) console.error('Update customer error:', error);
@@ -5907,7 +5958,8 @@ function renderInvoices(filter) {
     const bal  = invBalance(inv);
     const partPaid = paid > 0 && bal > 0;
     const isDraft = inv.status === 'draft';
-    const statusLabel = isDraft ? 'running tab' : (partPaid ? 'part paid' : inv.status);
+    const isWeekly = !!inv.weekStart;
+    const statusLabel = isDraft ? (isWeekly ? 'this week' : 'running tab') : (partPaid ? 'part paid' : inv.status);
     const statusBg = isDraft ? '#eef1f6' : inv.status==='paid' ? '#d9f0e0' : inv.status==='overdue' ? '#fdd' : partPaid ? '#e8f0fe' : '#f6e5cf';
     const statusCol = isDraft ? 'var(--navy)' : inv.status==='paid' ? '#1a6640' : inv.status==='overdue' ? '#a00' : partPaid ? '#1a4fad' : 'var(--oxblood)';
     const payNote = invPaymentSummary(inv);
@@ -5916,7 +5968,7 @@ function renderInvoices(filter) {
       <div style="flex:1;min-width:0">
         <div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-soft);font-weight:700">${inv.ref}</div>
         <div style="font-size:14px;font-weight:800;color:var(--ink);margin-top:2px">${inv.name}</div>
-        <div style="font-size:11px;color:var(--ink-soft);margin-top:2px">${isDraft ? 'Still collecting deliveries — ' + inv.date : inv.date}${payNote ? ' · ' + payNote : ''}</div>
+        <div style="font-size:11px;color:var(--ink-soft);margin-top:2px">${isWeekly ? weekLabel(inv.weekStart) + (isDraft ? ' · still collecting' : '') : (isDraft ? 'Still collecting deliveries — ' + inv.date : inv.date)}${payNote ? ' · ' + payNote : ''}</div>
         ${partPaid ? `<div style="font-size:11px;color:#1a4fad;margin-top:2px;font-weight:700">£${paid.toFixed(2)} paid · £${bal.toFixed(2)} remaining</div>` : ''}
       </div>
       <div style="font-family:var(--display);font-size:17px;font-weight:600;color:var(--navy);min-width:70px;text-align:right">£${inv.amount.toFixed(2)}</div>
@@ -5932,6 +5984,8 @@ function renderInvoices(filter) {
           </button>
           <div class="actions-menu" id="iam-${inv.id}">
             ${isDraft ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');finalizeInvoice('${inv.id}')"><span class="ai-icon">✅</span> Finalise &amp; send</div>` : `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openPaymentModal('${inv.id}')"><span class="ai-icon">💷</span> Log payment</div>`}
+            ${isDraft ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');splitInvoice('${inv.id}')"><span class="ai-icon">✂️</span> Split into one per delivery</div>` : ''}
+            ${inv.status !== 'paid' ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');mergeInvoiceWeek('${inv.id}')"><span class="ai-icon">🧾</span> Combine this week onto one</div>` : ''}
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');downloadInvoiceById('${inv.id}')"><span class="ai-icon">📄</span> Download PDF</div>
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openSendModal('email','${inv.name}','${inv.ref}','${inv.amount}','${inv.id}')"><span class="ai-icon">✉️</span> Send via email</div>
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openSendModal('message','${inv.name}','${inv.ref}','${inv.amount}','${inv.id}')"><span class="ai-icon">💬</span> Send via WhatsApp</div>
@@ -5965,6 +6019,56 @@ async function finalizeInvoice(id) {
   renderInvoices();
   renderDashboard();
   alert(`${inv.ref} finalised${isReceipt ? ' and marked paid' : ' — marked as sent'}. The next order for ${inv.name} will start a new invoice.`);
+}
+
+// ── Split & combine (migration 036) ───────────────────────────
+// Jon's customers don't all want billing the same way, and some change
+// their minds. These two let him move an invoice between "one bill for
+// the week" and "a bill for every delivery" without re-keying anything.
+
+async function splitInvoice(id) {
+  const inv = sampleInvoices.find(i => i.id === id);
+  if (!inv) return;
+  if (!confirm(
+    `Split ${inv.ref} for ${inv.name} into separate invoices?\n\n` +
+    `Each delivery on it becomes its own invoice, dated the day it went out. ` +
+    `Nothing is sent to the customer — you'll see the new invoices in this list.`
+  )) return;
+  if (!window.supabase) { alert('Not connected to the database — please refresh and try again.'); return; }
+
+  const { data, error } = await window.supabase.rpc('split_invoice_by_delivery', { p_invoice_id: id });
+  if (error) { alert('Could not split this invoice — ' + error.message); return; }
+  if (!data) {
+    alert(`${inv.ref} only has one delivery on it, so there's nothing to split.`);
+    return;
+  }
+  await loadAppData();
+  alert(`${inv.ref} split into ${data} separate invoice${data === 1 ? '' : 's'} for ${inv.name}.`);
+}
+
+async function mergeInvoiceWeek(id) {
+  const inv = sampleInvoices.find(i => i.id === id);
+  if (!inv) return;
+  if (!inv.custId) { alert('This invoice isn\'t linked to a customer record, so it can\'t be combined.'); return; }
+
+  // Which week? The invoice's own if it has one, otherwise the week its
+  // date falls in — which is what Jon means when he's tidying up a past week.
+  const wk = inv.weekStart || mondayOf(inv.created ? new Date(inv.created) : new Date());
+  if (!confirm(
+    `Combine every unpaid invoice for ${inv.name} in the ${weekLabel(wk).toLowerCase()} onto one invoice?\n\n` +
+    `All their deliveries that week end up on a single bill, grouped by site. Anything already paid is left alone.`
+  )) return;
+  if (!window.supabase) { alert('Not connected to the database — please refresh and try again.'); return; }
+
+  const { data, error } = await window.supabase.rpc('merge_week_invoices', {
+    p_customer_id: inv.custId,
+    p_week_start:  wk,
+  });
+  if (error) { alert('Could not combine those invoices — ' + error.message); return; }
+
+  await loadAppData();
+  const merged = sampleInvoices.find(i => i.id === data);
+  alert(`Combined onto ${merged ? merged.ref : 'one invoice'} for ${inv.name}, ${weekLabel(wk).toLowerCase()}.`);
 }
 
 async function deleteInvoice(id, ref, name) {
@@ -6143,7 +6247,7 @@ async function getSendData(invId, custName, invRef, amount) {
   if (invId && window.supabase) {
     const { data: inv, error } = await window.supabase
       .from('invoices')
-      .select('invoice_number, invoice_type, total_amount, customers(name, phone, email, address_line_1, invoice_address, customer_type), invoice_items(description, unit_price, quantity, site_label)')
+      .select('invoice_number, invoice_type, total_amount, week_start, week_end, customers(name, phone, email, address_line_1, invoice_address, customer_type), invoice_items(description, unit_price, quantity, site_label, delivery_date, created_at)')
       .eq('id', invId).single();
     if (!error && inv) {
       ref     = inv.invoice_number;
@@ -6155,7 +6259,12 @@ async function getSendData(invId, custName, invRef, amount) {
       // invoice_address = optional override (e.g. the trade client who wants
       // his home address printed on his invoices)
       address = inv.customers?.invoice_address || inv.customers?.address_line_1 || '';
-      items   = (inv.invoice_items || []).map(i => ({ desc: i.description, qty: i.quantity, price: parseFloat(i.unit_price) || 0, site_label: i.site_label || null }));
+      // Sorted here rather than in the query — nested ordering isn't supported
+      // by every supabase-js build, and the order lines print in matters.
+      items   = (inv.invoice_items || [])
+        .slice()
+        .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+        .map(i => ({ desc: i.description, qty: i.quantity, price: parseFloat(i.unit_price) || 0, site_label: i.site_label || null, delivery_date: i.delivery_date || null }));
     }
   }
 
@@ -6422,8 +6531,25 @@ function renderLogSitePicker(custId) {
   const sites = customerSitesByCustomer[custId] || [];
   if (!wrap || !sel) return;
   if (!sites.length) { wrap.style.display = 'none'; sel.innerHTML = ''; return; }
-  sel.innerHTML = sites.map(s => `<option value="${s.id}">${s.label}</option>`).join('');
+
+  // The customer's own address is a delivery site too — without it in the
+  // list Jon could only ever pick one of the EXTRA addresses, so a drop to
+  // the main premises got filed against the wrong site.
+  const cust = sampleCustomers.find(c => c.id === custId);
+  const mainLabel = (cust && cust.address) ? cust.address : 'Main address';
+
+  sel.innerHTML =
+    `<option value="">— pick the site this delivery is going to —</option>` +
+    `<option value="__main__">${escapeHtmlAttr(mainLabel)} (main address)</option>` +
+    sites.map(s => `<option value="${s.id}">${escapeHtmlAttr(s.label)}</option>`).join('');
+  sel.value = '';
   wrap.style.display = 'block';
+}
+
+function escapeHtmlAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function closeLookup() {
@@ -6538,36 +6664,70 @@ async function saveLogOrder() {
   });
   if (items.length === 0) { alert('Please add at least one item.'); return; }
 
+  // Multi-site customers: which address is this drop going to? Getting this
+  // wrong puts the delivery under the wrong heading on their invoice, so it's
+  // asked for rather than guessed.
+  const siteWrapEl = document.getElementById('lo-site-wrap');
+  if (siteWrapEl && siteWrapEl.style.display !== 'none' && !document.getElementById('lo-site').value) {
+    alert('This customer has more than one address — please choose which site this delivery is going to.');
+    document.getElementById('lo-site').focus();
+    return;
+  }
+
   const total     = items.reduce((s, i) => s + i.price * i.qty, 0);
   const slotSel    = document.getElementById('lo-slot');
   const slotOpt    = slotSel.options[slotSel.selectedIndex];
   const slotValue  = slotSel.value;
+
+  // Backdating (migration 036) — an order Jon has already delivered.
+  const isBackdated = slotValue === '__past__';
+  const pastDate    = isBackdated ? (document.getElementById('lo-pastdate')?.value || '') : '';
+  if (isBackdated) {
+    if (!pastDate) { alert('Please pick the date this order was delivered.'); return; }
+    if (pastDate > toDateStr(new Date())) {
+      alert('That date is in the future. For an upcoming delivery, pick one of the delivery days from the list instead.');
+      return;
+    }
+  }
+
   const slotIsUuid = /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(slotValue);
-  const slotDay    = slotOpt?.dataset?.day || (slotValue === 'mon' ? 'Monday' : slotValue === 'wed' ? 'Wednesday' : slotValue === 'thu' ? 'Thursday' : 'Wednesday');
+  const slotDay    = isBackdated
+    ? WEEKDAYS[new Date(pastDate + 'T12:00:00').getDay()]
+    : (slotOpt?.dataset?.day || (slotValue === 'mon' ? 'Monday' : slotValue === 'wed' ? 'Wednesday' : slotValue === 'thu' ? 'Thursday' : 'Wednesday'));
   const slotBucket = slotDay === 'Monday' ? 'mon' : slotDay === 'Thursday' ? 'thu' : 'wed';
   const custType  = document.getElementById('lo-type').value;
   const rawChannel = document.getElementById('lo-channel').value;
   // Map 'text' to 'phone' — schema only allows: website, facebook, instagram, phone, whatsapp
   const channel   = rawChannel === 'text' ? 'phone' : rawChannel;
 
-  // Add to local sample list for immediate UI update
-  const newOrder = {
-    id: 'o' + Date.now(),
-    name,
-    type: custType,
-    slot: slotBucket,
-    items: items.map(i => `${i.product} × ${i.qty}`).join(', '),
-    total,
-    channel: channel.charAt(0).toUpperCase() + channel.slice(1),
-    status: 'new',
-    address,
-  };
-  sampleOrders.push(newOrder);
+  // Add to local sample list for immediate UI update. A backdated order is
+  // history, not work to do, so it's kept off the runs page entirely.
+  if (!isBackdated) {
+    const newOrder = {
+      id: 'o' + Date.now(),
+      name,
+      type: custType,
+      slot: slotBucket,
+      items: items.map(i => `${i.product} × ${i.qty}`).join(', '),
+      total,
+      channel: channel.charAt(0).toUpperCase() + channel.slice(1),
+      status: 'new',
+      address,
+    };
+    sampleOrders.push(newOrder);
+  }
 
   const btn = document.querySelector('#page-logorder .btn-add');
-  btn.textContent = '✓ Order saved';
+  btn.textContent = isBackdated ? '✓ Past order added' : '✓ Order saved';
   btn.style.background = 'var(--green)';
-  setTimeout(() => { btn.textContent = 'Save order'; btn.style.background = ''; clearLogForm(); showPage('runs'); }, 1200);
+  setTimeout(() => {
+    btn.textContent = 'Save order';
+    btn.style.background = '';
+    clearLogForm();
+    // Stay on Log Order when catching up past deliveries — Jon is usually
+    // entering several in a row and shouldn't be bounced to the runs page.
+    if (!isBackdated) showPage('runs');
+  }, 1200);
 
   // Persist to Supabase
   if (!supabase) return;
@@ -6600,7 +6760,14 @@ async function saveLogOrder() {
 
     // 2. Resolve the delivery slot
     let slotId;
-    if (slotIsUuid) {
+    if (isBackdated) {
+      // Past days often have no slot at all. ensure_delivery_slot creates one
+      // closed and confirmed, so it never appears as a bookable day.
+      const { data: pastSlot, error: pastErr } = await supabase
+        .rpc('ensure_delivery_slot', { p_date: pastDate });
+      if (pastErr) throw pastErr;
+      slotId = pastSlot;
+    } else if (slotIsUuid) {
       // A real open day was chosen from the dropdown
       slotId = slotValue;
     } else {
@@ -6631,9 +6798,12 @@ async function saveLogOrder() {
     // if Jon typed a different phone than the one he looked up, this customer
     // may not be the multi-site one, so we don't attach a stray site_id).
     const siteWrap = document.getElementById('lo-site-wrap');
-    const siteId = (siteWrap && siteWrap.style.display !== 'none' && logSelectedCustomerId === customerId)
-      ? (document.getElementById('lo-site')?.value || null)
-      : null;
+    const sitePick = (siteWrap && siteWrap.style.display !== 'none' && logSelectedCustomerId === customerId)
+      ? (document.getElementById('lo-site')?.value || '')
+      : '';
+    // '__main__' means the customer's own address — that's stored as no site,
+    // which is what makes it print as the first, unheaded block on the invoice.
+    const siteId = (sitePick && sitePick !== '__main__') ? sitePick : null;
 
     // 3. Insert order
     const { data: orderData, error: orderErr } = await supabase
@@ -6641,7 +6811,7 @@ async function saveLogOrder() {
         customer_id:      customerId,
         delivery_slot_id: slotId,
         channel:          channel,
-        status:           'pending',
+        status:           isBackdated ? 'delivered' : 'pending',
         total_amount:     total,
         notes:            document.getElementById('lo-notes').value.trim() || null,
         site_id:          siteId,
@@ -6686,6 +6856,13 @@ function clearLogForm() {
   if (siteWrap) siteWrap.style.display = 'none';
   const siteSel = document.getElementById('lo-site');
   if (siteSel) siteSel.innerHTML = '';
+  // Keep the chosen date when catching up several past orders in a row —
+  // Jon is usually entering a whole Monday's worth at once.
+  const slotSel = document.getElementById('lo-slot');
+  if (slotSel && slotSel.value !== '__past__') {
+    const pastWrap = document.getElementById('lo-pastdate-wrap');
+    if (pastWrap) pastWrap.style.display = 'none';
+  }
 }
 
 // ============ SCHEDULE / DELIVERY DAYS ============
@@ -6718,6 +6895,28 @@ function toDateStr(d) {
 }
 function prettyDate(dateStr) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
+}
+
+// ── Week helpers (migration 036) — Jon's week runs Monday to Sunday ──
+function mondayOf(d) {
+  const dt = (d instanceof Date) ? new Date(d) : new Date(String(d) + 'T12:00:00');
+  const shift = (dt.getDay() + 6) % 7;          // Mon=0 … Sun=6
+  dt.setDate(dt.getDate() - shift);
+  return toDateStr(dt);
+}
+function addDaysStr(dateStr, n) {
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return toDateStr(d);
+}
+// "Week of Mon 10 – Sun 16 Aug" — how a running weekly invoice is labelled.
+function weekLabel(startStr) {
+  if (!startStr) return '';
+  const a = new Date(startStr + 'T12:00:00');
+  const b = new Date(addDaysStr(startStr, 6) + 'T12:00:00');
+  const sameMonth = a.getMonth() === b.getMonth();
+  const optA = sameMonth ? { day:'numeric' } : { day:'numeric', month:'short' };
+  return `Week of ${a.toLocaleDateString('en-GB', optA)}–${b.toLocaleDateString('en-GB', { day:'numeric', month:'short' })}`;
 }
 // Cut-off timestamp for a delivery date: the evening before, per settings
 function cutoffISOFor(dateStr) {
@@ -7081,7 +7280,7 @@ async function cancelAffectedOrder(orderId) {
 
 // ── Log Order: populate the delivery-slot dropdown from real open days ──
 function legacyLogSlotOptions() {
-  return '<option value="mon">Monday</option><option value="wed">Wednesday</option><option value="thu">Thursday</option>';
+  return '<option value="mon">Monday</option><option value="wed">Wednesday</option><option value="thu">Thursday</option>' + pastDateOption();
 }
 async function populateLogSlots() {
   const sel = document.getElementById('lo-slot');
@@ -7101,10 +7300,29 @@ async function populateLogSlots() {
     }
     sel.innerHTML = data.map(s =>
       `<option value="${s.id}" data-day="${s.day_label}">${s.day_label} · ${prettyDate(s.delivery_date)}</option>`
-    ).join('');
+    ).join('') + pastDateOption();
   } catch (err) {
     console.error('populateLogSlots error:', err);
     sel.innerHTML = legacyLogSlotOptions();
+  }
+}
+
+// The "already delivered" escape hatch at the bottom of the slot list.
+function pastDateOption() {
+  return '<option value="__past__">📅 A delivery I\'ve already done (pick a date)…</option>';
+}
+
+// Show the date box only when Jon picks the backdating option.
+function onLogSlotChange() {
+  const sel  = document.getElementById('lo-slot');
+  const wrap = document.getElementById('lo-pastdate-wrap');
+  const inp  = document.getElementById('lo-pastdate');
+  if (!sel || !wrap) return;
+  const isPast = sel.value === '__past__';
+  wrap.style.display = isPast ? 'block' : 'none';
+  if (isPast && inp && !inp.value) {
+    inp.max = toDateStr(new Date());
+    inp.value = inp.max;
   }
 }
 
@@ -7795,6 +8013,7 @@ function rebuildInvoiceCustomers() {
     email:   c.email   || '',
     // Invoices print the invoice-address override when Jon has set one
     address: c.invoiceAddress || c.address || '',
+    billingMode: c.billingMode || 'per_delivery',
     prefix:  c.name.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase(),
     nextInv: Math.floor(10000 + Math.random() * 90000),
     products: sampleProducts.map(p => ({ name: p.name, price: p.price })),
@@ -7816,7 +8035,10 @@ function populateInvoiceCustomerSelect() {
   // Set today's date
   const today = new Date().toISOString().slice(0,10);
   const dateEl = document.getElementById('inv-date');
-  if (dateEl) dateEl.value = today;
+  if (dateEl) {
+    if (!dateEl.value) dateEl.value = today;
+    dateEl.onchange = renderInvWeekNote;
+  }
 }
 
 let invItems = [];
@@ -7861,20 +8083,48 @@ function flattenInvItems() {
 // order each site label first appears. A plain invoice (no site headers
 // ever added) always comes back as ONE group with label=null — render that
 // case exactly like today's flat invoice, no visual change.
+// Group invoice lines into the sections that get printed, each with its own
+// subtotal, followed by a grand total.
+//
+//  * One delivery, one address  -> a single plain list, exactly as always.
+//  * One delivery, several sites -> a section per site (Billy Bunters' format).
+//  * A WEEK of deliveries (migration 036) -> a section per site PER DAY, so a
+//    customer taking four drops can see what came when instead of one merged
+//    list they can't check against their own paperwork.
 function groupInvoiceLines(lines) {
+  const dates = [...new Set((lines || []).map(l => l.delivery_date).filter(Boolean))];
+  const showDates = dates.length > 1;   // only a weekly invoice spans days
+
   const groups = [];
-  const byLabel = new Map();
-  lines.forEach(l => {
-    const key = l.site_label || '';
-    if (!byLabel.has(key)) {
-      const g = { label: l.site_label || null, lines: [], subtotal: 0 };
-      byLabel.set(key, g);
+  const byKey = new Map();
+  (lines || []).forEach(l => {
+    const site = l.site_label || '';
+    const day  = showDates && l.delivery_date ? l.delivery_date : '';
+    const key  = site + '|' + day;
+    if (!byKey.has(key)) {
+      const dayText = day
+        ? new Date(day + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'short' })
+        : '';
+      const g = {
+        label: [l.site_label || null, dayText || null].filter(Boolean).join(' · ') || null,
+        site, day, lines: [], subtotal: 0,
+      };
+      byKey.set(key, g);
       groups.push(g);
     }
-    const g = byLabel.get(key);
+    const g = byKey.get(key);
     g.lines.push(l);
     g.subtotal += l.qty * l.price;
   });
+
+  // Main address first (it has no site heading), then by site, then by date —
+  // so the invoice reads in a sensible order however the orders were logged.
+  groups.sort((a, b) =>
+    (a.site === '' ? 0 : 1) - (b.site === '' ? 0 : 1) ||
+    a.site.localeCompare(b.site) ||
+    a.day.localeCompare(b.day)
+  );
+
   const grandTotal = groups.reduce((s, g) => s + g.subtotal, 0);
   return { groups, grandTotal };
 }
@@ -7981,7 +8231,24 @@ async function loadInvoiceCustomer() {
       (data || []).forEach(r => { INV_TRADE_PRICES[r.product_id] = parseFloat(r.price); });
     } catch (e) { console.error('Trade prices load failed:', e); }
   }
+  renderInvWeekNote();
   addInvItem(); // start with one blank row
+}
+
+// Tell Jon which week a weekly-billed customer's invoice will land in — the
+// same week the system files their logged orders under, so the two line up.
+function renderInvWeekNote() {
+  const note = document.getElementById('inv-week-note');
+  if (!note) return;
+  const custId = document.getElementById('inv-customer')?.value;
+  const cust   = INVOICE_CUSTOMERS.find(c => c.id === custId);
+  const dateEl = document.getElementById('inv-date');
+  if (!cust || (cust.billingMode || 'per_delivery') !== 'weekly' || !dateEl?.value) {
+    note.style.display = 'none';
+    return;
+  }
+  note.style.display = 'block';
+  note.innerHTML = `📅 ${escapeHtmlAttr(cust.name)} is on weekly invoicing — this will be filed under <strong>${weekLabel(mondayOf(dateEl.value))}</strong>.`;
 }
 
 // Shared items-table HTML — used by the on-screen preview. A plain invoice
@@ -8111,6 +8378,13 @@ async function saveInvoice() {
   const invRef  = currentInvoiceRef;
   const due     = new Date(issued); due.setDate(due.getDate() + 30);
 
+  // Weekly-billed customers: stamp the invoice with the Mon–Sun week the
+  // chosen date falls in, so a hand-built invoice sits alongside the ones
+  // the system raises automatically and can be merged with them.
+  const isWeekly = (cust.billingMode || 'per_delivery') === 'weekly';
+  const wkStart  = isWeekly ? mondayOf(issued) : null;
+  const wkEnd    = wkStart ? addDaysStr(wkStart, 6) : null;
+
   if (!window.supabase) { alert('Not connected to the database — please refresh and try again.'); return; }
 
   try {
@@ -8122,6 +8396,8 @@ async function saveInvoice() {
       issued_at:      issued.toISOString(),
       due_at:         invType === 'invoice' ? due.toISOString() : null,
       paid_at:        invType === 'receipt' ? issued.toISOString() : null,
+      week_start:     wkStart,
+      week_end:       wkEnd,
       subtotal:       total,
       vat_amount:     0,
       total_amount:   total,
@@ -8129,11 +8405,12 @@ async function saveInvoice() {
     if (error) throw error;
 
     const lineRows = items.map(i => ({
-      invoice_id:  inv.id,
-      description: i.desc,
-      unit_price:  i.price,
-      quantity:    i.qty,
-      site_label:  i.site_label,
+      invoice_id:    inv.id,
+      description:   i.desc,
+      unit_price:    i.price,
+      quantity:      i.qty,
+      site_label:    i.site_label,
+      delivery_date: dateVal || null,
     }));
     const { error: liErr } = await window.supabase.from('invoice_items').insert(lineRows);
     if (liErr) throw liErr;
@@ -9604,7 +9881,8 @@ const HELP_PAGES = {
       { icon:'👤', title:'Customer lookup', body:'Or enter it manually: start typing a customer\'s name in the search box. If they\'ve ordered before, they\'ll appear in the list and their address fills in automatically.' },
       { icon:'🛒', title:'Adding items', body:'Select a product from the dropdown, enter the quantity, and press <strong>Add item</strong>. Repeat for each product in the order. The total updates automatically.' },
       { icon:'📅', title:'Delivery day', body:'The delivery day list shows the days you\'ve opened on the <strong>Schedule</strong> page, each with its date. Pick the one the customer wants and the order lands in that day\'s run. If a day you need isn\'t listed, open it first on the Schedule page.' },
-      { icon:'📍', title:'Customers with more than one address', body:'If a customer has extra delivery sites set up (Customers page → Edit → <strong>Delivery sites</strong>) — e.g. a business with two locations — a <strong>Delivery site</strong> box appears once you pick them from the lookup. Choose the right address for this delivery. It shows on the delivery run pick list and route so you go to the right place, and all their deliveries land on <strong>one combined invoice</strong> with a subtotal per site.' },
+      { icon:'📍', title:'Customers with more than one address', body:'If a customer has extra delivery sites set up (Customers page → Edit → <strong>Delivery sites</strong>) — e.g. a business with two locations — a <strong>Delivery site</strong> box appears once you pick them from the lookup. You must choose which address this delivery is going to: their <strong>main address</strong> or one of the extra sites. It shows on the delivery run pick list and route so you go to the right place, and it decides which section of their invoice the items appear under.' },
+      { icon:'⏪', title:'Entering an order you\'ve already delivered', body:'Catching the system up with deliveries you\'ve already done? In the <strong>Delivery slot</strong> list choose <strong>📅 A delivery I\'ve already done</strong> at the bottom, then pick the date it went out. It\'s saved as already delivered, so it won\'t appear on your run sheet or pick list — it just goes on the books, into that day\'s takings, and onto the customer\'s invoice for that week. The form stays open so you can enter the next one straight away.' },
       { icon:'💬', title:'Notes', body:'Use the notes box for anything special — e.g. "leave by back gate" or "call on arrival". Jon will see this on the order card.' },
       { icon:'💰', title:'Minimum order', body:'Orders under £20 will automatically have the £5 small-order charge added. Customers marked as exempt (family/friends) won\'t see this charge.' },
     ]
@@ -9634,6 +9912,8 @@ const HELP_PAGES = {
       { icon:'🏢', title:'Trade accounts', body:'Trade customers have a <strong>Trade</strong> badge. When a business creates a trade account on the website, you get an <strong>email straight away</strong>, an alert appears on your <strong>Dashboard</strong>, and they\'re pinned to the <strong>top of this list</strong> with a <strong>🕐 Approve login</strong> badge until you deal with them. Open their profile and press <strong>✓ Approve trade access</strong> — once approved, they see your trade-only items when they sign in. Your 5pm daily email also reminds you of any still waiting.' },
       { icon:'💷', title:'Trade prices (per customer)', body:'Every trade customer can have their own agreed prices. Open their profile and press <strong>💷 Set this customer\'s trade prices</strong> — you\'ll see your whole availability list (trade-only items first) with a price box for each. Fill in only what you\'ve agreed; leave the rest blank. By default they see <strong>no prices</strong> on the website, just "speak to Jon about pricing" — tick <strong>Show these prices to the customer</strong> when you\'re ready for them to see their agreed prices. Their orders and invoices use these prices automatically. Prices are always subject to the market — update them here whenever things change.' },
       { icon:'🏠', title:'A different address on their invoices', body:'If a customer wants a different address printed on their invoices (e.g. their home address rather than the delivery address), open their <strong>Edit</strong> screen and fill in <strong>Invoice address</strong>. Leave it blank and invoices use their normal address as always.' },
+      { icon:'🗓️', title:'One invoice a week instead of one per delivery', body:'Some customers take two, three or four deliveries a week and only want <strong>one bill</strong> for the lot. Open their <strong>Edit</strong> screen and under <strong>How this customer is invoiced</strong> choose <strong>One invoice a week</strong>. From then on, every delivery you log for them Monday to Sunday goes onto the same invoice, and a fresh one starts automatically each Monday. Everyone else carries on getting an invoice per delivery — you don\'t need to change anything for them.' },
+      { icon:'📍', title:'Customers with more than one address', body:'If you deliver to two or more addresses for the same customer, add the extra ones under <strong>Delivery sites</strong> in their Edit screen. After that, every time you log an order for them the form asks <strong>which site</strong> it\'s going to — pick their main address or one of the extra sites. Their invoice then shows each address as its own section with its own subtotal, and one grand total at the bottom.' },
       { icon:'📍', title:'Delivery sites (customers with more than one address)', body:'Open a customer\'s <strong>Edit</strong> screen and look for <strong>Delivery sites</strong>. Add one row per extra address (e.g. two pub sites for the same business). Once any sites are listed: <strong>Log Order</strong> will ask which site each delivery is for, the delivery run and route show the right address, and — instead of a separate invoice per delivery — all their orders build up onto <strong>one running invoice</strong> with a subtotal per site, until you finalise and send it from the Invoices tab. No sites listed = nothing changes, it works exactly as before.' },
       { icon:'➕', title:'Adding a new customer', body:'Press <strong>+ Add customer</strong> and pick the type first. <strong>Trade</strong> just needs the business name (plus an optional contact person). <strong>Domestic</strong> asks for first and last name. Add a phone number and email if you have them — you can then ring, WhatsApp or email them straight from their record.' },
       { icon:'📞', title:'Calling or messaging a customer', body:'Open any customer\'s record and use the <strong>Call</strong>, <strong>WhatsApp</strong> or <strong>Email</strong> buttons. On your phone, tapping the number rings them directly. Phone numbers in the customer list are tappable too.' },
@@ -9680,6 +9960,10 @@ const HELP_PAGES = {
       { icon:'⚡', title:'Created automatically from orders', body:'Every order now creates its own record for you — a <strong>receipt</strong> for domestic customers (marked paid) and an <strong>invoice</strong> for trade customers (30-day terms). Whether the order came from the website or you logged it yourself, the matching receipt/invoice lands here automatically. No need to type it out again.' },
       { icon:'➕', title:'Building one by hand', body:'Need a one-off? Select the customer — their details fill in automatically. For each line, pick an item from the <strong>availability list</strong> (the price fills in — a trade customer\'s <strong>agreed trade price</strong> is used automatically where you\'ve set one) or choose <strong>✏️ Custom item</strong> for something you\'ve sourced specially, with its own description and price. Press <strong>Generate invoice</strong> to preview, then <strong>Save invoice</strong>. It picks receipt or invoice automatically based on the customer.' },
       { icon:'🛒', title:'One-off items you\'ve sourced for a customer', body:'A trade customer asks you to get them something that\'s not on your list? Two easy ways to bill it: build an invoice by hand and use <strong>✏️ Custom item</strong> for each special line, or — if they\'ve already got an order that day — open the order on the delivery run, tap <strong>➕ Add an item</strong>, and type the one-off item with its price. Either way it lands on their invoice like anything else.' },
+      { icon:'🗓️', title:'Weekly invoices', body:'A customer set to <strong>one invoice a week</strong> gets a single running invoice instead of one per delivery. It shows here marked <strong>this week</strong> with the dates it covers, and every order you log for them that week is added to it. Each delivery gets its own heading and subtotal so they can see exactly what came when, with one grand total at the bottom. It closes on its own each Monday — or press <strong>Finalise &amp; send</strong> to send it early.' },
+      { icon:'✂️', title:'Splitting a weekly invoice up', body:'Customer changed their mind and wants each delivery billed separately? Open the <strong>Actions</strong> menu on the running invoice and choose <strong>Split into one per delivery</strong>. Each delivery becomes its own invoice, dated the day it went out. Nothing is sent to the customer — the new invoices just appear in this list for you to check.' },
+      { icon:'🧾', title:'Combining a week onto one invoice', body:'The other way round: if you\'ve logged a week\'s deliveries separately and want to send one bill, open <strong>Actions</strong> on any of them and choose <strong>Combine this week onto one</strong>. Every unpaid invoice for that customer that week is brought together, grouped by delivery and by site. Anything already marked paid is left exactly as it is.' },
+      { icon:'⏪', title:'Writing up a past week', body:'Catching the system up with work you\'ve already done? Set the <strong>Invoice date</strong> back to the day in question before you save — it\'ll be filed under the right week. To enter the orders themselves, use Log Order and pick <strong>📅 A delivery I\'ve already done</strong> from the delivery slot list.' },
       { icon:'📄', title:'Download as PDF', body:'Open the <strong>Actions</strong> menu and choose <strong>Download PDF</strong> to save the invoice or receipt as a tidy PDF on your device — ready to email, print, or keep for your records.' },
       { icon:'📬', title:'Sending it to the customer', body:'Open the <strong>Actions</strong> menu and choose <strong>Send via WhatsApp</strong> or <strong>Send via email</strong>. It uses the customer\'s saved number or email and writes the whole message for you — the items, the total, and a link to the PDF copy. You don\'t attach anything (handy on your phone) — just check it and press send. WhatsApp opens ready to go; email opens your Gmail with everything filled in, you press send.' },
       { icon:'📱', title:'Works from your phone', body:'This is built for sending on the road. The receipt is written right into the message with a tap-to-open PDF link, so there\'s nothing to attach or fiddle with — open the order\'s receipt, tap WhatsApp or email, check it, send. Done in seconds at the van.' },
