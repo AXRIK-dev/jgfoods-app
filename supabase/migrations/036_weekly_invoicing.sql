@@ -592,6 +592,59 @@ GRANT EXECUTE ON FUNCTION merge_week_invoices(uuid, date)         TO authenticat
 
 
 -- ============================================================
+-- 9. Adopt the invoices that are already open
+-- ============================================================
+-- Without this, a running tab created by migration 032 has
+-- week_start = NULL, so the new weekly lookup can't see it. The next
+-- order for that customer would start a SECOND invoice for the same
+-- week and Jon would be looking at two open bills for Billy Bunters.
+--
+-- So: stamp each existing open tab with the week it actually covers,
+-- and it simply carries on as that week's invoice.
+--
+-- Deliberately cautious. A tab is only adopted when:
+--   * all its deliveries fall inside ONE Mon-Sun week, and
+--   * that customer has no other open invoice already stamped with
+--     that week (which would breach idx_invoices_open_week and fail
+--     the whole migration).
+--
+-- Anything left unstamped is a tab that has been running for more
+-- than a week. Those are left exactly as they are for Jon to finalise
+-- or split by hand — guessing a single week for them would put
+-- deliveries on the wrong bill.
+DO $$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT i.id,
+           i.customer_id,
+           min(jg_week_start(ii.delivery_date)) AS wk
+    FROM invoices i
+    JOIN invoice_items ii ON ii.invoice_id = i.id
+    WHERE i.status     = 'draft'
+      AND i.week_start IS NULL
+      AND ii.delivery_date IS NOT NULL
+    GROUP BY i.id, i.customer_id
+    HAVING min(jg_week_start(ii.delivery_date)) = max(jg_week_start(ii.delivery_date))
+  LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM invoices x
+      WHERE x.customer_id = r.customer_id
+        AND x.status      = 'draft'
+        AND x.week_start  = r.wk
+        AND x.id         <> r.id
+    ) THEN
+      UPDATE invoices
+      SET week_start = r.wk,
+          week_end   = r.wk + 6
+      WHERE id = r.id;
+    END IF;
+  END LOOP;
+END $$;
+
+
+-- ============================================================
 -- NOTES FOR PHIL
 --
 -- * Nothing changes for a customer on the default 'per_delivery'
@@ -604,10 +657,19 @@ GRANT EXECUTE ON FUNCTION merge_week_invoices(uuid, date)         TO authenticat
 --   was — except his running tab now closes at the end of each week
 --   instead of running on until Jon remembers to finalise it.
 --
--- * The old 032 running-draft invoices have week_start = NULL. They
---   are NOT picked up by the new weekly lookup, so the first order
---   after this migration starts a proper week-stamped invoice and the
---   old tab is left for Jon to finalise and send as normal.
+-- * No existing invoice is renumbered, re-totalled or re-dated. The
+--   only column touched on invoices that already exist is week_start
+--   /week_end, and only on OPEN tabs (section 9).
+--
+-- * Orders already invoiced individually are NOT retro-combined by
+--   this migration. Switching a customer to weekly only affects
+--   orders logged from that point on. To pull a week Jon has already
+--   entered onto one bill, use "Combine this week onto one" on the
+--   Invoices page — that's what merge_week_invoices is for.
+--
+-- * That combine won't touch anything already marked PAID, which
+--   includes every domestic receipt (they're auto-paid on creation).
+--   Weekly billing is really a trade/commercial arrangement.
 --
 -- * Reusable for other AXRIK clients: billing_mode + week_start is a
 --   generic "bill per job or bill per week" pattern that will suit any
