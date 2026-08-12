@@ -1862,6 +1862,7 @@
         style="padding:10px 14px;border-radius:9px;font-weight:800;font-size:12.5px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer">Clear</button>
     </div>
 
+    <div id="invoiceCombineHint" style="display:none"></div>
     <div id="invoiceCount" style="font-size:11.5px;color:var(--ink-soft);margin-bottom:9px"></div>
     <div id="invoiceList" style="display:flex;flex-direction:column;gap:9px"></div>
   </div>
@@ -6056,6 +6057,41 @@ function clearInvoiceSearch() {
   renderInvoices();
 }
 
+// If the list on screen has more than one unpaid invoice for the same
+// customer in the same week, say so and offer to combine them. Combining
+// lives in the Actions menu, which Jon has no reason to go looking in when
+// what he wants is "one bill to hand the customer".
+function renderCombineHint(shown) {
+  const box = document.getElementById('invoiceCombineHint');
+  if (!box) return;
+  box.innerHTML = '';
+  box.style.display = 'none';
+
+  const groups = {};
+  (shown || []).forEach(i => {
+    if (i.status === 'paid' || !i.custId) return;
+    const wk = i.weekStart || mondayOf(i.created ? new Date(i.created) : new Date());
+    const key = i.custId + '|' + wk;
+    (groups[key] = groups[key] || { name: i.name, wk, custId: i.custId, list: [] }).list.push(i);
+  });
+
+  const combinable = Object.values(groups).filter(g => g.list.length > 1);
+  if (!combinable.length) return;
+
+  box.innerHTML = combinable.map(g => {
+    const total = g.list.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+    return `
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#eef2f7;border:1px solid #cdd8e6;border-radius:10px;padding:11px 14px;margin-bottom:9px">
+        <div style="flex:1;min-width:200px;font-size:12.5px;color:var(--ink)">
+          <strong>${escapeHtmlAttr(g.name)}</strong> has <strong>${g.list.length}</strong> unpaid invoices for the ${escapeHtmlAttr(weekLabel(g.wk).toLowerCase())} — ${g.list.map(i => escapeHtmlAttr(i.ref)).join(' and ')}, £${total.toFixed(2)} together.
+        </div>
+        <button onclick="mergeInvoiceWeek('${g.list[0].id}')"
+          style="padding:8px 14px;border-radius:8px;font-weight:800;font-size:12px;background:var(--navy);color:#fff;border:none;cursor:pointer;white-space:nowrap">🧾 Combine into one invoice</button>
+      </div>`;
+  }).join('');
+  box.style.display = 'block';
+}
+
 // The date an invoice is filtered and searched on: the week it covers for a
 // weekly invoice, otherwise the day it was raised.
 function invoiceDateKey(inv) {
@@ -6100,6 +6136,8 @@ function renderInvoices(filter) {
       countEl.innerHTML = `Showing <strong>${shown.length}</strong> of ${sampleInvoices.length} · total <strong>£${sum.toFixed(2)}</strong>`;
     }
   }
+
+  renderCombineHint(shown);
 
   if (!shown.length) {
     const searching = q || from || to;
@@ -10475,7 +10513,7 @@ const HELP_PAGES = {
       { icon:'🔁', title:'Copying a recent order onto an invoice', body:'Building an invoice by hand for a regular? Pick the customer and a <strong>Copy a recent order</strong> panel appears. Tap <strong>Use this</strong> and that order\'s items drop straight in as invoice lines at the prices they were charged. Tap a second one to add it underneath — handy for putting Monday\'s and Thursday\'s deliveries on one weekly invoice. If the order went to a named site, its heading goes in automatically.' },
       { icon:'🗓️', title:'Weekly invoices', body:'A customer set to <strong>one invoice a week</strong> gets a single running invoice instead of one per delivery. It shows here marked <strong>this week</strong> with the dates it covers, and every order you log for them that week is added to it. Each delivery gets its own heading and subtotal so they can see exactly what came when, with one grand total at the bottom. It closes on its own each Monday — or press <strong>Finalise &amp; send</strong> to send it early.' },
       { icon:'✂️', title:'Splitting a weekly invoice up', body:'Customer changed their mind and wants each delivery billed separately? Open the <strong>Actions</strong> menu on the running invoice and choose <strong>Split into one per delivery</strong>. Each delivery becomes its own invoice, dated the day it went out. Nothing is sent to the customer — the new invoices just appear in this list for you to check.' },
-      { icon:'🧾', title:'Combining a week onto one invoice', body:'The other way round: if you\'ve logged a week\'s deliveries separately and want to send one bill, open <strong>Actions</strong> on any of them and choose <strong>Combine this week onto one</strong>. Every unpaid invoice for that customer that week is brought together, grouped by delivery and by site. Anything already marked paid is left exactly as it is.' },
+      { icon:'🧾', title:'Combining a week onto one invoice', body:'Ended up with two or three invoices for the same customer in the same week and want to hand them one bill? A <strong>blue bar appears above the list</strong> telling you so — press <strong>Combine into one invoice</strong> and they\'re brought together, grouped by delivery and by site, keeping the earliest invoice number so the customer sees a reference they recognise. You can also do it from <strong>Actions</strong> on any of them. It picks up invoices you raised by hand as well as ones the system created, and anything already marked paid is left exactly as it is.' },
       { icon:'⏪', title:'Writing up a past week', body:'Catching the system up with work you\'ve already done? Set the <strong>Invoice date</strong> back to the day in question before you save — it\'ll be filed under the right week. To enter the orders themselves, use Log Order and pick <strong>📅 A delivery I\'ve already done</strong> from the delivery slot list.' },
       { icon:'📄', title:'Download as PDF', body:'Open the <strong>Actions</strong> menu and choose <strong>Download PDF</strong> to save the invoice or receipt as a tidy PDF on your device — ready to email, print, or keep for your records.' },
       { icon:'📬', title:'Sending it to the customer', body:'Open the <strong>Actions</strong> menu and choose <strong>Send via WhatsApp</strong> or <strong>Send via email</strong>. It uses the customer\'s saved number or email and writes the whole message for you — the items, the total, and a link to the PDF copy. You don\'t attach anything (handy on your phone) — just check it and press send. WhatsApp opens ready to go; email opens your Gmail with everything filled in, you press send.' },

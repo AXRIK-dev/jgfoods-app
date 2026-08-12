@@ -363,6 +363,18 @@ Adds one internal view, `daily_payment_allocations`, that decides which day any 
 
 ---
 
+### 38. `038_combine_invoices_fix.sql`
+**What it does:** Fixes "Combine this week onto one" so it actually combines everything. Found on Billy Bunters — two invoices, same customer, same week (`BBL-1035` weekly £150.05 and `BBL-232242` hand-built £174.40), and Combine would have quietly picked up only the first.
+
+- An invoice now belongs to a week if it carries that week stamp, **or** a line came from an order delivered that week, **or** a line carries a delivery date in that week, **or** it has no orders behind it at all and was issued that week. That last rule is what catches everything Jon types by hand.
+- Target selection: reuse the open weekly invoice if there is one, otherwise keep the **oldest** invoice in the set and stamp it with the week — so the customer keeps a reference they've already seen instead of a third number being minted.
+- Combining a single invoice is no longer an error; it just stamps it with its week.
+- Calls `recompute_daily_sales_for_invoice` afterwards so the takings stay in step.
+
+**When to run:** After 036 and 037. Safe on the live database — replaces one function, changes no data.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app
