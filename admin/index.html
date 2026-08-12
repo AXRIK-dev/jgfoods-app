@@ -586,6 +586,8 @@
     <button class="login-link" id="forgot-link" onclick="adminForgotPassword()">Forgot your password?</button>
     <div class="login-error" id="login-error"></div>
     <div class="login-note" id="login-note"></div>
+    <button class="login-link" id="diag-link" style="opacity:.7;font-size:11.5px" onclick="runLoginDiagnostic()">Trouble signing in on this device?</button>
+    <div id="login-diag" style="display:none;text-align:left;font-size:11.5px;line-height:1.55;background:rgba(255,255,255,.08);border-radius:9px;padding:11px 13px;margin-top:10px"></div>
   </div>
 
   <!-- STATE 2 — reset email sent -->
@@ -2420,10 +2422,19 @@ async function signIn() {
   btn.disabled = true;
   errEl.style.display = 'none';
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  let error;
+  try {
+    ({ error } = await supabase.auth.signInWithPassword({ email, password }));
+  } catch (e) {
+    error = e;   // network/CORS failures throw rather than returning an error
+  }
 
   if (error) {
-    errEl.textContent = 'Incorrect email or password. Please try again.';
+    // This used to say "Incorrect email or password" whatever went wrong,
+    // which sent us hunting for a password problem when the real cause was
+    // the device. Say what actually happened.
+    console.error('Sign-in failed:', error);
+    errEl.innerHTML = await explainSignInError(error);
     errEl.style.display = 'block';
     btn.textContent = 'Sign in';
     btn.disabled = false;
@@ -2433,6 +2444,139 @@ async function signIn() {
   // Successful login — load role and data
   await loadUserRole();
   await loadAppData();
+}
+
+// Turn a Supabase auth error into something that points at the actual problem.
+// Most "I can't log in on this one computer" reports are the clock being out,
+// an old cached copy of the app, or the browser blocking storage — none of
+// which are password problems.
+async function explainSignInError(error) {
+  const msg    = String(error?.message || error || '');
+  const status = error?.status || 0;
+  const low    = msg.toLowerCase();
+
+  // Can the browser store a session at all? Private windows and locked-down
+  // Edge/Chrome profiles block this, and sign-in then silently fails.
+  let storageBlocked = false;
+  try {
+    localStorage.setItem('__jg_t', '1');
+    localStorage.removeItem('__jg_t');
+  } catch (e) { storageBlocked = true; }
+
+  if (storageBlocked) {
+    return 'This browser is blocking the app from staying signed in. ' +
+           'If you\'re in a private/incognito window, try a normal one. ' +
+           'Otherwise allow cookies and site data for this site.';
+  }
+
+  // A clock more than a few minutes out makes the login token invalid the
+  // moment it's issued. Classic "works on every device but this one".
+  const skew = await clockSkewSeconds();
+  if (skew !== null && Math.abs(skew) > 120) {
+    const mins = Math.round(Math.abs(skew) / 60);
+    return `This computer's clock is about <strong>${mins} minute${mins === 1 ? '' : 's'} ` +
+           `${skew > 0 ? 'behind' : 'ahead'}</strong>, which stops the login working. ` +
+           'On Windows: Settings → Time &amp; language → Date &amp; time → turn on ' +
+           '<strong>Set time automatically</strong>, then press <strong>Sync now</strong>. Then try again.';
+  }
+
+  if (low.includes('failed to fetch') || low.includes('networkerror') || low.includes('load failed')) {
+    return 'Could not reach the server. Check the internet connection — and if this ' +
+           'computer has antivirus or a firewall that filters web traffic, it may be ' +
+           'blocking it.';
+  }
+  if (status === 429 || low.includes('rate limit') || low.includes('too many')) {
+    return 'Too many attempts in a row. Wait a couple of minutes and try again.';
+  }
+  if (low.includes('email not confirmed')) {
+    return 'This account hasn\'t been confirmed yet. Check the inbox for the confirmation email.';
+  }
+  if (status === 400 || low.includes('invalid login')) {
+    return 'Incorrect email or password. Please try again — or use <strong>Forgotten your password?</strong> below.';
+  }
+  return 'Could not sign in — ' + escapeHtmlAttr(msg || 'unknown error') +
+         '. If this keeps happening on one computer only, try a hard refresh (Ctrl+Shift+R).';
+}
+
+// A device self-check for "it works everywhere except this one computer".
+// Everything that differs BETWEEN devices, checked in one go, so the answer
+// arrives in a screenshot instead of a guessing game.
+async function runLoginDiagnostic() {
+  const box = document.getElementById('login-diag');
+  if (!box) return;
+  box.style.display = 'block';
+  box.innerHTML = 'Checking this device…';
+
+  const rows = [];
+  const line = (ok, label, detail) =>
+    rows.push(`<div style="margin-bottom:5px">${ok === null ? '•' : ok ? '✅' : '❌'} <strong>${label}</strong>${detail ? ' — ' + detail : ''}</div>`);
+
+  // Can it keep you signed in?
+  let storageOk = true;
+  try { localStorage.setItem('__jg_t', '1'); localStorage.removeItem('__jg_t'); }
+  catch (e) { storageOk = false; }
+  line(storageOk, 'Can stay signed in',
+    storageOk ? 'browser storage works' : 'blocked — private window, or cookies/site data turned off');
+
+  // Is the clock right? A few minutes out is enough to break the login.
+  const skew = await clockSkewSeconds();
+  if (skew === null) {
+    line(false, 'Clock check', 'couldn\'t reach the server to compare — see the connection line below');
+  } else if (Math.abs(skew) > 120) {
+    const mins = Math.round(Math.abs(skew) / 60);
+    line(false, 'Computer clock',
+      `about ${mins} minute${mins === 1 ? '' : 's'} ${skew > 0 ? 'behind' : 'ahead'}. ` +
+      'Windows: Settings → Time &amp; language → Date &amp; time → <strong>Set time automatically</strong>, then <strong>Sync now</strong>');
+  } else {
+    line(true, 'Computer clock', 'correct');
+  }
+
+  // Can it actually reach the database? Antivirus and firewalls on Windows
+  // are the usual culprit when one machine can't and everything else can.
+  let reachable = false, netDetail = '';
+  try {
+    const res = await fetch(SUPABASE_URL + '/auth/v1/health', {
+      method: 'GET', cache: 'no-store', headers: { apikey: SUPABASE_ANON_KEY },
+    });
+    reachable = res.ok;
+    netDetail = res.ok ? 'server responded' : 'server replied ' + res.status;
+  } catch (e) {
+    netDetail = 'blocked — check antivirus or firewall web filtering on this computer';
+  }
+  line(reachable, 'Can reach the database', netDetail);
+
+  line(navigator.onLine, 'Internet', navigator.onLine ? 'connected' : 'this device reports it is offline');
+
+  const ua = navigator.userAgent;
+  const m  = ua.match(/(Chrome|Edg|Firefox|Safari)\/(\d+)/);
+  const browser = m ? (m[1] === 'Edg' ? 'Edge' : m[1]) + ' ' + m[2] : 'unknown';
+  const old = m && Number(m[2]) < 100;
+  line(!old, 'Browser', browser + (old ? ' — too old for this app, please update' : ''));
+
+  line(null, 'App version', 'loaded ' + new Date(document.lastModified).toLocaleString('en-GB'));
+
+  box.innerHTML = rows.join('') +
+    '<div style="margin-top:9px;opacity:.75">Anything with a ❌ is the thing to fix. ' +
+    'If it\'s all ✅ then the email or password really is wrong — use <strong>Forgot your password?</strong> above.</div>';
+}
+
+// How far this device's clock is from the server's, in seconds.
+// Positive = device is behind. Returns null if it can't be worked out.
+async function clockSkewSeconds() {
+  try {
+    const before = Date.now();
+    const res = await fetch(SUPABASE_URL + '/auth/v1/health', {
+      method: 'GET', cache: 'no-store', headers: { apikey: SUPABASE_ANON_KEY },
+    });
+    const after = Date.now();
+    const serverDate = res.headers.get('date');
+    if (!serverDate) return null;
+    const serverMs = new Date(serverDate).getTime();
+    if (isNaN(serverMs)) return null;
+    return Math.round((serverMs - (before + after) / 2) / 1000);
+  } catch (e) {
+    return null;
+  }
 }
 
 // ============ FORGOT PASSWORD (admin app) ============
