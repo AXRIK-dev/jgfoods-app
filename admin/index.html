@@ -864,13 +864,14 @@
         <label>Customer name *</label>
         <div class="lookup-wrap">
           <input type="text" id="lo-name" placeholder="Start typing a name…" autocomplete="off"
-            oninput="customerLookup(this.value)" onblur="setTimeout(()=>closeLookup(),200)">
+            oninput="customerLookup(this.value)" onchange="matchLogCustomer()"
+            onblur="setTimeout(()=>{closeLookup();matchLogCustomer();},200)">
           <div class="lookup-dropdown" id="lookupDropdown"></div>
         </div>
       </div>
       <div class="field">
         <label>Phone number</label>
-        <input type="tel" id="lo-phone" placeholder="07700 000000">
+        <input type="tel" id="lo-phone" placeholder="07700 000000" onchange="matchLogCustomer()" onblur="matchLogCustomer()">
       </div>
     </div>
 
@@ -5313,6 +5314,44 @@ function fillLogFromExtract(ex) {
     });
     updateLogTotal();
   }
+
+  // Paste-a-message fills these fields directly rather than going through the
+  // customer lookup, so without this the site picker and repeat-order panel
+  // never appeared on Jon's most-used route into this form — and a multi-site
+  // delivery would be saved against no site at all.
+  matchLogCustomer();
+}
+
+// Work out which existing customer the form is for, from whatever Jon has
+// typed or the AI has extracted, and switch on the bits that depend on
+// knowing them. Safe to call as often as you like.
+function matchLogCustomer() {
+  const name  = (document.getElementById('lo-name')?.value  || '').trim().toLowerCase();
+  const phone = (document.getElementById('lo-phone')?.value || '').replace(/\D/g, '');
+
+  let match = null;
+  if (phone.length >= 10) {
+    match = sampleCustomers.find(c => String(c.phone || '').replace(/\D/g, '') === phone);
+  }
+  if (!match && name) {
+    match = sampleCustomers.find(c => String(c.name || '').trim().toLowerCase() === name);
+  }
+
+  if (!match) {
+    // Unknown so far — hide anything that belongs to a specific customer
+    if (logSelectedCustomerId) {
+      logSelectedCustomerId = null;
+      const sw = document.getElementById('lo-site-wrap');
+      if (sw) sw.style.display = 'none';
+      const rw = document.getElementById('lo-repeat-wrap');
+      if (rw) rw.style.display = 'none';
+    }
+    return;
+  }
+
+  if (logSelectedCustomerId === match.id) return;   // already set up for them
+  renderLogSitePicker(match.id);
+  loadRecentOrders(match.id);
 }
 
 function simulateExtract(msg) {
