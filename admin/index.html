@@ -6705,51 +6705,119 @@ async function loadRecentOrders(custId) {
   list.innerHTML = '';
   if (!custId || !supabase) return;
 
+  const entries = await fetchRecentActivity(custId);
+  if (!entries.length) return;
+  list.innerHTML = entries.map(e => repeatCardHTML(e, 'usePreviousOrder')).join('');
+  wrap.style.display = 'block';
+}
+
+// What has this customer had recently? Reads BOTH orders and hand-built
+// invoices, because Jon spent his first days on the system raising invoices
+// without logging the orders behind them. If we only looked at orders, all
+// that work would be invisible here and he'd be re-keying it for weeks.
+//
+// An invoice raised automatically FROM an order is skipped — its lines carry
+// an order_id, and the order itself is already in the list.
+async function fetchRecentActivity(custId) {
+  const entries = [];
+
   try {
     const { data, error } = await supabase
       .from('orders')
-      .select('id, created_at, total_amount, site_id, delivery_slots(delivery_date, day_label), customer_sites(label), order_items(product_name, unit_price, quantity)')
+      .select('id, created_at, site_id, delivery_slots(delivery_date), customer_sites(label), order_items(product_name, unit_price, quantity)')
       .eq('customer_id', custId)
       .neq('status', 'cancelled')
       .order('created_at', { ascending: false })
-      .limit(8);
+      .limit(10);
     if (error) throw error;
 
-    const orders = (data || []).filter(o => (o.order_items || []).length);
-    if (!orders.length) return;
-
-    list.innerHTML = orders.map(o => {
+    (data || []).forEach(o => {
       const items = (o.order_items || []).map(i => ({
         name:  i.product_name,
         price: parseFloat(i.unit_price) || 0,
         qty:   parseInt(i.quantity, 10) || 1,
       }));
-      recentOrdersCache[o.id] = { items, siteLabel: o.customer_sites?.label || '' };
-
-      const when = o.delivery_slots?.delivery_date
-        ? new Date(o.delivery_slots.delivery_date + 'T12:00:00')
-            .toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' })
-        : new Date(o.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
-      const site  = o.customer_sites?.label ? ' · ' + o.customer_sites.label : '';
-      const total = items.reduce((s, i) => s + i.price * i.qty, 0);
-      const summary = items.map(i => `${i.name} ×${i.qty}`).join(', ');
-
-      return `
-        <div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 11px">
-          <div style="flex:1;min-width:0">
-            <div style="font-size:12.5px;font-weight:800;color:var(--ink)">${escapeHtmlAttr(when + site)}</div>
-            <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtmlAttr(summary)}</div>
-          </div>
-          <div style="font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy);white-space:nowrap">£${total.toFixed(2)}</div>
-          <button type="button" onclick="usePreviousOrder('${o.id}')"
-            style="padding:7px 12px;border-radius:7px;font-weight:800;font-size:11.5px;background:var(--navy);color:#fff;border:none;cursor:pointer;white-space:nowrap">Use this</button>
-        </div>`;
-    }).join('');
-
-    wrap.style.display = 'block';
+      if (!items.length) return;
+      entries.push({
+        id: o.id,
+        sortKey: o.delivery_slots?.delivery_date || String(o.created_at).slice(0, 10),
+        when: o.delivery_slots?.delivery_date || String(o.created_at).slice(0, 10),
+        siteLabel: o.customer_sites?.label || '',
+        source: 'order',
+        items,
+      });
+    });
   } catch (err) {
-    console.error('loadRecentOrders error:', err);   // never blocks logging an order
+    console.error('fetchRecentActivity (orders) error:', err);
   }
+
+  try {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('id, invoice_number, created_at, issued_at, week_start, invoice_items(description, unit_price, quantity, order_id, site_label, delivery_date)')
+      .eq('customer_id', custId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    if (error) throw error;
+
+    (data || []).forEach(inv => {
+      const lines = inv.invoice_items || [];
+      if (!lines.length) return;
+      // Skip anything generated from an order — that order is already listed
+      if (lines.some(l => l.order_id)) return;
+
+      const items = lines.map(l => ({
+        name:  l.description,
+        price: parseFloat(l.unit_price) || 0,
+        qty:   parseInt(l.quantity, 10) || 1,
+      }));
+      const day = lines.find(l => l.delivery_date)?.delivery_date
+        || (inv.issued_at ? String(inv.issued_at).slice(0, 10) : String(inv.created_at).slice(0, 10));
+
+      entries.push({
+        id: inv.id,
+        sortKey: day,
+        when: day,
+        siteLabel: lines.find(l => l.site_label)?.site_label || '',
+        source: 'invoice',
+        ref: inv.invoice_number || '',
+        items,
+      });
+    });
+  } catch (err) {
+    console.error('fetchRecentActivity (invoices) error:', err);
+  }
+
+  entries.sort((a, b) => String(b.sortKey).localeCompare(String(a.sortKey)));
+  const top = entries.slice(0, 8);
+  top.forEach(e => { recentOrdersCache[e.id] = { items: e.items, siteLabel: e.siteLabel }; });
+  return top;
+}
+
+// One card in a repeat panel. handler is the name of the function to call.
+function repeatCardHTML(e, handler) {
+  const when = e.when
+    ? new Date(e.when + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' })
+    : '';
+  const site  = e.siteLabel ? ' · ' + e.siteLabel : '';
+  const total = e.items.reduce((s, i) => s + i.price * i.qty, 0);
+  const summary = e.items.map(i => `${i.name} ×${i.qty}`).join(', ');
+  // Jon should be able to see at a glance which of these came from an invoice
+  // he raised by hand rather than a delivery he logged.
+  const tag = e.source === 'invoice'
+    ? `<span style="font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;background:#eef1f6;color:var(--navy);border-radius:8px;padding:2px 6px;margin-left:6px">invoice${e.ref ? ' ' + escapeHtmlAttr(e.ref) : ''}</span>`
+    : '';
+
+  return `
+    <div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 11px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12.5px;font-weight:800;color:var(--ink)">${escapeHtmlAttr(when + site)}${tag}</div>
+        <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtmlAttr(summary)}</div>
+      </div>
+      <div style="font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy);white-space:nowrap">£${total.toFixed(2)}</div>
+      <button type="button" onclick="${handler}('${e.id}')"
+        style="padding:7px 12px;border-radius:7px;font-weight:800;font-size:11.5px;background:var(--navy);color:#fff;border:none;cursor:pointer;white-space:nowrap">Use this</button>
+    </div>`;
 }
 
 // Load a previous order's lines into the form. Anything no longer on the
@@ -8483,8 +8551,8 @@ async function loadInvoiceCustomer() {
   addInvItem(); // start with one blank row
 }
 
-// Recent orders offered on the invoice builder, same idea as Log Order.
-// Reuses recentOrdersCache so an order tapped in either place behaves alike.
+// Recent activity offered on the invoice builder — same source as Log Order,
+// so an invoice Jon raised by hand can be copied onto the next one.
 async function loadInvoiceRecentOrders(custId) {
   const wrap = document.getElementById('inv-repeat-wrap');
   const list = document.getElementById('inv-repeat-list');
@@ -8493,50 +8561,10 @@ async function loadInvoiceRecentOrders(custId) {
   list.innerHTML = '';
   if (!custId || !supabase || !/^[0-9a-f-]{36}$/i.test(custId)) return;
 
-  try {
-    const { data, error } = await supabase
-      .from('orders')
-      .select('id, created_at, site_id, delivery_slots(delivery_date), customer_sites(label), order_items(product_name, unit_price, quantity)')
-      .eq('customer_id', custId)
-      .neq('status', 'cancelled')
-      .order('created_at', { ascending: false })
-      .limit(8);
-    if (error) throw error;
-
-    const orders = (data || []).filter(o => (o.order_items || []).length);
-    if (!orders.length) return;
-
-    list.innerHTML = orders.map(o => {
-      const items = (o.order_items || []).map(i => ({
-        name:  i.product_name,
-        price: parseFloat(i.unit_price) || 0,
-        qty:   parseInt(i.quantity, 10) || 1,
-      }));
-      recentOrdersCache[o.id] = { items, siteLabel: o.customer_sites?.label || '' };
-
-      const when = o.delivery_slots?.delivery_date
-        ? new Date(o.delivery_slots.delivery_date + 'T12:00:00')
-            .toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' })
-        : new Date(o.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
-      const site  = o.customer_sites?.label ? ' · ' + o.customer_sites.label : '';
-      const total = items.reduce((s, i) => s + i.price * i.qty, 0);
-
-      return `
-        <div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 11px">
-          <div style="flex:1;min-width:0">
-            <div style="font-size:12.5px;font-weight:800;color:var(--ink)">${escapeHtmlAttr(when + site)}</div>
-            <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtmlAttr(items.map(i => i.name + ' ×' + i.qty).join(', '))}</div>
-          </div>
-          <div style="font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy);white-space:nowrap">£${total.toFixed(2)}</div>
-          <button type="button" onclick="useOrderOnInvoice('${o.id}')"
-            style="padding:7px 12px;border-radius:7px;font-weight:800;font-size:11.5px;background:var(--navy);color:#fff;border:none;cursor:pointer;white-space:nowrap">Use this</button>
-        </div>`;
-    }).join('');
-
-    wrap.style.display = 'block';
-  } catch (err) {
-    console.error('loadInvoiceRecentOrders error:', err);
-  }
+  const entries = await fetchRecentActivity(custId);
+  if (!entries.length) return;
+  list.innerHTML = entries.map(e => repeatCardHTML(e, 'useOrderOnInvoice')).join('');
+  wrap.style.display = 'block';
 }
 
 // Append a past order's lines to the invoice being built. Appends rather than
@@ -10225,7 +10253,7 @@ const HELP_PAGES = {
       { icon:'🛒', title:'Adding items', body:'Select a product from the dropdown, enter the quantity, and press <strong>Add item</strong>. Repeat for each product in the order. The total updates automatically.' },
       { icon:'📅', title:'Delivery day', body:'The delivery day list shows the days you\'ve opened on the <strong>Schedule</strong> page, each with its date. Pick the one the customer wants and the order lands in that day\'s run. If a day you need isn\'t listed, open it first on the Schedule page.' },
       { icon:'📍', title:'Customers with more than one address', body:'If a customer has extra delivery sites set up (Customers page → Edit → <strong>Delivery sites</strong>) — e.g. a business with two locations — a <strong>Delivery site</strong> box appears once you pick them from the lookup. You must choose which address this delivery is going to: their <strong>main address</strong> or one of the extra sites. It shows on the delivery run pick list and route so you go to the right place, and it decides which section of their invoice the items appear under.' },
-      { icon:'🔁', title:'Order the same again (big time saver)', body:'Most trade customers order the same thing every drop. As soon as you pick the customer, an <strong>Order the same again</strong> panel appears listing their recent orders with the date, the site it went to and what was on it. Tap <strong>Use this</strong> and every item loads into the form — then just change what\'s different: bump a quantity, add a line, remove one. Nothing is saved until you press Save order, so you can\'t break anything by having a look.' },
+      { icon:'🔁', title:'Order the same again (big time saver)', body:'Most trade customers order the same thing every drop. As soon as the customer is filled in, an <strong>Order the same again</strong> panel appears listing what they\'ve had recently — the date, the site it went to and what was on it. Tap <strong>Use this</strong> and every item loads into the form, then just change what\'s different: bump a quantity, add a line, remove one. Nothing is saved until you press Save order, so you can\'t break anything by having a look. It lists <strong>invoices you\'ve raised by hand</strong> as well as orders you\'ve logged, marked with an <strong>invoice</strong> tag — so anything already on the system can be copied.' },
       { icon:'⏪', title:'Entering an order you\'ve already delivered', body:'Catching the system up with deliveries you\'ve already done? In the <strong>Delivery slot</strong> list choose <strong>📅 A delivery I\'ve already done</strong> at the bottom, then pick the date it went out. It\'s saved as already delivered, so it won\'t appear on your run sheet or pick list — it just goes on the books, into that day\'s takings, and onto the customer\'s invoice for that week. The form stays open so you can enter the next one straight away.' },
       { icon:'💬', title:'Notes', body:'Use the notes box for anything special — e.g. "leave by back gate" or "call on arrival". Jon will see this on the order card.' },
       { icon:'💰', title:'Minimum order', body:'Orders under £20 will automatically have the £5 small-order charge added. Customers marked as exempt (family/friends) won\'t see this charge.' },
