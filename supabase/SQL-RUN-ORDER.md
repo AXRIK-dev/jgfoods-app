@@ -375,6 +375,19 @@ Adds one internal view, `daily_payment_allocations`, that decides which day any 
 
 ---
 
+### 39. `039_order_profiles.sql`
+**What it does:** Stores each customer's **usual order** — the standing list Jon worked from before the system.
+
+The repeat panel offered a customer's last several orders. That works now, but a regular taking four deliveries a week builds up hundreds of near-identical past orders within months, and picking the right one gets harder the better the business does. So Log Order now offers two things instead of a history: **their usual order** and **their last order**.
+
+- `customer_order_profiles` — description, unit price, default quantity, sort order. Optionally per **delivery site**, because Billy Bunters' Russell Road order isn't his Dock Road order; `site_id NULL` is the customer's general one and is used as a fallback.
+- `save_order_profile(customer_id, site_id, lines jsonb)` — replaces a profile atomically. Empty array clears it.
+- **Zero quantities are deliberate.** They reproduce Jon's sheet: an item at 0 stays on the form as a reminder to ask, and isn't billed unless he types a quantity in. Roses Cafe's sheet lists 1kg Tuna Pouch and 500g Sliced Beef at 0 alongside three items that were taken — total £108.05.
+
+**When to run:** After 032 (needs `customer_sites`). Safe on the live database — purely additive, and nothing reads the table until Jon saves a profile.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

@@ -891,7 +891,7 @@
 
     <div class="field" id="lo-site-wrap" style="display:none">
       <label>Delivery site *</label>
-      <select id="lo-site"></select>
+      <select id="lo-site" onchange="onLogSiteChange()"></select>
     </div>
 
     <div class="field-row">
@@ -915,8 +915,8 @@
     <!-- Repeat orders: most trade customers order the same thing every drop.
          Loads a previous order's items in one tap so Jon only edits what changed. -->
     <div id="lo-repeat-wrap" style="display:none;background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:14px">
-      <label style="font-weight:800;font-size:13px">Order the same again</label>
-      <p style="font-size:11.5px;color:var(--ink-soft);margin:2px 0 10px">Tap one of their recent orders to load it in, then change whatever's different. Nothing is saved until you press Save order.</p>
+      <label style="font-weight:800;font-size:13px">Start from what they usually have</label>
+      <p style="font-size:11.5px;color:var(--ink-soft);margin:2px 0 10px">Load it in, then change whatever's different — quantities, extra items, one-offs. Anything they're not having this time, press <strong>✕</strong> to take it off; it stays on their usual order for next time. Nothing is saved until you press Save order.</p>
       <div id="lo-repeat-list" style="display:flex;flex-direction:column;gap:6px"></div>
     </div>
 
@@ -956,11 +956,17 @@
             <option value="Family Value Pack|52">Family Value Pack — £52.00</option>
             <option value="Diced Beef 1kg|10">Diced Beef 1kg — £10.00</option>
           </select>
-          <input type="number" min="1" value="1" class="item-qty" placeholder="Qty" onchange="updateLogTotal()">
+          <input type="number" min="0" value="1" class="item-qty" placeholder="Qty" onchange="updateLogTotal()">
           <button onclick="removeLogItem(this)">×</button>
         </div>
       </div>
       <button class="add-item-btn" onclick="addLogItem()">+ Add another item</button>
+      <button class="add-item-btn" id="lo-clear-zeros" style="display:none;margin-top:6px;border-style:solid;border-color:var(--line);color:var(--oxblood)"
+        onclick="clearZeroLogItems()"
+        title="Take the items they're not having off this order. Their usual order is not changed.">✕ <span id="lo-clear-zeros-text">Remove the ones they're not having</span></button>
+      <button class="add-item-btn" id="lo-save-profile" style="display:none;margin-top:6px;border-style:solid;border-color:var(--gold,#c2954a);color:var(--navy)"
+        onclick="saveOrderProfileFromForm(this)"
+        title="Remember these items as this customer's usual order, so next time you can load them in one tap">⭐ Save as their usual order</button>
     </div>
 
     <div id="logSurcharge" style="display:none;background:#fdf3e3;border:1px solid #fcd299;border-radius:9px;padding:9px 13px;margin:10px 0 4px;align-items:center;gap:8px">
@@ -7019,12 +7025,115 @@ async function loadRecentOrders(custId) {
   if (!wrap || !list) return;
   wrap.style.display = 'none';
   list.innerHTML = '';
+
+  // Saving a usual order only makes sense once we know who the customer is
+  const saveBtn = document.getElementById('lo-save-profile');
+  if (saveBtn) saveBtn.style.display = custId ? 'block' : 'none';
+
   if (!custId || !supabase) return;
 
-  const entries = await fetchRecentActivity(custId);
-  if (!entries.length) return;
-  list.innerHTML = entries.map(e => repeatCardHTML(e, 'usePreviousOrder')).join('');
+  // Two choices, not a growing history. A regular taking four deliveries a
+  // week would otherwise have hundreds of near-identical past orders here
+  // within a couple of months, and finding the right one gets harder the
+  // better the business does.
+  const siteId = currentLogSiteId();
+  const [profile, entries] = await Promise.all([
+    fetchOrderProfile(custId, siteId),
+    fetchRecentActivity(custId, 1),
+  ]);
+
+  const cards = [];
+  if (profile.items.length) {
+    recentOrdersCache['__profile__'] = { items: profile.items, siteLabel: '' };
+    cards.push(repeatCardHTML({
+      id: '__profile__', items: profile.items, source: 'profile',
+      when: '', siteLabel: profile.siteLabel || '',
+    }, 'usePreviousOrder'));
+  }
+  if (entries.length) cards.push(repeatCardHTML(entries[0], 'usePreviousOrder'));
+
+  if (!cards.length) return;
+  list.innerHTML = cards.join('');
   wrap.style.display = 'block';
+}
+
+// Billy Bunters' Russell Road order isn't his Dock Road order, so switching
+// site reloads the usual order for that site.
+function onLogSiteChange() {
+  if (logSelectedCustomerId) loadRecentOrders(logSelectedCustomerId);
+}
+
+// Which site is selected on the Log Order form right now (null = main/none).
+function currentLogSiteId() {
+  const w = document.getElementById('lo-site-wrap');
+  if (!w || w.style.display === 'none') return null;
+  const v = document.getElementById('lo-site')?.value || '';
+  return (v && v !== '__main__') ? v : null;
+}
+
+// A customer's saved usual order. Looks for one against the chosen site
+// first, then falls back to their general one.
+async function fetchOrderProfile(custId, siteId) {
+  const empty = { items: [], siteLabel: '' };
+  if (!custId || !supabase) return empty;
+  try {
+    const { data, error } = await supabase
+      .from('customer_order_profiles')
+      .select('description, unit_price, default_qty, site_id, sort_order')
+      .eq('customer_id', custId)
+      .order('sort_order', { ascending: true });
+    if (error) throw error;
+
+    const all = data || [];
+    let rows = siteId ? all.filter(r => r.site_id === siteId) : [];
+    if (!rows.length) rows = all.filter(r => !r.site_id);
+    if (!rows.length) return empty;
+
+    return {
+      items: rows.map(r => ({
+        name:  r.description,
+        price: parseFloat(r.unit_price) || 0,
+        qty:   parseInt(r.default_qty, 10) || 0,
+      })),
+      siteLabel: '',
+    };
+  } catch (err) {
+    console.error('fetchOrderProfile error:', err);
+    return empty;
+  }
+}
+
+// Save whatever is on the Log Order form as this customer's usual order.
+async function saveOrderProfileFromForm(btn) {
+  const custId = logSelectedCustomerId;
+  if (!custId) { alert('Pick the customer first, then save their usual order.'); return; }
+  if (!supabase) { alert('Not connected to the database — please refresh and try again.'); return; }
+
+  const lines = [];
+  document.querySelectorAll('.log-item-wrap').forEach(wrap => {
+    const it = readLogItemRow(wrap, true);   // include zero-quantity lines
+    if (it) lines.push({ description: it.product, unit_price: it.price, default_qty: it.qty });
+  });
+  if (!lines.length) { alert('Add some items first, then save them as their usual order.'); return; }
+
+  const siteId = currentLogSiteId();
+  const label  = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const { error } = await supabase.rpc('save_order_profile', {
+      p_customer_id: custId, p_site_id: siteId, p_lines: lines,
+    });
+    if (error) throw error;
+    await loadRecentOrders(custId);
+    alert(`Saved as their usual order — ${lines.length} item${lines.length === 1 ? '' : 's'}.\n\n` +
+          'Next time you log an order for them you can load it in one tap and just change the quantities. ' +
+          'Leave an item at 0 and it stays on the list as a reminder without being charged.');
+  } catch (err) {
+    console.error('saveOrderProfileFromForm error:', err);
+    alert('Could not save their usual order — ' + (err.message || err));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label || '⭐ Save as their usual order'; }
+  }
 }
 
 // What has this customer had recently? Reads BOTH orders and hand-built
@@ -7034,8 +7143,9 @@ async function loadRecentOrders(custId) {
 //
 // An invoice raised automatically FROM an order is skipped — its lines carry
 // an order_id, and the order itself is already in the list.
-async function fetchRecentActivity(custId) {
+async function fetchRecentActivity(custId, limit) {
   const entries = [];
+  const cap = limit || 8;
 
   try {
     const { data, error } = await supabase
@@ -7105,29 +7215,40 @@ async function fetchRecentActivity(custId) {
   }
 
   entries.sort((a, b) => String(b.sortKey).localeCompare(String(a.sortKey)));
-  const top = entries.slice(0, 8);
+  const top = entries.slice(0, cap);
   top.forEach(e => { recentOrdersCache[e.id] = { items: e.items, siteLabel: e.siteLabel }; });
   return top;
 }
 
 // One card in a repeat panel. handler is the name of the function to call.
 function repeatCardHTML(e, handler) {
+  const isProfile = e.source === 'profile';
   const when = e.when
     ? new Date(e.when + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' })
     : '';
   const site  = e.siteLabel ? ' · ' + e.siteLabel : '';
   const total = e.items.reduce((s, i) => s + i.price * i.qty, 0);
-  const summary = e.items.map(i => `${i.name} ×${i.qty}`).join(', ');
-  // Jon should be able to see at a glance which of these came from an invoice
-  // he raised by hand rather than a delivery he logged.
-  const tag = e.source === 'invoice'
-    ? `<span style="font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;background:#eef1f6;color:var(--navy);border-radius:8px;padding:2px 6px;margin-left:6px">invoice${e.ref ? ' ' + escapeHtmlAttr(e.ref) : ''}</span>`
-    : '';
+
+  // On a usual order, items sitting at 0 are prompts rather than purchases —
+  // show them plainly so Jon can see the full standing list at a glance.
+  const summary = e.items
+    .map(i => i.qty > 0 ? `${i.name} ×${i.qty}` : `${i.name} —`)
+    .join(', ');
+
+  const title = isProfile
+    ? 'Their usual order'
+    : (when + site) || 'Their last order';
+
+  const tag = isProfile
+    ? `<span style="font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;background:var(--gold,#c2954a);color:var(--navy-deep,#0d1726);border-radius:8px;padding:2px 6px;margin-left:6px">saved list</span>`
+    : e.source === 'invoice'
+      ? `<span style="font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;background:#eef1f6;color:var(--navy);border-radius:8px;padding:2px 6px;margin-left:6px">invoice${e.ref ? ' ' + escapeHtmlAttr(e.ref) : ''}</span>`
+      : `<span style="font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;background:#eef1f6;color:var(--navy);border-radius:8px;padding:2px 6px;margin-left:6px">last order</span>`;
 
   return `
-    <div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 11px">
+    <div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid ${isProfile ? 'var(--gold,#c2954a)' : 'var(--line)'};border-radius:8px;padding:9px 11px">
       <div style="flex:1;min-width:0">
-        <div style="font-size:12.5px;font-weight:800;color:var(--ink)">${escapeHtmlAttr(when + site)}${tag}</div>
+        <div style="font-size:12.5px;font-weight:800;color:var(--ink)">${escapeHtmlAttr(title)}${tag}</div>
         <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtmlAttr(summary)}</div>
       </div>
       <div style="font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy);white-space:nowrap">£${total.toFixed(2)}</div>
@@ -7204,6 +7325,7 @@ function updateLogTotal() {
     const it = readLogItemRow(wrap);
     if (it) total += it.price * it.qty;
   });
+  refreshZeroLineHint();
 
   // Check if selected customer is exempt before applying the small-order charge
   const custName = (document.getElementById('lo-name')?.value || '').trim().toLowerCase();
@@ -7265,7 +7387,7 @@ function addLogItem(desc = '', price = null, qty = 1) {
         ${opts}
         <option value="__custom__">✏️ Something else (type it in)</option>
       </select>
-      <input type="number" min="1" value="${qty}" class="item-qty" placeholder="Qty" onchange="updateLogTotal()">
+      <input type="number" min="0" value="${qty}" class="item-qty" placeholder="Qty" onchange="updateLogTotal()">
       <button type="button" title="Remove this item" onclick="removeLogItem(this)">×</button>
     </div>
     <div class="log-custom-row lc-wrap" style="display:none">
@@ -7295,10 +7417,20 @@ function onLogProductChange(sel) {
 }
 
 // What's on this row: either the chosen product, or the typed-in custom item.
-function readLogItemRow(wrap) {
+//
+// A quantity of 0 is meaningful, not a mistake. A usual order lists everything
+// the customer sometimes takes, and the ones they've skipped this week sit at
+// 0 — exactly like Jon's old sheet. Those lines stay on screen as a reminder
+// but are left off the order, so pass includeZero only when saving a profile.
+function readLogItemRow(wrap, includeZero) {
   const sel = wrap.querySelector('.item-product');
-  const qty = parseInt(wrap.querySelector('.item-qty')?.value, 10) || 1;
   if (!sel) return null;
+
+  const raw = wrap.querySelector('.item-qty')?.value;
+  let qty = parseInt(raw, 10);
+  if (isNaN(qty)) qty = includeZero ? 0 : 1;
+  if (qty < 0) qty = 0;
+  if (!includeZero && qty <= 0) return null;
 
   if (sel.value === '__custom__') {
     const name  = (wrap.querySelector('.lc-desc')?.value || '').trim();
@@ -7313,7 +7445,54 @@ function readLogItemRow(wrap) {
 
 function removeLogItem(btn) {
   const rows = document.querySelectorAll('.log-item-wrap');
-  if (rows.length > 1) { btn.closest('.log-item-wrap').remove(); updateLogTotal(); }
+  if (rows.length > 1) {
+    btn.closest('.log-item-wrap').remove();
+  } else {
+    // Last row — clear it rather than refusing, so the form can't get stuck
+    addLogItem();
+    btn.closest('.log-item-wrap').remove();
+  }
+  updateLogTotal();
+}
+
+// Strip every line the customer isn't taking this time.
+//
+// Jon's sheets carried zeros because deleting a row in a spreadsheet is a
+// faff. Here it isn't — so a usual order can arrive with the full standing
+// list, he types the quantities they actually want, and clears the rest in
+// one tap. The customer's invoice then shows only what they bought.
+//
+// This touches THIS ORDER ONLY. Their usual order is untouched unless he
+// presses "Save as their usual order", so next week the tuna is back.
+function clearZeroLogItems() {
+  const wraps = [...document.querySelectorAll('.log-item-wrap')];
+  const zeros = wraps.filter(w => {
+    const line = readLogItemRow(w, true);
+    return line && line.qty <= 0;
+  });
+  if (!zeros.length) return;
+
+  zeros.forEach(w => w.remove());
+  if (!document.querySelectorAll('.log-item-wrap').length) addLogItem();
+  updateLogTotal();
+}
+
+// Show the clear button only when there's something to clear, and say how
+// many — so it's obvious what pressing it will do.
+function refreshZeroLineHint() {
+  const btn  = document.getElementById('lo-clear-zeros');
+  const text = document.getElementById('lo-clear-zeros-text');
+  if (!btn) return;
+  const n = [...document.querySelectorAll('.log-item-wrap')].filter(w => {
+    const line = readLogItemRow(w, true);
+    return line && line.qty <= 0;
+  }).length;
+  btn.style.display = n ? 'block' : 'none';
+  if (text) {
+    text.textContent = n === 1
+      ? "Remove the 1 item they're not having"
+      : `Remove the ${n} items they're not having`;
+  }
 }
 
 async function saveLogOrder() {
@@ -7527,6 +7706,8 @@ function clearLogForm() {
   if (repeatWrap) repeatWrap.style.display = 'none';
   const repeatList = document.getElementById('lo-repeat-list');
   if (repeatList) repeatList.innerHTML = '';
+  const saveProfBtn = document.getElementById('lo-save-profile');
+  if (saveProfBtn) saveProfBtn.style.display = 'none';
   // Keep the chosen date when catching up several past orders in a row —
   // Jon is usually entering a whole Monday's worth at once.
   const slotSel = document.getElementById('lo-slot');
@@ -8943,9 +9124,23 @@ async function loadInvoiceRecentOrders(custId) {
   list.innerHTML = '';
   if (!custId || !supabase || !/^[0-9a-f-]{36}$/i.test(custId)) return;
 
-  const entries = await fetchRecentActivity(custId);
-  if (!entries.length) return;
-  list.innerHTML = entries.map(e => repeatCardHTML(e, 'useOrderOnInvoice')).join('');
+  // Same two choices as Log Order: their usual order, or their last one.
+  const [profile, entries] = await Promise.all([
+    fetchOrderProfile(custId, null),
+    fetchRecentActivity(custId, 1),
+  ]);
+
+  const cards = [];
+  if (profile.items.length) {
+    recentOrdersCache['__profile__'] = { items: profile.items, siteLabel: '' };
+    cards.push(repeatCardHTML({
+      id: '__profile__', items: profile.items, source: 'profile', when: '', siteLabel: '',
+    }, 'useOrderOnInvoice'));
+  }
+  if (entries.length) cards.push(repeatCardHTML(entries[0], 'useOrderOnInvoice'));
+
+  if (!cards.length) return;
+  list.innerHTML = cards.join('');
   wrap.style.display = 'block';
 }
 
@@ -8965,7 +9160,9 @@ function useOrderOnInvoice(orderId) {
     const id = Date.now() + Math.floor(Math.random() * 1000);
     invItems.push({ id, type: 'header', label: siteLabel });
   }
-  items.forEach((it, n) => {
+  // Zero-quantity lines on a usual order are prompts, not purchases — they
+  // don't belong on an invoice.
+  items.filter(it => it.qty > 0).forEach((it, n) => {
     invItems.push({
       id: Date.now() + n + Math.floor(Math.random() * 1000),
       type: 'item', productId: null,
@@ -10716,7 +10913,10 @@ const HELP_PAGES = {
       { icon:'✏️', title:'Something that\'s not on the list', body:'Sourced something specially, or selling something you haven\'t added to your products yet? Pick <strong>✏️ Something else (type it in)</strong> at the bottom of the product dropdown — a box appears for what it is and what you\'re charging. It goes on the order and their invoice exactly like anything else. Handy for one-offs you don\'t want cluttering up your product list.' },
       { icon:'📅', title:'Delivery day', body:'The delivery day list shows the days you\'ve opened on the <strong>Schedule</strong> page, each with its date. Pick the one the customer wants and the order lands in that day\'s run. If a day you need isn\'t listed, open it first on the Schedule page.' },
       { icon:'📍', title:'Customers with more than one address', body:'If a customer has extra delivery sites set up (Customers page → Edit → <strong>Delivery sites</strong>) — e.g. a business with two locations — a <strong>Delivery site</strong> box appears once you pick them from the lookup. You must choose which address this delivery is going to: their <strong>main address</strong> or one of the extra sites. It shows on the delivery run pick list and route so you go to the right place, and it decides which section of their invoice the items appear under.' },
-      { icon:'🔁', title:'Order the same again (big time saver)', body:'Most trade customers order the same thing every drop. As soon as the customer is filled in, an <strong>Order the same again</strong> panel appears listing what they\'ve had recently — the date, the site it went to and what was on it. Tap <strong>Use this</strong> and every item loads into the form, then just change what\'s different: bump a quantity, add a line, remove one. Nothing is saved until you press Save order, so you can\'t break anything by having a look. It lists <strong>invoices you\'ve raised by hand</strong> as well as orders you\'ve logged, marked with an <strong>invoice</strong> tag — so anything already on the system can be copied.' },
+      { icon:'⭐', title:'Their usual order (the big time saver)', body:'Most regulars have the same few things every week. Build their order once, then press <strong>⭐ Save as their usual order</strong> under the item list. From then on, whenever you pick that customer you can load the whole lot back in with one tap and just change what\'s different that week. If they have more than one delivery address you can save a different usual order for each — pick the site first, then save.' },
+      { icon:'0️⃣', title:'Items they\'re not having this time', body:'When you load their usual order, anything they\'re not taking can either be left at <strong>0</strong> or taken off the order entirely with the <strong>✕</strong> next to it. If there are several, press <strong>✕ Remove the ones they\'re not having</strong> under the item list and they all go at once. Either way they aren\'t charged — but taking them off means the customer\'s invoice shows only what they actually bought, which is easier for them to read.' },
+      { icon:'🔒', title:'Removing an item doesn\'t forget it', body:'Taking an item off an order changes <strong>that order only</strong>. Their usual order is left exactly as it is, so next time you log an order for them it\'s all still there — it\'s up to you each time whether you put a quantity against it or take it off. Their usual order only changes when you press <strong>⭐ Save as their usual order</strong>.' },
+      { icon:'🔁', title:'Starting from a previous order', body:'Once the customer is filled in you get two choices: <strong>Their usual order</strong> (the list you saved, marked in gold) and <strong>Their last order</strong> (the most recent one, whether you logged it or raised it as an invoice by hand). Tap <strong>Use this</strong> on either and it loads into the form — then change quantities, add lines, remove lines, or add a one-off item. Nothing is saved until you press Save order, so you can\'t break anything by having a look.' },
       { icon:'⏪', title:'Entering an order you\'ve already delivered', body:'Catching the system up with deliveries you\'ve already done? In the <strong>Delivery slot</strong> list choose <strong>📅 A delivery I\'ve already done</strong> at the bottom, then pick the date it went out. It\'s saved as already delivered, so it won\'t appear on your run sheet or pick list — it just goes on the books, into that day\'s takings, and onto the customer\'s invoice for that week. The form stays open so you can enter the next one straight away.' },
       { icon:'💬', title:'Notes', body:'Use the notes box for anything special — e.g. "leave by back gate" or "call on arrival". Jon will see this on the order card.' },
       { icon:'💰', title:'Minimum order', body:'Orders under £20 will automatically have the £5 small-order charge added. Customers marked as exempt (family/friends) won\'t see this charge.' },
