@@ -403,6 +403,21 @@ Domestic orders create a receipt, and because those customers pay at the door it
 
 ---
 
+### 41. `041_delete_invoice_cascade.sql`
+**What it does:** Makes deleting an invoice take its money out of the books with it.
+
+Deleting an invoice removed the invoice and cascaded its payments away correctly — but `daily_sales` stores each day's takings as a **saved figure**, rebuilt only when something asks it to, and nothing did. The money stayed in the books after the invoice had gone, and since the weekly sheet and monthly accountant export are both built from `daily_sales`, that ghost flowed straight through to the accountant with no way for Jon to spot it.
+
+`delete_invoice_cascade(uuid)` works out every day the invoice's money counts towards **before** deleting it, then rebuilds each of those days. One correction at `daily_sales` level flows through to weekly and monthly automatically.
+
+Also fixes the same staleness when an **order** is deleted off a weekly invoice: that resynced only the order's own delivery date, but a weekly invoice's payments are apportioned across all its deliveries (037), so removing one changes the share landing on the others.
+
+The **order survives** with `invoice_id` set to NULL — deleting a bill shouldn't erase a delivery that happened, and it means an invoice deleted in error can be raised again. Cash tabs are untouched: `cash_tab_entries` has no link to an invoice.
+
+**When to run:** After 037. Safe on the live database — adds one function, changes no data by itself.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

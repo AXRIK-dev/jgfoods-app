@@ -3531,16 +3531,22 @@ async function deleteCurrentOrder() {
       .select('id').eq('order_id', currentOrderId).maybeSingle();
     if (findErr) { alert('Failed to check the invoice: ' + findErr.message); return; }
     if (directInv) {
-      const { error: invErr } = await window.supabase.from('invoices').delete().eq('id', directInv.id);
+      // Deletes the invoice AND rebuilds the takings for every day its money
+      // counted towards (migration 041)
+      const { error: invErr } = await window.supabase.rpc('delete_invoice_cascade', { p_invoice_id: directInv.id });
       if (invErr) { alert('Failed to delete the invoice: ' + invErr.message); return; }
     } else {
-      // Multi-site customer (migration 032): the invoice is shared with other
-      // orders via orders.invoice_id — remove only THIS order's lines from it
-      // and keep the rest of the invoice (other sites/deliveries) intact.
+      // Weekly or multi-site customer: the invoice is shared with other orders
+      // via orders.invoice_id — remove only THIS order's lines and keep the
+      // rest of the invoice intact.
       const { data: link } = await window.supabase.from('orders').select('invoice_id').eq('id', currentOrderId).maybeSingle();
       if (link?.invoice_id) {
         await window.supabase.from('invoice_items').delete().eq('invoice_id', link.invoice_id).eq('order_id', currentOrderId);
         try { await window.supabase.rpc('recalc_invoice_totals', { p_invoice_id: link.invoice_id }); } catch (e) { console.error('Recalc failed:', e); }
+        // A weekly invoice's payments are split across its deliveries by value,
+        // so dropping one delivery changes the share landing on all the others.
+        // Resyncing just this order's own date would leave the rest wrong.
+        try { await window.supabase.rpc('recompute_daily_sales_for_invoice', { p_invoice_id: link.invoice_id }); } catch (e) { console.error('Daily sales sync failed:', e); }
       }
     }
     const { error } = await window.supabase.from('orders').delete().eq('id', currentOrderId);
@@ -6451,15 +6457,29 @@ async function mergeInvoiceWeek(id) {
 }
 
 async function deleteInvoice(id, ref, name) {
-  if (!confirm(`Delete ${ref} (${name})?\n\nThis will also remove all payments logged against it. This cannot be undone.`)) return;
+  const inv  = sampleInvoices.find(i => i.id === id);
+  const paid = inv ? invPaidTotal(inv) : 0;
+
+  // Spell out what goes, especially when money has been recorded against it
+  const moneyWarning = paid > 0.001
+    ? `\n\n£${paid.toFixed(2)} has been logged as paid against this. That money will be TAKEN OUT of your daily takings, and out of your weekly and monthly figures with it.`
+    : '';
+  if (!confirm(`Delete ${ref} (${name})?${moneyWarning}\n\nThe delivery itself is kept — only the invoice and its payments go. This cannot be undone.`)) return;
+
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-    const { error } = await window.supabase.from('invoices').delete().eq('id', id);
+    // Goes through the database so the takings for every day this invoice's
+    // money touched are rebuilt as it's deleted. A plain delete left the cash
+    // sitting in Daily Sales — and from there in the accountant's figures —
+    // long after the invoice had gone.
+    const { error } = await window.supabase.rpc('delete_invoice_cascade', { p_invoice_id: id });
     if (error) { alert('Failed to delete invoice: ' + error.message); return; }
   }
+
   const idx = sampleInvoices.findIndex(i => i.id === id);
   if (idx !== -1) sampleInvoices.splice(idx, 1);
-  renderInvoices();
-  renderDashboard(); // unpaid count updates immediately
+
+  if (typeof loadAppData === 'function') await loadAppData();   // refresh Finance + dashboard
+  else { renderInvoices(); renderDashboard(); }
 }
 
 function filterInvoices(filter, btn) {
@@ -11019,6 +11039,7 @@ const HELP_PAGES = {
       { icon:'📱', title:'Works from your phone', body:'This is built for sending on the road. The receipt is written right into the message with a tap-to-open PDF link, so there\'s nothing to attach or fiddle with — open the order\'s receipt, tap WhatsApp or email, check it, send. Done in seconds at the van.' },
       { icon:'🖨️', title:'Printing', body:'Choose <strong>Print</strong> from the <strong>Actions</strong> menu to get a printer-friendly version. Useful if a customer wants a paper copy.' },
       { icon:'💷', title:'Logging a payment', body:'When a customer pays, press <strong>Log payment</strong> on their invoice. Choose the method (cash or bank transfer), enter the amount, and press <strong>Add this payment</strong>. You can add as many entries as needed — for example £50 cash and £50 bank transfer against the same invoice. The invoice marks itself as paid automatically once the full balance is cleared, and the money goes straight into that day\'s takings on the Finance page.' },
+      { icon:'🗑', title:'Deleting an invoice', body:'From the <strong>Actions</strong> menu, <strong>Delete invoice</strong>. If money has been logged against it you\'ll be told how much before you confirm — that amount comes <strong>straight back out</strong> of the day\'s takings, and out of your weekly and monthly figures with it, so nothing is left behind in the books. The <strong>delivery itself is kept</strong>, so if you delete a bill by mistake you can raise it again from the order. Cash tabs are separate and are never touched.' },
       { icon:'↩️', title:'Logged a payment by mistake', body:'Press the <strong>×</strong> next to it in the Log payment box. It asks you to confirm, then removes it and puts the day\'s takings back to what they should be. If the invoice was marked paid it goes back to unpaid.' },
       { icon:'🔀', title:'Split payments', body:'If a customer pays part in cash and part by bank transfer, just log both separately using <strong>Log payment</strong>. Each entry shows up on the invoice with its method and amount. The remaining balance updates as you go.' },
       { icon:'🔴', title:'Overdue invoices', body:'Any invoice not paid after 30 days turns <strong>Overdue</strong> and shows in red. You\'ll see a count on the Dashboard too.' },
