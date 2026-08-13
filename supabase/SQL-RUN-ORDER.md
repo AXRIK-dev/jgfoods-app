@@ -388,6 +388,21 @@ The repeat panel offered a customer's last several orders. That works now, but a
 
 ---
 
+### 40. `040_receipts_await_payment.sql`
+**What it does:** Stops a receipt claiming to be paid before any money has been recorded.
+
+Domestic orders create a receipt, and because those customers pay at the door it was stamped `paid` at creation. That left two screens contradicting each other: the **delivery run** correctly said *Awaiting payment* (it reads `invoice_payments`), while the **Invoices page** said **PAID** with no Log payment button (it reads `invoices.status`). Since Daily Sales is built from recorded payments (037), taking a receipt at its word meant that money silently never reached the takings.
+
+- Receipts are now created `sent`, becoming `paid` when Jon records the cash or bank transfer — the same moment the money hits Daily Sales. One source of truth.
+- `split_invoice_by_delivery` follows the same rule.
+- **Existing receipts are deliberately not changed** — we can't know which were genuinely paid in cash and never recorded. The admin app flags them amber as **"unrecorded"** with a Log payment button so Jon can settle them as he goes.
+
+**Expect the Unpaid list and the dashboard's outstanding figure to grow** by the domestic receipts with no money recorded. That isn't a regression — it's the true position, and it clears as he works through them.
+
+**When to run:** After 036 and 037. Safe on the live database — replaces two functions, changes no existing rows.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app
