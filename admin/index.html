@@ -2009,6 +2009,29 @@
 </div>
 
 <!-- ============ LOG PAYMENT MODAL ============ -->
+<!-- ============ VIEW INVOICE ============
+     Look at an invoice on screen without downloading a copy. Jon checks
+     invoices constantly; every check used to leave another PDF on the
+     computer. Download / print / send are all here if he wants them. -->
+<div class="modal-overlay" id="viewInvoiceModal">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-head">
+      <div>
+        <h3 id="viTitle">Invoice</h3>
+        <p style="font-size:12px;color:var(--ink-soft);margin-top:3px" id="viSubtitle"></p>
+      </div>
+      <button class="modal-close" onclick="closeModal('viewInvoiceModal')">✕</button>
+    </div>
+    <div id="viBody" style="max-height:62vh;overflow-y:auto;background:#fff;border:1px solid var(--line-soft);border-radius:11px;padding:18px 20px"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:13px">
+      <button class="btn-add" style="flex:1;justify-content:center;padding:12px;min-width:130px" id="viDownload">📄 Download PDF</button>
+      <button class="btn-navy" style="padding:12px 16px" id="viEmail">✉️ Email</button>
+      <button class="btn-navy" style="padding:12px 16px" id="viWhatsApp">💬 WhatsApp</button>
+      <button onclick="closeModal('viewInvoiceModal')" style="padding:12px 18px;border-radius:9px;font-weight:800;font-size:13px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft)">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="paymentModal">
   <div class="modal" style="max-width:480px">
     <div class="modal-head">
@@ -6304,7 +6327,7 @@ function renderInvoices(filter) {
     const payNote = invPaymentSummary(inv);
     return `
     <div style="background:#fff;border:1px solid var(--line-soft);border-radius:11px;padding:13px 15px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 12px -10px rgba(13,23,38,.4)">
-      <div style="flex:1;min-width:0">
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="viewInvoice('${inv.id}')" title="Tap to view this invoice">
         <div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-soft);font-weight:700">${inv.ref}</div>
         <div style="font-size:14px;font-weight:800;color:var(--ink);margin-top:2px">${inv.name}</div>
         <div style="font-size:11px;color:var(--ink-soft);margin-top:2px">${isWeekly ? weekLabel(inv.weekStart) + (isDraft ? ' · still collecting' : '') : (isDraft ? 'Still collecting deliveries — ' + inv.date : inv.date)}${payNote ? ' · ' + payNote : ''}</div>
@@ -6322,6 +6345,7 @@ function renderInvoices(filter) {
             <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
           <div class="actions-menu" id="iam-${inv.id}">
+            <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');viewInvoice('${inv.id}')"><span class="ai-icon">👁️</span> View invoice</div>
             ${isDraft ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');finalizeInvoice('${inv.id}')"><span class="ai-icon">✅</span> Finalise &amp; send</div>` : `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openPaymentModal('${inv.id}')"><span class="ai-icon">💷</span> Log payment</div>`}
             ${isDraft ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');splitInvoice('${inv.id}')"><span class="ai-icon">✂️</span> Split into one per delivery</div>` : ''}
             ${inv.status !== 'paid' ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');mergeInvoiceWeek('${inv.id}')"><span class="ai-icon">🧾</span> Combine this week onto one</div>` : ''}
@@ -6655,7 +6679,7 @@ let sendMode = 'email';
 // Gather everything we need to send. invId set -> load the saved invoice from
 // the DB (full line items); otherwise fall back to the on-screen builder state.
 async function getSendData(invId, custName, invRef, amount) {
-  let ref, type, name, total, items = [], phone = '', email = '', address = '';
+  let ref, type, name, total, items = [], phone = '', email = '', address = '', weekStart = null;
 
   if (invId && window.supabase) {
     const { data: inv, error } = await window.supabase
@@ -6672,6 +6696,7 @@ async function getSendData(invId, custName, invRef, amount) {
       // invoice_address = optional override (e.g. the trade client who wants
       // his home address printed on his invoices)
       address = inv.customers?.invoice_address || inv.customers?.address_line_1 || '';
+      weekStart = inv.week_start || null;
       // Sorted here rather than in the query — nested ordering isn't supported
       // by every supabase-js build, and the order lines print in matters.
       items   = (inv.invoice_items || [])
@@ -6697,7 +6722,17 @@ async function getSendData(invId, custName, invRef, amount) {
       : (parseFloat(String(amount||'').replace(/[^0-9.]/g,'')) || 0);
   }
 
-  return { ref, type, name, total, items, phone, email, address };
+  return { ref, type, name, total, items, phone, email, address, weekStart };
+}
+
+// A combined invoice covers a whole week, so it's headed "W/C 10/08/2026" —
+// week commencing — exactly as Jon's own sheet always has been, rather than a
+// single date that would look like it only covered one delivery.
+function invoiceDateLine(weekStart, fallbackDate) {
+  if (weekStart) {
+    return 'W/C ' + new Date(weekStart + 'T12:00:00').toLocaleDateString('en-GB');
+  }
+  return 'Date: ' + (fallbackDate || new Date().toLocaleDateString('en-GB'));
 }
 
 function fmtMoney(n) { return '£' + (Number(n)||0).toFixed(2); }
@@ -6742,7 +6777,8 @@ async function openSendModal(mode, custName, invRef, amount, invId) {
   if (d.items && d.items.length) {
     pdfUrl = await uploadInvoicePdf({
       ref: d.ref, type: d.type, custName: d.name, custAddress: d.address,
-      dateFmt: new Date().toLocaleDateString('en-GB'), items: d.items, total: d.total,
+      dateFmt: new Date().toLocaleDateString('en-GB'), weekStart: d.weekStart,
+      items: d.items, total: d.total,
     });
   }
 
@@ -8688,9 +8724,24 @@ function addInvItem(desc='', qty=1, price=0) {
 // addresses). A "site header" row splits everything below it (until the
 // next header) into its own labelled section with its own subtotal.
 // Never used = every invoice renders exactly as it always has.
+// The selected customer's saved delivery sites, plus their main address —
+// the exact wording used everywhere else, so headings match and sections
+// don't split in two.
+function invSiteOptions() {
+  const custId = document.getElementById('inv-customer')?.value;
+  if (!custId) return [];
+  const cust = INVOICE_CUSTOMERS.find(c => c.id === custId);
+  const sites = (customerSitesByCustomer[custId] || []).map(s => s.label).filter(Boolean);
+  if (cust && cust.address) sites.unshift(cust.address);
+  return [...new Set(sites)];
+}
+
 function addInvSiteHeader() {
   const id = Date.now() + Math.floor(Math.random() * 1000);
-  invItems.push({ id, type: 'header', label: '' });
+  // Only one site left unused? Fill it in — it's what he was going to type.
+  const used = invItems.filter(i => i.type === 'header').map(i => (i.label || '').trim());
+  const spare = invSiteOptions().filter(s => !used.includes(s));
+  invItems.push({ id, type: 'header', label: spare.length === 1 ? spare[0] : '' });
   renderInvItems();
 }
 
@@ -8727,38 +8778,40 @@ function flattenInvItems() {
 //    customer taking four drops can see what came when instead of one merged
 //    list they can't check against their own paperwork.
 function groupInvoiceLines(lines) {
-  const dates = [...new Set((lines || []).map(l => l.delivery_date).filter(Boolean))];
-  const showDates = dates.length > 1;   // only a weekly invoice spans days
-
   const groups = [];
   const byKey = new Map();
+
   (lines || []).forEach(l => {
     const site = l.site_label || '';
-    const day  = showDates && l.delivery_date ? l.delivery_date : '';
-    const key  = site + '|' + day;
-    if (!byKey.has(key)) {
-      const dayText = day
-        ? new Date(day + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'short' })
-        : '';
-      const g = {
-        label: [l.site_label || null, dayText || null].filter(Boolean).join(' · ') || null,
-        site, day, lines: [], subtotal: 0,
-      };
-      byKey.set(key, g);
+    if (!byKey.has(site)) {
+      const g = { label: l.site_label || null, site, lines: [], subtotal: 0, _byItem: new Map() };
+      byKey.set(site, g);
       groups.push(g);
     }
-    const g = byKey.get(key);
-    g.lines.push(l);
+    const g = byKey.get(site);
+
+    // One line per product per site, quantities added up across the week —
+    // the way Jon's own sheet reads. Without this a customer taking the same
+    // bacon on Monday and Thursday sees it listed twice and has to add it up
+    // themselves. Different prices stay on separate lines, because that's a
+    // genuine difference the customer needs to see.
+    const key = (l.desc || '') + '|' + (l.price || 0);
+    if (g._byItem.has(key)) {
+      g._byItem.get(key).qty += l.qty;
+    } else {
+      const line = { ...l, qty: l.qty };
+      g._byItem.set(key, line);
+      g.lines.push(line);
+    }
     g.subtotal += l.qty * l.price;
   });
 
-  // Main address first (it has no site heading), then by site, then by date —
-  // so the invoice reads in a sensible order however the orders were logged.
+  // Main address first (it has no site heading), then the named sites.
   groups.sort((a, b) =>
     (a.site === '' ? 0 : 1) - (b.site === '' ? 0 : 1) ||
-    a.site.localeCompare(b.site) ||
-    a.day.localeCompare(b.day)
+    a.site.localeCompare(b.site)
   );
+  groups.forEach(g => delete g._byItem);
 
   const grandTotal = groups.reduce((s, g) => s + g.subtotal, 0);
   return { groups, grandTotal };
@@ -8787,10 +8840,19 @@ function renderInvItems() {
   if (!list) return;
   list.innerHTML = invItems.map(item => {
     if (item.type === 'header') {
+      // Offer the customer's saved delivery sites. Typing the address again
+      // by hand is how Billy Bunters ended up with "Box On The Docks…" and
+      // "Bunters Box on the Docks…" as two separate sections on one invoice —
+      // the grouping keys on the text, so a stray word splits them.
+      const sites = invSiteOptions();
       return `
         <div style="display:flex;align-items:center;gap:6px;margin-top:4px;padding-top:8px;border-top:2px solid var(--gold, #c2954a)">
-          <input class="fin-input" style="flex:1;font-size:12.5px;font-weight:800;padding:7px 9px" placeholder="Site name / address, e.g. 4a Russell Road, Birkenhead"
+          <input class="fin-input" list="invSiteList-${item.id}" style="flex:1;font-size:12.5px;font-weight:800;padding:7px 9px"
+            placeholder="${sites.length ? 'Pick one of their sites, or type an address' : 'Site name / address, e.g. 4a Russell Road, Birkenhead'}"
             value="${(item.label || '').replace(/"/g, '&quot;')}" oninput="updateInvSiteLabel(${item.id}, this.value)">
+          <datalist id="invSiteList-${item.id}">
+            ${sites.map(s => `<option value="${escapeHtmlAttr(s)}"></option>`).join('')}
+          </datalist>
           <button onclick="removeInvItem(${item.id})" style="width:26px;height:34px;border-radius:7px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);font-size:14px">×</button>
         </div>`;
     }
@@ -8979,6 +9041,9 @@ function generateInvoicePreview() {
   const invRef = currentInvoiceRef;
   const docTitle = currentInvoiceType === 'receipt' ? 'RECEIPT' : 'INVOICE';
   const dateFormatted = date ? new Date(date).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB');
+  // Weekly-billed customers get the week-commencing heading Jon has always used
+  const wkStart = (cust.billingMode === 'weekly' && date) ? mondayOf(date) : null;
+  const dateLine = invoiceDateLine(wkStart, dateFormatted);
   const { groups, grandTotal: total } = groupInvoiceLines(flattenInvItems());
 
   document.getElementById('invoicePreview').innerHTML = `
@@ -8992,7 +9057,7 @@ function generateInvoicePreview() {
       <div class="inv-meta">
         <b>${docTitle}</b>
         <div><b style="font-size:13px;color:var(--oxblood)">${invRef}</b></div>
-        <div style="margin-top:4px">Date: ${dateFormatted}</div>
+        <div style="margin-top:4px">${dateLine}</div>
         <div style="margin-top:2px;font-weight:700;color:var(--ink)">VAT No: 307458303</div>
       </div>
     </div>
@@ -9024,6 +9089,81 @@ function generateInvoicePreview() {
 
 function printInvoice() {
   window.print();
+}
+
+// ── View a saved invoice on screen ─────────────────────────────
+// Same branded layout the customer gets, rendered in a panel. Nothing is
+// written to disk unless Jon actually presses Download.
+async function viewInvoice(invId) {
+  const inv = sampleInvoices.find(i => i.id === invId);
+  const body = document.getElementById('viBody');
+  if (!body) return;
+
+  document.getElementById('viTitle').textContent = inv ? inv.ref : 'Invoice';
+  document.getElementById('viSubtitle').textContent = inv ? inv.name : '';
+  body.innerHTML = '<p style="padding:26px;text-align:center;color:var(--ink-soft);font-size:13px">Loading…</p>';
+  document.getElementById('viewInvoiceModal').classList.add('show');
+
+  const d = await getSendData(invId, inv?.name, inv?.ref, inv?.amount);
+  if (!d || !d.items || !d.items.length) {
+    body.innerHTML = '<p style="padding:26px;text-align:center;color:var(--ink-soft);font-size:13px">Could not load this invoice.</p>';
+    return;
+  }
+
+  const { groups, grandTotal } = groupInvoiceLines(d.items);
+  const title = d.type === 'receipt' ? 'RECEIPT' : 'INVOICE';
+  const dateLine = invoiceDateLine(
+    d.weekStart,
+    inv?.created ? new Date(inv.created).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB')
+  );
+
+  body.innerHTML = `
+    <div class="inv-header">
+      <div>
+        <div class="inv-logo">JG Foods<span>Mobile Butcher · North Liverpool, Ormskirk &amp; West Lancashire</span></div>
+        <div style="font-size:11.5px;color:var(--ink-soft);margin-top:8px;line-height:1.6">
+          07702 852 704<br>jongreen347@gmail.com
+        </div>
+      </div>
+      <div class="inv-meta">
+        <b>${title}</b>
+        <div><b style="font-size:13px;color:var(--oxblood)">${escapeHtmlAttr(d.ref)}</b></div>
+        <div style="margin-top:4px">${escapeHtmlAttr(dateLine)}</div>
+        <div style="margin-top:2px;font-weight:700;color:var(--ink)">VAT No: 307458303</div>
+      </div>
+    </div>
+
+    <div class="inv-section">
+      <h4>Bill to</h4>
+      <p style="font-size:13px;font-weight:700;color:var(--ink)">${escapeHtmlAttr(d.name)}</p>
+      <p style="font-size:12px;color:var(--ink-soft)">${escapeHtmlAttr(d.address || '—')}</p>
+    </div>
+
+    <div class="inv-section">
+      <h4>Items</h4>
+      <table class="inv-table">
+        <thead><tr><th>Description</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th>Total</th></tr></thead>
+        <tbody>${renderInvoiceItemsTableHTML(groups, grandTotal)}</tbody>
+      </table>
+    </div>
+
+    <div class="inv-bank">
+      <b>Bank details for payment</b><br>
+      HSBC · Mr J B Green<br>
+      Account: 51476998 · Sort code: 40-31-33<br>
+      <span style="color:var(--ink);font-weight:700">Ref: ${escapeHtmlAttr(d.ref)}</span>
+    </div>`;
+
+  // Wire the buttons to THIS invoice
+  document.getElementById('viDownload').onclick = () => downloadInvoiceById(invId);
+  document.getElementById('viEmail').onclick    = () => {
+    closeModal('viewInvoiceModal');
+    openSendModal('email', d.name, d.ref, d.total, invId);
+  };
+  document.getElementById('viWhatsApp').onclick = () => {
+    closeModal('viewInvoiceModal');
+    openSendModal('message', d.name, d.ref, d.total, invId);
+  };
 }
 
 // Clear the invoice builder back to a blank slate (also runs after a save)
@@ -9160,7 +9300,7 @@ function buildInvoiceDoc(data) {
   doc.setFont('helvetica','bold').setFontSize(11).setTextColor(GOLDB[0],GOLDB[1],GOLDB[2]);
   doc.text(ref, R, 65, { align:'right' });
   doc.setFont('helvetica','normal').setFontSize(8.5).setTextColor(206,213,222);
-  doc.text('Date: ' + (data.dateFmt || new Date().toLocaleDateString('en-GB')), R, 80, { align:'right' });
+  doc.text(invoiceDateLine(data.weekStart, data.dateFmt), R, 80, { align:'right' });
   doc.text('VAT No: 307458303', R, 92, { align:'right' });
 
   let y = 150;
@@ -9266,6 +9406,7 @@ async function downloadInvoicePDF() {
     ref: currentInvoiceRef, type: currentInvoiceType,
     custName: cust.name, custAddress: cust.address || '',
     dateFmt: dateVal ? new Date(dateVal).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB'),
+    weekStart: (cust.billingMode === 'weekly' && dateVal) ? mondayOf(dateVal) : null,
     items, total: items.reduce((s,i) => s + i.qty*i.price, 0),
   });
   if (!doc) { alert('PDF builder is still loading — please try again in a second.'); return; }
@@ -9422,7 +9563,8 @@ async function downloadInvoiceById(invId) {
   if (!d || !d.items || !d.items.length) { alert('Could not load this invoice to download.'); return; }
   const doc = buildInvoiceDoc({
     ref: d.ref, type: d.type, custName: d.name, custAddress: d.address,
-    dateFmt: new Date().toLocaleDateString('en-GB'), items: d.items, total: d.total,
+    dateFmt: new Date().toLocaleDateString('en-GB'), weekStart: d.weekStart,
+    items: d.items, total: d.total,
   });
   if (!doc) { alert('PDF builder is still loading — please try again in a second.'); return; }
   const safe = (d.name || 'customer').replace(/[^a-z0-9]+/gi, '-');
@@ -10655,11 +10797,12 @@ const HELP_PAGES = {
       { icon:'🛒', title:'One-off items you\'ve sourced for a customer', body:'A trade customer asks you to get them something that\'s not on your list? Two easy ways to bill it: build an invoice by hand and use <strong>✏️ Custom item</strong> for each special line, or — if they\'ve already got an order that day — open the order on the delivery run, tap <strong>➕ Add an item</strong>, and type the one-off item with its price. Either way it lands on their invoice like anything else.' },
       { icon:'🔍', title:'Finding an invoice', body:'Don\'t scroll — use the <strong>Search</strong> box above the list. Type any part of a customer\'s name or an invoice number and the list narrows as you type. Use <strong>From</strong> and <strong>To</strong> to pull up a particular week or month, on their own or alongside the search. It shows how many match and what they add up to, so you can see at a glance what one customer owes for a week. Press <strong>Clear</strong> to go back to everything. The All / Running / Unpaid / Paid / Overdue buttons still work on top of the search.' },
       { icon:'🔁', title:'Copying a recent order onto an invoice', body:'Building an invoice by hand for a regular? Pick the customer and a <strong>Copy a recent order</strong> panel appears. Tap <strong>Use this</strong> and that order\'s items drop straight in as invoice lines at the prices they were charged. Tap a second one to add it underneath — handy for putting Monday\'s and Thursday\'s deliveries on one weekly invoice. If the order went to a named site, its heading goes in automatically.' },
-      { icon:'🗓️', title:'Weekly invoices', body:'A customer set to <strong>one invoice a week</strong> gets a single running invoice instead of one per delivery. It shows here marked <strong>this week</strong> with the dates it covers, and every order you log for them that week is added to it. Each delivery gets its own heading and subtotal so they can see exactly what came when, with one grand total at the bottom. It closes on its own each Monday — or press <strong>Finalise &amp; send</strong> to send it early.' },
+      { icon:'🗓️', title:'Weekly invoices', body:'A customer set to <strong>one invoice a week</strong> gets a single running invoice instead of one per delivery. It shows here marked <strong>this week</strong> with the dates it covers, and every order you log for them that week is added to it. It\'s headed <strong>W/C</strong> (week commencing), laid out with a section and subtotal per delivery address and one grand total — the same way you always did them by hand. If the same item comes on more than one day it appears <strong>once with the week\'s total quantity</strong>, so the customer doesn\'t have to add it up. It closes on its own each Monday — or press <strong>Finalise &amp; send</strong> to send it early.' },
       { icon:'✂️', title:'Splitting a weekly invoice up', body:'Customer changed their mind and wants each delivery billed separately? Open the <strong>Actions</strong> menu on the running invoice and choose <strong>Split into one per delivery</strong>. Each delivery becomes its own invoice, dated the day it went out. Nothing is sent to the customer — the new invoices just appear in this list for you to check.' },
       { icon:'🧾', title:'Combining a week onto one invoice', body:'Ended up with two or three invoices for the same customer in the same week and want to hand them one bill? A <strong>blue bar appears above the list</strong> telling you so — press <strong>Combine into one invoice</strong> and they\'re brought together, grouped by delivery and by site, keeping the earliest invoice number so the customer sees a reference they recognise. You can also do it from <strong>Actions</strong> on any of them. It picks up invoices you raised by hand as well as ones the system created, and anything already marked paid is left exactly as it is.' },
       { icon:'⏪', title:'Writing up a past week', body:'Catching the system up with work you\'ve already done? Set the <strong>Invoice date</strong> back to the day in question before you save — it\'ll be filed under the right week. To enter the orders themselves, use Log Order and pick <strong>📅 A delivery I\'ve already done</strong> from the delivery slot list.' },
-      { icon:'📄', title:'Download as PDF', body:'Open the <strong>Actions</strong> menu and choose <strong>Download PDF</strong> to save the invoice or receipt as a tidy PDF on your device — ready to email, print, or keep for your records.' },
+      { icon:'👁️', title:'Just having a look at an invoice', body:'To check what\'s on an invoice, <strong>tap the customer\'s name</strong> in the list — or choose <strong>View invoice</strong> from the Actions menu. It opens on screen exactly as the customer sees it, and <strong>nothing is saved to your computer</strong>. Download, email and WhatsApp buttons are along the bottom if you do want to send it. Use this rather than Download PDF when you\'re only checking something, and you won\'t end up with a folder full of PDFs.' },
+      { icon:'📄', title:'Download as PDF', body:'Open the <strong>Actions</strong> menu and choose <strong>Download PDF</strong> to save the invoice or receipt as a tidy PDF on your device — ready to email, print, or keep for your records. If you only want to <em>look</em> at it, use <strong>View invoice</strong> instead — that doesn\'t save anything.' },
       { icon:'📬', title:'Sending it to the customer', body:'Open the <strong>Actions</strong> menu and choose <strong>Send via WhatsApp</strong> or <strong>Send via email</strong>. It uses the customer\'s saved number or email and writes the whole message for you — the items, the total, and a link to the PDF copy. You don\'t attach anything (handy on your phone) — just check it and press send. WhatsApp opens ready to go; email opens your Gmail with everything filled in, you press send.' },
       { icon:'📱', title:'Works from your phone', body:'This is built for sending on the road. The receipt is written right into the message with a tap-to-open PDF link, so there\'s nothing to attach or fiddle with — open the order\'s receipt, tap WhatsApp or email, check it, send. Done in seconds at the van.' },
       { icon:'🖨️', title:'Printing', body:'Choose <strong>Print</strong> from the <strong>Actions</strong> menu to get a printer-friendly version. Useful if a customer wants a paper copy.' },
