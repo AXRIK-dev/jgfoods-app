@@ -3580,7 +3580,7 @@ async function openOrderModal(id) {
       const { data: ord } = await supabase.from('orders')
         .select('id, total_amount, channel, notes, status, payment_method, customer_id, customers(name,email,phone,address_line_1,postcode,customer_type,invoice_address), order_items(id, product_id, product_name, unit_price, quantity)')
         .eq('id', id).single();
-      const invSelect = 'id, order_id, invoice_number, total_amount, status, invoice_type, invoice_payments(method, amount)';
+      const invSelect = 'id, order_id, invoice_number, total_amount, status, invoice_type, invoice_payments(id, method, amount)';
       // Multi-site customers (migration 032): their invoice is shared across
       // several orders, so it's linked via orders.invoice_id, not
       // invoices.order_id. Try the classic direct link first, then fall back.
@@ -3660,6 +3660,10 @@ function renderOrderModalBody() {
   const methods   = (inv && inv.invoice_payments || []).map(p=>p.method);
   const methodLabel = methods.includes('cash') && methods.includes('bacs') ? 'cash + bank'
                     : methods.includes('cash') ? 'cash' : methods.includes('bacs') ? 'bank transfer' : '';
+  // Only offer a one-tap correction when the whole thing was paid one way —
+  // a genuinely split cash+bank payment gets corrected on the invoice instead.
+  const flipTo = methods.length && methods.every(m => m === 'cash') ? 'bacs'
+               : methods.length && methods.every(m => m === 'bacs') ? 'cash' : null;
 
   const itemRows = items.length
     ? items.map(i => `<div class="oitem-row"><span class="oi-name">${ordEsc(i.name)} ×${i.qty}</span><span class="oi-price">£${(i.qty*i.price).toFixed(2)}</span></div>`).join('')
@@ -3672,6 +3676,10 @@ function renderOrderModalBody() {
     <div class="modal-detail-row"><span>Address</span><b>${ordEsc([cust.address_line_1, cust.postcode].filter(Boolean).join(', ') || (o ? o.address : ''))}</b></div>
     <div class="modal-detail-row"><span>Channel</span><b>${ordEsc(ord.channel || '')}</b></div>
     <div class="modal-detail-row"><span>Payment</span><b style="color:${isPaid?'#1a6640':'var(--oxblood)'}">${isPaid ? '✓ Paid ('+methodLabel+')' : 'Awaiting payment'}</b></div>
+    ${isPaid && flipTo ? `
+    <div style="text-align:right;margin:-2px 0 6px">
+      <button onclick="orderSwitchPaymentMethod('${flipTo}')" style="font-size:11.5px;font-weight:700;color:var(--ink-soft);background:none;border:none;text-decoration:underline;padding:2px 0;cursor:pointer">Wrong one? Change to ${flipTo === 'cash' ? 'cash' : 'bank transfer'}</button>
+    </div>` : ''}
 
     ${(cust.customer_type === 'trade' || cust.customer_type === 'commercial') && items.some(i => !(i.price > 0)) ? `
     <div style="background:#fdf3e3;border:1px solid #fcd299;border-radius:9px;padding:11px 13px;margin-top:12px;font-size:12.5px;color:#b06000">
@@ -3885,7 +3893,7 @@ async function orderMarkPaid(method) {
   if (!f.inv || !f.inv.id) {
     try {
       await supabase.rpc('create_invoice_for_order', { p_order_id: f.ord.id });
-      const invSel = 'id, order_id, invoice_number, total_amount, status, invoice_type, invoice_payments(method, amount)';
+      const invSel = 'id, order_id, invoice_number, total_amount, status, invoice_type, invoice_payments(id, method, amount)';
       let r = await supabase.from('invoices').select(invSel).eq('order_id', f.ord.id).maybeSingle();
       if (!r.data) {
         // Multi-site customer (migration 032) — invoice is linked via orders.invoice_id
@@ -3914,6 +3922,31 @@ async function orderMarkPaid(method) {
   } catch (e) {
     console.error('Mark paid failed:', e);
     alert('Could not record the payment: ' + (e.message || e));
+  }
+}
+
+// Same correction as on the invoice, but from the order card on the run —
+// which is where Jon actually marks things paid at the door. Flips every
+// payment on this order's invoice to the other method (only offered when
+// they're all the same), keeps the amounts, and re-does the day's figures.
+async function orderSwitchPaymentMethod(to) {
+  const f = currentOrderFull; if (!f || !f.inv || !f.inv.id) return;
+  const pays = f.inv.invoice_payments || [];
+  if (!pays.length) return;
+  const toLbl = to === 'cash' ? 'cash' : 'bank transfer';
+  const sum = pays.reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+  if (!confirm(`Change this £${sum.toFixed(2)} payment to ${toLbl}?\n\nThe amount doesn't change — only how it was paid. Your cash and bank totals update to match.`)) return;
+  try {
+    const { error } = await supabase.from('invoice_payments')
+      .update({ method: to }).eq('invoice_id', f.inv.id);
+    if (error) throw error;
+    await supabase.from('orders').update({ payment_method: to }).eq('id', f.ord.id);
+    await syncDailySalesForInvoice(f.inv.id);
+    if (typeof loadAppData === 'function') await loadAppData();
+    await openOrderModal(f.ord.id);
+  } catch (e) {
+    console.error('orderSwitchPaymentMethod failed:', e);
+    alert('Could not change the payment method: ' + (e.message || e));
   }
 }
 
@@ -6526,6 +6559,7 @@ function renderPaymentModal(inv) {
           <div style="font-size:11px;color:var(--ink-soft)">${p.date||''}</div>
         </div>
         <span style="font-family:var(--display);font-size:15px;font-weight:700;color:var(--navy)">£${p.amount.toFixed(2)}</span>
+        <button onclick="switchPaymentEntryMethod(${i})" title="Recorded the wrong way? Switch it." style="color:var(--ink);font-size:11px;font-weight:700;padding:5px 8px;border-radius:5px;background:var(--paper);border:1px solid var(--line);white-space:nowrap">↔ ${p.method==='cash'?'Bank':'Cash'}</button>
         <button onclick="removePaymentEntry(${i})" style="color:var(--ink-soft);font-size:13px;padding:3px 7px;border-radius:5px;background:var(--paper);border:1px solid var(--line)">×</button>
       </div>
     `).join('')}
@@ -6595,6 +6629,47 @@ async function addPaymentEntry() {
     alert('Could not save that payment — ' + (err.message || err));
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = label || 'Add this payment'; }
+  }
+}
+
+// Marked it cash when it was a bank transfer (or the other way round)? Jon
+// used to have to delete the payment and log it again, which briefly reopened
+// the invoice and wobbled the day's takings. This just flips the method on the
+// existing entry and recomputes the affected days — the amount, the date and
+// the invoice's paid status all stay exactly as they were.
+async function switchPaymentEntryMethod(idx) {
+  const inv = sampleInvoices.find(i => i.id === currentPaymentInvId);
+  if (!inv) return;
+  const p = inv.payments[idx];
+  if (!p || !p.id) return;
+  const to    = p.method === 'cash' ? 'bacs' : 'cash';
+  const from  = p.method === 'cash' ? 'cash' : 'bank transfer';
+  const toLbl = to === 'cash' ? 'cash' : 'bank transfer';
+  if (!confirm(`Change this £${(Number(p.amount)||0).toFixed(2)} payment from ${from} to ${toLbl}?\n\nThe amount stays the same — only how it was paid changes. Your cash and bank figures update to match.`)) return;
+
+  if (!window.supabase) { alert('Not connected to the database — please refresh and try again.'); return; }
+
+  try {
+    const { error } = await window.supabase
+      .from('invoice_payments').update({ method: to }).eq('id', p.id);
+    if (error) throw error;
+    p.method = to;
+
+    // Keep the order's own payment label in step for single-order invoices,
+    // so the run sheet and order card don't still say the old method.
+    if (inv.orderId) {
+      await window.supabase.from('orders').update({ payment_method: to }).eq('id', inv.orderId);
+    }
+
+    await syncDailySalesForInvoice(inv.id);
+
+    renderPaymentModal(inv);
+    renderInvoices();
+    renderDashboard();
+    if (typeof renderFinance === 'function') renderFinance();
+  } catch (err) {
+    console.error('switchPaymentEntryMethod error:', err);
+    alert('Could not change that payment — ' + (err.message || err));
   }
 }
 
@@ -11042,6 +11117,7 @@ const HELP_PAGES = {
       { icon:'🗑', title:'Deleting an invoice', body:'From the <strong>Actions</strong> menu, <strong>Delete invoice</strong>. If money has been logged against it you\'ll be told how much before you confirm — that amount comes <strong>straight back out</strong> of the day\'s takings, and out of your weekly and monthly figures with it, so nothing is left behind in the books. The <strong>delivery itself is kept</strong>, so if you delete a bill by mistake you can raise it again from the order. Cash tabs are separate and are never touched.' },
       { icon:'↩️', title:'Logged a payment by mistake', body:'Press the <strong>×</strong> next to it in the Log payment box. It asks you to confirm, then removes it and puts the day\'s takings back to what they should be. If the invoice was marked paid it goes back to unpaid.' },
       { icon:'🔀', title:'Split payments', body:'If a customer pays part in cash and part by bank transfer, just log both separately using <strong>Log payment</strong>. Each entry shows up on the invoice with its method and amount. The remaining balance updates as you go.' },
+      { icon:'↔️', title:'Marked it cash when it was bank (or the other way round)', body:'Easily fixed — nothing needs deleting. On the invoice, press <strong>Log payment</strong> and each payment listed has a small <strong>↔ Cash / ↔ Bank</strong> button next to it; press it, confirm, and it swaps over. From an order on the run there\'s a <strong>“Wrong one? Change to…”</strong> link under the Payment line that does the same thing. The amount and the date stay exactly as they were, the invoice stays paid, and your cash and bank figures for that day correct themselves straight away.' },
       { icon:'🔴', title:'Overdue invoices', body:'Any invoice not paid after 30 days turns <strong>Overdue</strong> and shows in red. You\'ll see a count on the Dashboard too.' },
     ]
   },
