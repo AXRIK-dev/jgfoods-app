@@ -431,6 +431,23 @@ The exemption is **one editable setting per customer**, not a rule tied to accou
 
 ---
 
+### 43. `043_min_order_charge_on_invoice.sql`
+**What it does:** Puts the £5 small-order charge on the invoice instead of only on the screen.
+
+The charge was display-only. The website told the customer "a £5 delivery charge has been added" and quoted a total including it, then built the order purely from the basket lines — so the order, the invoice and the day's takings were all £5 light. Every under-£20 order since launch has been invoiced for less than the site quoted.
+
+`apply_min_order_charge(order_id)` adds the charge as a real order line, flagged `order_items.is_surcharge` so it's never mistaken for a product. Called from `place_order` (website), `edit_my_order` (customer changing their order) and the admin's Log Order and Edit items — so the same rule applies however the order arrives, and a customer can't strip it out by editing the request.
+
+It always rebuilds from scratch, so it removes itself too: top an order up past £20 and the charge disappears, cut it back below and it returns. Orders where a trade price is still to be agreed (£0 lines) are left alone rather than being charged for looking small.
+
+The threshold and amount move into `app_settings` under `min_order`, so the website, the admin app and the database work from one number instead of three copies.
+
+**Nothing is backdated** — orders already invoiced keep their existing totals.
+
+**When to run:** After 042. Safe on the live database; only affects orders placed from here on.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

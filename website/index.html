@@ -1617,13 +1617,16 @@ async function loadDeliveryBanner() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadCategories();   // build CAT_SLUG + filter list before products render
+  loadOrderRules();         // live £20 / £5 figures (migration 043)
   loadProducts();
   loadSlots();
   loadDeliveryBanner();
 });
 
 // ============ ORDER RULES ============
-// TODO: Load these from Supabase admin settings table so Jon can update them
+// The threshold and charge live in app_settings (migration 043) so the site,
+// the admin app and the database all work off one number. These are only the
+// fallbacks used if the settings row can't be read.
 const ORDER_RULES = {
   minOrderValue: 20.00,       // minimum order before free delivery
   deliveryCharge: 5.00,       // charge if below minimum or outside radius
@@ -1634,6 +1637,19 @@ const ORDER_RULES = {
 };
 
 let deliveryChargeActive = false;
+
+// Pull the live threshold/charge so a change Jon makes takes effect everywhere
+// at once instead of needing the site rebuilt.
+async function loadOrderRules() {
+  try {
+    const { data } = await window.sbClient
+      .from('app_settings').select('value').eq('key', 'min_order').maybeSingle();
+    if (data?.value) {
+      if (data.value.threshold != null) ORDER_RULES.minOrderValue  = parseFloat(data.value.threshold);
+      if (data.value.charge    != null) ORDER_RULES.deliveryCharge = parseFloat(data.value.charge);
+    }
+  } catch (e) { /* fall back to the defaults above */ }
+}
 
 function checkOrderRules() {
   const total = getBasketTotal();

@@ -2899,7 +2899,7 @@ async function loadAppData() {
           customers (name, customer_type, address_line_1),
           customer_sites (label),
           delivery_slots (day_label, delivery_date),
-          order_items (product_name, quantity)
+          order_items (product_name, quantity, is_surcharge)
         `)
         .order('created_at', { ascending: false })
         .limit(100),
@@ -3009,7 +3009,10 @@ async function loadAppData() {
           slotId:   o.delivery_slot_id || null,
           date:     o.delivery_slots?.delivery_date || null,
           dayLabel: dayLabel,
-          items:    (o.order_items || []).map(i => `${i.product_name} × ${i.quantity}`).join(', '),
+          // The small-order charge is a billing line, not something to pack —
+          // keep it off the run card and out of the pick list (migration 043).
+          items:    (o.order_items || []).filter(i => !i.is_surcharge)
+                      .map(i => `${i.product_name} × ${i.quantity}`).join(', '),
           total:    parseFloat(o.total_amount),
           channel:  o.channel ? o.channel.charAt(0).toUpperCase() + o.channel.slice(1) : '',
           status:   o.status,
@@ -3582,7 +3585,7 @@ async function openOrderModal(id) {
   if (supabase && isOrderUUID(id)) {
     try {
       const { data: ord } = await supabase.from('orders')
-        .select('id, total_amount, channel, notes, status, payment_method, customer_id, customers(name,email,phone,address_line_1,postcode,customer_type,invoice_address), order_items(id, product_id, product_name, unit_price, quantity)')
+        .select('id, total_amount, channel, notes, status, payment_method, customer_id, customers(name,email,phone,address_line_1,postcode,customer_type,invoice_address), order_items(id, product_id, product_name, unit_price, quantity, is_surcharge)')
         .eq('id', id).single();
       const invSelect = 'id, order_id, invoice_number, total_amount, status, invoice_type, invoice_payments(id, method, amount)';
       // Multi-site customers (migration 032): their invoice is shared across
@@ -3628,12 +3631,25 @@ async function openOrderModal(id) {
 // Agreed trade prices for the order currently open in the modal
 let ORDER_TRADE_PRICES = {};
 
+// The order's real items. The £5 small-order charge (migration 043) is a line
+// on the order too, but the database owns it — it's added and removed as the
+// order's value crosses £20 — so it's kept out of the editable item list and
+// shown separately. Jon changes whether it applies on the customer's record,
+// not by deleting a line here that would come straight back.
 function orderItemsArray() {
   const f = currentOrderFull;
   if (f && f.ord && f.ord.order_items) {
-    return f.ord.order_items.map(i => ({ id:i.id, product_id:i.product_id, name:i.product_name, price:parseFloat(i.unit_price)||0, qty:i.quantity }));
+    return f.ord.order_items.filter(i => !i.is_surcharge)
+      .map(i => ({ id:i.id, product_id:i.product_id, name:i.product_name, price:parseFloat(i.unit_price)||0, qty:i.quantity }));
   }
   return null;
+}
+
+// The charge line itself, if this order has one.
+function orderSurchargeLine() {
+  const f = currentOrderFull;
+  const row = (f && f.ord && f.ord.order_items || []).find(i => i.is_surcharge);
+  return row ? { name: row.product_name, amount: (parseFloat(row.unit_price)||0) * (row.quantity||1) } : null;
 }
 
 function renderOrderModalBody() {
@@ -3673,9 +3689,17 @@ function renderOrderModalBody() {
     ? items.map(i => `<div class="oitem-row"><span class="oi-name">${ordEsc(i.name)} ×${i.qty}</span><span class="oi-price">£${(i.qty*i.price).toFixed(2)}</span></div>`).join('')
     : '<span style="color:var(--ink-soft);font-size:12.5px">No items</span>';
 
+  // Small-order charge (migration 043) — shown on its own line so it's obvious
+  // what the customer is being billed, and where the extra £5 came from.
+  const sc = orderSurchargeLine();
+  const scRow = sc
+    ? `<div class="oitem-row" style="color:#b06000"><span class="oi-name">${ordEsc(sc.name)}</span><span class="oi-price">£${sc.amount.toFixed(2)}</span></div>`
+    : '';
+  const grandTotal = total + (sc ? sc.amount : 0);
+
   body.innerHTML = `
-    <div style="background:var(--cream);border-radius:9px;padding:10px 12px;margin-bottom:10px">${itemRows}
-      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--line);margin-top:6px;padding-top:6px;font-weight:800;font-size:14px"><span>Total</span><span>£${total.toFixed(2)}</span></div>
+    <div style="background:var(--cream);border-radius:9px;padding:10px 12px;margin-bottom:10px">${itemRows}${scRow}
+      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--line);margin-top:6px;padding-top:6px;font-weight:800;font-size:14px"><span>Total</span><span>£${grandTotal.toFixed(2)}</span></div>
     </div>
     <div class="modal-detail-row"><span>Address</span><b>${ordEsc([cust.address_line_1, cust.postcode].filter(Boolean).join(', ') || (o ? o.address : ''))}</b></div>
     <div class="modal-detail-row"><span>Channel</span><b>${ordEsc(ord.channel || '')}</b></div>
@@ -3813,17 +3837,32 @@ async function orderSaveItems(btn) {
       order_id: oid, product_id: i.product_id || null, product_name: i.name, unit_price: i.price, quantity: i.qty, unit: 'pack'
     })));
     if (res.error) throw res.error;
-    await supabase.from('orders').update({ total_amount: total }).eq('id', oid);
+
+    // The £5 charge follows the new order value — added if this edit drops the
+    // order under £20, removed if it lifts it over. Then read the lines back
+    // from the database so the invoice is built from what's really on the
+    // order, charge included, rather than from the rows on screen.
+    try { await supabase.rpc('apply_min_order_charge', { p_order_id: oid }); }
+    catch (scErr) { console.error('Small-order charge check failed:', scErr); }
+
+    const { data: savedLines } = await supabase.from('order_items')
+      .select('product_name, unit_price, quantity').eq('order_id', oid);
+    const billLines = (savedLines || []).map(l => ({
+      name: l.product_name, price: parseFloat(l.unit_price) || 0, qty: l.quantity || 1,
+    }));
+    const billTotal = billLines.reduce((s, l) => s + l.price * l.qty, 0);
+
+    await supabase.from('orders').update({ total_amount: billTotal }).eq('id', oid);
     // Keep the linked invoice + financials in step
     if (f.inv && f.inv.id) {
       if (f.inv.order_id) {
         // Classic case: this invoice belongs solely to this order — safe to
         // replace all its lines (unchanged behaviour).
         await supabase.from('invoice_items').delete().eq('invoice_id', f.inv.id);
-        await supabase.from('invoice_items').insert(items.map(i => ({
+        await supabase.from('invoice_items').insert(billLines.map(i => ({
           invoice_id: f.inv.id, order_id: oid, description: i.name, unit_price: i.price, quantity: i.qty
         })));
-        await supabase.from('invoices').update({ total_amount: total }).eq('id', f.inv.id);
+        await supabase.from('invoices').update({ subtotal: billTotal, total_amount: billTotal }).eq('id', f.inv.id);
       } else {
         // Multi-site customer (migration 032): this invoice is shared with
         // other orders — only touch THIS order's own lines, keep its site label.
@@ -3831,7 +3870,7 @@ async function orderSaveItems(btn) {
           .select('site_label').eq('invoice_id', f.inv.id).eq('order_id', oid).limit(1);
         const siteLabel = (oldLines && oldLines[0]) ? oldLines[0].site_label : null;
         await supabase.from('invoice_items').delete().eq('invoice_id', f.inv.id).eq('order_id', oid);
-        await supabase.from('invoice_items').insert(items.map(i => ({
+        await supabase.from('invoice_items').insert(billLines.map(i => ({
           invoice_id: f.inv.id, order_id: oid, description: i.name, unit_price: i.price, quantity: i.qty, site_label: siteLabel
         })));
         try { await supabase.rpc('recalc_invoice_totals', { p_invoice_id: f.inv.id }); } catch (e) { console.error('Recalc failed:', e); }
@@ -3839,7 +3878,7 @@ async function orderSaveItems(btn) {
     }
     // Reflect in the delivery-run card without a full reload
     const o = sampleOrders.find(x => x.id === oid);
-    if (o) { o.items = items.map(i=>`${i.name} ×${i.qty}`).join(', '); o.total = total; }
+    if (o) { o.items = items.map(i=>`${i.name} ×${i.qty}`).join(', '); o.total = billTotal; }
     await syncDailySalesForOrder(oid);                            // keep Daily Sales in step
     orderEditMode = false;
     if (typeof loadAppData === 'function') await loadAppData();   // refresh Finance/dashboard/run
@@ -7809,6 +7848,16 @@ async function saveLogOrder() {
     );
     if (itemsErr) throw itemsErr;
 
+    // 4b. Add the £5 small-order charge as a real line if it applies to this
+    // customer (migration 043). Must happen before the invoice is raised, or
+    // the invoice is built without it. The database decides — same rule for a
+    // hand-typed order as for one placed on the website.
+    try {
+      await supabase.rpc('apply_min_order_charge', { p_order_id: orderData.id });
+    } catch (scErr) {
+      console.error('Small-order charge check failed:', scErr);
+    }
+
     // 5. Auto-create the receipt/invoice for this order (never blocks the order)
     try {
       await supabase.rpc('create_invoice_for_order', { p_order_id: orderData.id });
@@ -11053,7 +11102,7 @@ const HELP_PAGES = {
       { icon:'🔁', title:'Starting from a previous order', body:'Once the customer is filled in you get two choices: <strong>Their usual order</strong> (the list you saved, marked in gold) and <strong>Their last order</strong> (the most recent one, whether you logged it or raised it as an invoice by hand). Tap <strong>Use this</strong> on either and it loads into the form — then change quantities, add lines, remove lines, or add a one-off item. Nothing is saved until you press Save order, so you can\'t break anything by having a look.' },
       { icon:'⏪', title:'Entering an order you\'ve already delivered', body:'Catching the system up with deliveries you\'ve already done? In the <strong>Delivery slot</strong> list choose <strong>📅 A delivery I\'ve already done</strong> at the bottom, then pick the date it went out. It\'s saved as already delivered, so it won\'t appear on your run sheet or pick list — it just goes on the books, into that day\'s takings, and onto the customer\'s invoice for that week. The form stays open so you can enter the next one straight away.' },
       { icon:'💬', title:'Notes', body:'Use the notes box for anything special — e.g. "leave by back gate" or "call on arrival". Jon will see this on the order card.' },
-      { icon:'💰', title:'Minimum order', body:'Orders under £20 will automatically have the £5 small-order charge added. Customers marked as exempt (family/friends) won\'t see this charge.' },
+      { icon:'💰', title:'Minimum order', body:'Orders under £20 have the £5 small-order charge added automatically, as its own line on the order and on the invoice — so what you bill matches what the customer was told. Customers marked as exempt never see it.<br><br>It looks after itself: if a customer goes back and adds more to their order, the charge comes off as soon as they pass £20, and comes back if they take items away again. It doesn\'t appear on your pick list, because there\'s nothing to pack for it.' },
       { icon:'🏪', title:'Who pays the £5 charge — and changing it', body:'Every customer has a setting on their record that decides whether the £5 small-order charge ever applies to them. <strong>Trade accounts start exempt</strong>, so you don\'t have to do anything for a new pub or restaurant. Domestic customers start paying it.<br><br>To change it either way: <strong>Customers</strong> → tap their name → <strong>Edit</strong> → tick or untick <strong>Exempt from minimum order charge</strong> → <strong>Save changes</strong>. Ticking it means they\'re never charged; unticking means they are, under £20. It applies from then on to every order they place, whether they order on the website or you type it in yourself.<br><br>You\'re not stuck with the starting position — untick a trade customer you do want to charge, or tick a domestic one for family and friends. Their record tells you which way it\'s set every time you open it.' },
     ]
   },
