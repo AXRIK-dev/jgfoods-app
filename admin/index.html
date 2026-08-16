@@ -2231,8 +2231,8 @@
     </div>
     <div class="field"><label>Address</label><input id="ec-address" type="text" placeholder="14 Any Street, Ormskirk"></div>
     <div class="field">
-      <label>Invoice address <span style="font-weight:400;color:var(--ink-soft)">(optional — only if their invoices need a different address, e.g. a home address)</span></label>
-      <input id="ec-invaddress" type="text" placeholder="Leave blank to use the address above">
+      <label>Your details on their invoice <span style="font-weight:400;color:var(--ink-soft)">(optional — some firms' accounts departments won't pay an invoice unless your name and address are on it)</span></label>
+      <input id="ec-invaddress" type="text" placeholder="e.g. Jonathan Green, 10 Holborn Drive, Ormskirk, L39 3QL">
     </div>
     <div class="field" style="background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:12px 14px">
       <label style="font-weight:800;font-size:13px">Delivery sites <span style="font-weight:400;color:var(--ink-soft)">(optional — for customers with more than one address)</span></label>
@@ -9051,10 +9051,10 @@ function rebuildInvoiceCustomers() {
     type:    c.type,
     phone:   c.phone   || '',
     email:   c.email   || '',
-    // The customer's own address always prints. Where Jon has set an invoice
-    // address as well, that prints alongside it under "Send invoice to" —
-    // a trade client can want the bill sent somewhere other than the site it
-    // was delivered to, and the invoice needs to show both.
+    // The customer's own address always prints. Where Jon has entered his own
+    // details for this customer they print alongside under "Supplier" — some
+    // firms' accounts departments need the supplier's name and address before
+    // they'll pay, but the delivery address has to stay on there too.
     address:   c.address || '',
     invoiceTo: c.invoiceAddress || '',
     billingMode: c.billingMode || 'per_delivery',
@@ -9422,17 +9422,16 @@ function renderInvoiceItemsTableHTML(groups, grandTotal) {
 
 // The "Bill to" block, shared by every invoice view so they can't drift apart.
 //
-// Where Jon has set an invoice address on the customer, BOTH addresses print:
-// the customer's own address (the site the food went to) and, beside it, where
-// the bill itself should be sent. A trade client can want invoices going to a
-// head office or a home address while the delivery goes to the premises, and
-// an invoice showing only the billing address leaves them unable to tell which
-// site it was for.
-function billToBlockHTML(name, address, invoiceTo) {
+// Some trade customers' accounts departments won't pay an invoice unless the
+// supplier's own name and address are on it — they need it for their purchase
+// ledger. Where Jon has filled that in on a customer, it prints as a "Supplier"
+// block beside "Bill to", which keeps the customer's own delivery address on
+// the invoice as well so they can still tell which site the order was for.
+function billToBlockHTML(name, address, supplier) {
   const esc = s => escapeHtmlAttr(s || '');
-  const hasInvTo = invoiceTo && String(invoiceTo).trim()
-                   && String(invoiceTo).trim() !== String(address || '').trim();
-  if (!hasInvTo) {
+  const hasSupplier = supplier && String(supplier).trim()
+                      && String(supplier).trim() !== String(address || '').trim();
+  if (!hasSupplier) {
     return `
     <div class="inv-section">
       <h4>Bill to</h4>
@@ -9449,8 +9448,8 @@ function billToBlockHTML(name, address, invoiceTo) {
           <p style="font-size:12px;color:var(--ink-soft)">${esc(address) || '—'}</p>
         </div>
         <div style="flex:1;min-width:180px">
-          <h4>Send invoice to</h4>
-          <p style="font-size:12px;color:var(--ink-soft);margin-top:2px">${esc(invoiceTo)}</p>
+          <h4>Supplier</h4>
+          <p style="font-size:12px;color:var(--ink-soft);margin-top:2px">${esc(supplier)}</p>
         </div>
       </div>
     </div>`;
@@ -9723,9 +9722,10 @@ function buildInvoiceDoc(data) {
   let y = 150;
 
   // ── Bill to ──
-  // Where an invoice address is set it prints in a second column alongside,
-  // rather than replacing the customer's own address — the delivery site and
-  // the billing address are two different things and the customer needs both.
+  // Where Jon's own supplier details are set for this customer they print in a
+  // second column alongside, rather than replacing the customer's address —
+  // their accounts department needs the supplier's name and address to pay it,
+  // and the customer still needs to see which of their sites it was for.
   const invTo = (data.invoiceTo || '').trim();
   const showInvTo = invTo && invTo !== String(data.custAddress || '').trim();
 
@@ -9748,7 +9748,7 @@ function buildInvoiceDoc(data) {
   if (showInvTo) {
     const CL = L + (R - L) / 2 + 10;   // second column
     doc.setFont('helvetica','bold').setFontSize(8).setTextColor(GOLD[0],GOLD[1],GOLD[2]);
-    doc.text('SEND INVOICE TO', CL, y);
+    doc.text('SUPPLIER', CL, y);
     doc.setFont('helvetica','normal').setFontSize(9).setTextColor(INKSOFT[0],INKSOFT[1],INKSOFT[2]);
     const wrappedTo = doc.splitTextToSize(invTo, addrWidth);
     doc.text(wrappedTo, CL, y + 16);
@@ -11192,7 +11192,7 @@ const HELP_PAGES = {
       { icon:'🎁', title:'Referral reward', body:'When a new customer was recommended by an existing one, put the existing customer\'s name in the <strong>Referred by</strong> field. It\'s flagged so you remember to thank the person who referred them with a free pack of sausages or bacon on their next delivery.' },
       { icon:'🏢', title:'Trade accounts', body:'Trade customers have a <strong>Trade</strong> badge. When a business creates a trade account on the website, you get an <strong>email straight away</strong>, an alert appears on your <strong>Dashboard</strong>, and they\'re pinned to the <strong>top of this list</strong> with a <strong>🕐 Approve login</strong> badge until you deal with them. Open their profile and press <strong>✓ Approve trade access</strong> — once approved, they see your trade-only items when they sign in. Your 5pm daily email also reminds you of any still waiting.' },
       { icon:'💷', title:'Trade prices (per customer)', body:'Every trade customer can have their own agreed prices. Open their profile and press <strong>💷 Set this customer\'s trade prices</strong> — you\'ll see your whole availability list (trade-only items first) with a price box for each. Fill in only what you\'ve agreed; leave the rest blank. By default they see <strong>no prices</strong> on the website, just "speak to Jon about pricing" — tick <strong>Show these prices to the customer</strong> when you\'re ready for them to see their agreed prices. Their orders and invoices use these prices automatically. Prices are always subject to the market — update them here whenever things change.' },
-      { icon:'🏠', title:'Sending the invoice somewhere else', body:'Some customers want the bill sent to a different address from the one you deliver to — a head office, an accounts department, or someone\'s home. Open their <strong>Edit</strong> screen and fill in <strong>Invoice address</strong>.<br><br>The invoice then shows <strong>both</strong>: <strong>Bill to</strong> with their name and the address you deliver to, and <strong>Send invoice to</strong> alongside it with where the bill goes. They can see which site the order was for and where to send the money from, which is what a business needs to match it up.<br><br>Leave it blank and the invoice just shows their normal address, as always.' },
+      { icon:'🏠', title:'Customers who need your details on the invoice', body:'Bigger firms often won\'t pay an invoice unless the supplier\'s name and address are on it — their accounts department needs it before they can put it through. Open that customer\'s <strong>Edit</strong> screen and fill in <strong>Your details on their invoice</strong> with your name and address.<br><br>Their invoices then show <strong>both</strong>: <strong>Bill to</strong> with their name and the address you deliver to, and <strong>Supplier</strong> alongside it with your details. They can still see which site the order was for, which is what they need to match it up.<br><br>It\'s set per customer, so only the ones who ask for it get it. Leave it blank and their invoice looks exactly as it always has.' },
       { icon:'🗓️', title:'One invoice a week instead of one per delivery', body:'Some customers take two, three or four deliveries a week and only want <strong>one bill</strong> for the lot. Open their <strong>Edit</strong> screen and under <strong>How this customer is invoiced</strong> choose <strong>One invoice a week</strong>. From then on, every delivery you log for them Monday to Sunday goes onto the same invoice, and a fresh one starts automatically each Monday. Everyone else carries on getting an invoice per delivery — you don\'t need to change anything for them.' },
       { icon:'📍', title:'Customers with more than one address', body:'If you deliver to two or more addresses for the same customer, add the extra ones under <strong>Delivery sites</strong> in their Edit screen. After that, every time you log an order for them the form asks <strong>which site</strong> it\'s going to — pick their main address or one of the extra sites. Their invoice then shows each address as its own section with its own subtotal, and one grand total at the bottom.' },
       { icon:'📍', title:'Delivery sites (customers with more than one address)', body:'Open a customer\'s <strong>Edit</strong> screen and look for <strong>Delivery sites</strong>. Add one row per extra address (e.g. two pub sites for the same business). Once any sites are listed: <strong>Log Order</strong> will ask which site each delivery is for, the delivery run and route show the right address, and — instead of a separate invoice per delivery — all their orders build up onto <strong>one running invoice</strong> with a subtotal per site, until you finalise and send it from the Invoices tab. No sites listed = nothing changes, it works exactly as before.' },
