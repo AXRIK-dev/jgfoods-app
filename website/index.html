@@ -1372,6 +1372,10 @@ async function loadProducts() {
 let TRADE_PRICES = {};
 
 function isTradeUser() { return !!(currentUser && currentUser.type === 'trade'); }
+// Whether the £5 small-order charge applies is Jon's call per customer, held on
+// their record (migration 042). Trade accounts start exempt, but he can untick
+// one — so read the flag rather than assuming trade always means free.
+function isChargeExempt() { return !!(currentUser && currentUser.exemptMinCharge); }
 function isTradeApproved() { return isTradeUser() && currentUser.tradeStatus === 'approved'; }
 // True when a trade customer is browsing but Jon hasn't switched their prices on yet
 function tradePricesHidden() { return isTradeApproved() && !currentUser.showTradePrices; }
@@ -1633,8 +1637,9 @@ let deliveryChargeActive = false;
 
 function checkOrderRules() {
   const total = getBasketTotal();
-  // Trade accounts: no minimum-order charge — terms are agreed with Jon
-  const belowMin = !isTradeUser() && total < ORDER_RULES.minOrderValue && total > 0;
+  // Skip the charge for anyone Jon has marked exempt on their record — trade
+  // accounts are exempt from the off, domestic ones only if he ticks them.
+  const belowMin = !isChargeExempt() && total < ORDER_RULES.minOrderValue && total > 0;
   deliveryChargeActive = belowMin;
 
   const notice = document.getElementById('deliveryChargeNotice');
@@ -2564,7 +2569,7 @@ async function applyAuthedUser(session) {
 
   const { data: cust } = await window.sbClient
     .from('customers')
-    .select('name, customer_type, price_tier, business_name, phone, email, address_line_1, postcode, trade_status, show_trade_prices')
+    .select('name, customer_type, price_tier, business_name, phone, email, address_line_1, postcode, trade_status, show_trade_prices, exempt_min_charge')
     .eq('user_id', user.id).maybeSingle();
 
   const meta = user.user_metadata || {};
@@ -2578,6 +2583,9 @@ async function applyAuthedUser(session) {
     type:    (cust?.customer_type === 'commercial' || cust?.customer_type === 'trade' || cust?.price_tier === 'trade') ? 'trade' : 'domestic',
     tradeStatus:     cust?.trade_status || null,
     showTradePrices: cust?.show_trade_prices === true,
+    // migration 042 — Jon can exempt an individual customer from the £5
+    // small-order charge on their record; trade accounts are exempt anyway.
+    exemptMinCharge: cust?.exempt_min_charge === true,
     lastOrder: [],
   };
 

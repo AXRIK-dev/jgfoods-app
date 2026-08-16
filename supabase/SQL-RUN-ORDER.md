@@ -418,6 +418,19 @@ The **order survives** with `invoice_id` set to NULL — deleting a bill shouldn
 
 ---
 
+### 42. `042_min_charge_exemption.sql`
+**What it does:** Makes the "Exempt from minimum order charge" tick box actually work.
+
+The customer record has carried that tick box since the early build, but there was never a column behind it. Ticking it looked right on screen and reverted silently on the next refresh, so every customer Jon believed he'd exempted was still being charged the £5 small-order fee. Adds `customers.exempt_min_charge`, and the admin app now saves and reloads it.
+
+Backfills every existing trade/commercial account as exempt, and adds a BEFORE INSERT trigger so trade customers who sign up on the website start exempt too. The trigger skips admin inserts, so if Jon deliberately unticks the box when adding a trade customer it isn't overruled.
+
+The exemption is **one editable setting per customer**, not a rule tied to account type — Jon can untick a trade customer he does want to charge, or tick a domestic one. Both the website and the admin's hand-typed order screen read that single flag; the order screen previously ignored trade accounts entirely and charged them £5.
+
+**When to run:** Any time. Safe on the live database — adds one column with a default, sets it true for existing trade accounts, and adds one insert trigger.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

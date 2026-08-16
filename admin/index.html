@@ -1680,6 +1680,7 @@
       <input type="checkbox" id="ac-exempt" style="width:17px;height:17px;accent-color:var(--oxblood);cursor:pointer;flex-shrink:0">
       <div>
         <label for="ac-exempt" style="font-weight:800;font-size:13px;cursor:pointer">Exempt from minimum order charge</label>
+        <p id="ac-exempt-trade-note" style="display:none;font-size:11.5px;color:#b06000;font-weight:700;margin-top:1px">Trade accounts start exempt. Untick it if you do want to charge this one.</p>
         <p style="font-size:11.5px;color:var(--ink-soft);margin-top:1px">Tick for family &amp; friends — the £5 small-order fee won't apply to them</p>
       </div>
     </div>
@@ -2257,6 +2258,7 @@
       <div>
         <label for="ec-exempt" style="font-weight:800;font-size:13px;cursor:pointer">Exempt from minimum order charge</label>
         <p style="font-size:11.5px;color:var(--ink-soft);margin-top:1px">Tick for family &amp; friends — the £5 small-order fee won't apply to them</p>
+        <p id="ec-exempt-trade-note" style="display:none;font-size:11.5px;color:#b06000;font-weight:700;margin-top:4px">Trade accounts start exempt. Untick it if you do want to charge this one.</p>
       </div>
     </div>
     <div class="field"><label>Notes</label><textarea id="ec-notes" placeholder="Preferred delivery day, payment preference, etc." style="min-height:60px"></textarea></div>
@@ -2973,7 +2975,9 @@ async function loadAppData() {
         orders:       0,
         total:        0,
         lastOrder:    '',
-        exempt:       false,
+        // migration 042 — this used to be hardcoded false, so the tick box
+        // reverted on every refresh and exempt customers kept being charged.
+        exempt:       c.exempt_min_charge === true,
       }));
       // VIP list is just the flagged customers — always in step with records.
       sampleVIPs = sampleCustomers.filter(c => c.vip).map(c => ({ id: c.id, name: c.name, type: c.type, phone: c.phone, note: c.notes }));
@@ -5315,9 +5319,10 @@ function editCustomer(id) {
   document.getElementById('ec-invaddress').value = c.invoiceAddress || '';
   document.getElementById('ec-type').value = c.type || 'domestic';
   toggleEcNameFields(c.type || 'domestic');
-  document.getElementById('ec-type').onchange = function() { toggleEcNameFields(this.value); };
+  document.getElementById('ec-type').onchange = function() { toggleEcNameFields(this.value); renderEcExemptNote(); };
   document.getElementById('ec-referredby').value = c.referredBy || '';
-  document.getElementById('ec-exempt').checked = c.exempt || false;
+  document.getElementById('ec-exempt').checked = c.exempt === true;
+  renderEcExemptNote();
   document.getElementById('ec-notes').value = c.notes || '';
   const billSel = document.getElementById('ec-billing');
   if (billSel) {
@@ -5440,6 +5445,7 @@ async function saveEditCustomer() {
       invoice_address: c.invoiceAddress || null,
       customer_type: c.type          || 'domestic',
       billing_mode:  c.billingMode   || 'per_delivery',
+      exempt_min_charge: c.exempt === true,
       notes:         c.notes         || null,
     }).eq('id', id);
     if (error) console.error('Update customer error:', error);
@@ -5725,7 +5731,9 @@ async function openCustomerDetail(id) {
     <div class="modal-detail-row"><span>Address</span><b>${c.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.address)}" target="_blank" rel="noopener" style="color:var(--navy);text-decoration:underline">${c.address}</a>` : '—'}</b></div>
     ${c.notes ? `<div class="modal-detail-row"><span>Notes</span><b>${c.notes}</b></div>` : ''}
     ${c.referredBy ? `<div class="modal-detail-row"><span>Referred by</span><b>${c.referredBy}</b></div>` : ''}
-    ${c.exempt ? `<div style="background:#fdf3e3;border:1px solid #fcd299;border-radius:9px;padding:10px 13px;margin-top:10px;font-size:12.5px;color:#b06000;font-weight:700">✓ Exempt from £5 minimum order charge</div>` : ''}
+    ${c.exempt
+      ? `<div style="background:#fdf3e3;border:1px solid #fcd299;border-radius:9px;padding:10px 13px;margin-top:10px;font-size:12.5px;color:#b06000;font-weight:700">✓ Exempt from £5 minimum order charge</div>`
+      : `<div style="background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:10px 13px;margin-top:10px;font-size:12.5px;color:var(--ink-soft);font-weight:700">£5 small-order charge applies under £20 — change it with Edit</div>`}
     ${c.type === 'trade' ? tradeSectionHtml(c) : ''}
     ${contactBtns}
     <div id="custOrderHistory" style="margin-top:14px">
@@ -5924,6 +5932,12 @@ function toggleCustomerNameFields(type) {
   document.getElementById('acDomesticNameFields').style.display = isTrade ? 'none' : 'flex';
   document.getElementById('acBusinessNameField').style.display  = isTrade ? 'block' : 'none';
   document.getElementById('acContactNameField').style.display   = isTrade ? 'block' : 'none';
+  // Trade accounts don't pay the small-order charge as a rule, so tick it for
+  // him — he can untick it if this is one he does want to charge.
+  const ex = document.getElementById('ac-exempt');
+  if (ex) ex.checked = isTrade;
+  const note = document.getElementById('ac-exempt-trade-note');
+  if (note) note.style.display = isTrade ? 'block' : 'none';
 }
 
 function showAddCustomerModal() {
@@ -5987,6 +6001,10 @@ async function saveCustomer() {
         email:           newCust.email   || null,
         address_line_1:  newCust.address || null,
         notes:           newCust.notes   || null,
+        // Whatever Jon chose on the form — the box pre-ticks itself for trade
+        // accounts, so leaving it alone gives the sensible default, and
+        // unticking it is honoured rather than overruled (migration 042).
+        exempt_min_charge: newCust.exempt === true,
         is_active:       true,
       }).select('id').single();
 
@@ -6564,6 +6582,14 @@ function renderPaymentModal(inv) {
       </div>
     `).join('')}
   `;
+}
+
+// Trade accounts start exempt, but Jon stays in charge of it — he can untick
+// a trade customer he does want to charge. The note just explains the default.
+function renderEcExemptNote() {
+  const isTrade = document.getElementById('ec-type')?.value === 'trade';
+  const note = document.getElementById('ec-exempt-trade-note');
+  if (note) note.style.display = isTrade ? 'block' : 'none';
 }
 
 function pmUpdateBalance() {
@@ -7432,10 +7458,13 @@ function updateLogTotal() {
   });
   refreshZeroLineHint();
 
-  // Check if selected customer is exempt before applying the small-order charge
+  // Check if the selected customer is exempt before applying the small-order
+  // charge. One flag decides it, set on their record — trade accounts start
+  // exempt (migration 042) but Jon can change any of them either way, and a
+  // hand-typed order must honour that the same as the website does.
   const custName = (document.getElementById('lo-name')?.value || '').trim().toLowerCase();
   const matchedCust = sampleCustomers.find(c => c.name.toLowerCase() === custName);
-  const isExempt = matchedCust?.exempt || false;
+  const isExempt = matchedCust?.exempt === true;
   let surcharge = 0;
   const surchargeEl = document.getElementById('logSurcharge');
 
@@ -11025,6 +11054,7 @@ const HELP_PAGES = {
       { icon:'⏪', title:'Entering an order you\'ve already delivered', body:'Catching the system up with deliveries you\'ve already done? In the <strong>Delivery slot</strong> list choose <strong>📅 A delivery I\'ve already done</strong> at the bottom, then pick the date it went out. It\'s saved as already delivered, so it won\'t appear on your run sheet or pick list — it just goes on the books, into that day\'s takings, and onto the customer\'s invoice for that week. The form stays open so you can enter the next one straight away.' },
       { icon:'💬', title:'Notes', body:'Use the notes box for anything special — e.g. "leave by back gate" or "call on arrival". Jon will see this on the order card.' },
       { icon:'💰', title:'Minimum order', body:'Orders under £20 will automatically have the £5 small-order charge added. Customers marked as exempt (family/friends) won\'t see this charge.' },
+      { icon:'🏪', title:'Who pays the £5 charge — and changing it', body:'Every customer has a setting on their record that decides whether the £5 small-order charge ever applies to them. <strong>Trade accounts start exempt</strong>, so you don\'t have to do anything for a new pub or restaurant. Domestic customers start paying it.<br><br>To change it either way: <strong>Customers</strong> → tap their name → <strong>Edit</strong> → tick or untick <strong>Exempt from minimum order charge</strong> → <strong>Save changes</strong>. Ticking it means they\'re never charged; unticking means they are, under £20. It applies from then on to every order they place, whether they order on the website or you type it in yourself.<br><br>You\'re not stuck with the starting position — untick a trade customer you do want to charge, or tick a domestic one for family and friends. Their record tells you which way it\'s set every time you open it.' },
     ]
   },
   stock: {
