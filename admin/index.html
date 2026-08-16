@@ -3901,7 +3901,8 @@ function orderPrintInvoice() {
     ref: (f.inv && f.inv.invoice_number) || ('ORD-' + String(f.ord.id).slice(0,8).toUpperCase()),
     type: isTrade ? 'invoice' : 'receipt',
     custName: cust.name || (o ? o.name : 'Customer'),
-    custAddress: cust.invoice_address || [cust.address_line_1, cust.postcode].filter(Boolean).join(', '),
+    custAddress: [cust.address_line_1, cust.postcode].filter(Boolean).join(', '),
+    invoiceTo:   cust.invoice_address || '',
     dateFmt: new Date().toLocaleDateString('en-GB'),
     items: items.map(i => ({ desc:i.name, qty:i.qty, price:i.price })),
     total: items.reduce((s,i)=>s+i.qty*i.price,0),
@@ -6855,7 +6856,7 @@ let sendMode = 'email';
 // Gather everything we need to send. invId set -> load the saved invoice from
 // the DB (full line items); otherwise fall back to the on-screen builder state.
 async function getSendData(invId, custName, invRef, amount) {
-  let ref, type, name, total, items = [], phone = '', email = '', address = '', weekStart = null;
+  let ref, type, name, total, items = [], phone = '', email = '', address = '', invoiceTo = '', weekStart = null;
 
   if (invId && window.supabase) {
     const { data: inv, error } = await window.supabase
@@ -6869,9 +6870,12 @@ async function getSendData(invId, custName, invRef, amount) {
       name    = inv.customers?.name || custName || 'Customer';
       phone   = inv.customers?.phone || '';
       email   = inv.customers?.email || '';
-      // invoice_address = optional override (e.g. the trade client who wants
-      // his home address printed on his invoices)
-      address = inv.customers?.invoice_address || inv.customers?.address_line_1 || '';
+      // The delivery address always shows. invoice_address is an optional
+      // extra — where the bill itself should be sent — and prints as well,
+      // not instead: the customer needs to see which of their sites the
+      // delivery went to as well as where to send the money from.
+      address   = inv.customers?.address_line_1 || '';
+      invoiceTo = inv.customers?.invoice_address || '';
       weekStart = inv.week_start || null;
       // Sorted here rather than in the query — nested ordering isn't supported
       // by every supabase-js build, and the order lines print in matters.
@@ -6887,10 +6891,11 @@ async function getSendData(invId, custName, invRef, amount) {
     const cust = custName
       ? (sampleCustomers.find(c => c.name === custName) || { name: custName, phone:'', email:'', address:'', type:'domestic' })
       : (INVOICE_CUSTOMERS.find(c => c.id === document.getElementById('inv-customer')?.value) || { name:'Customer', phone:'', email:'', address:'', type:'domestic' });
-    name    = cust.name;
-    phone   = cust.phone || '';
-    email   = cust.email || '';
-    address = cust.address || '';
+    name      = cust.name;
+    phone     = cust.phone || '';
+    email     = cust.email || '';
+    address   = cust.address || '';
+    invoiceTo = cust.invoiceTo || '';
     type    = (cust.type === 'domestic') ? 'receipt' : (currentInvoiceType || 'invoice');
     ref     = invRef || currentInvoiceRef || 'INV-XXXX';
     items   = flattenInvItems();
@@ -6898,7 +6903,7 @@ async function getSendData(invId, custName, invRef, amount) {
       : (parseFloat(String(amount||'').replace(/[^0-9.]/g,'')) || 0);
   }
 
-  return { ref, type, name, total, items, phone, email, address, weekStart };
+  return { ref, type, name, total, items, phone, email, address, invoiceTo, weekStart };
 }
 
 // A combined invoice covers a whole week, so it's headed "W/C 10/08/2026" —
@@ -9046,8 +9051,12 @@ function rebuildInvoiceCustomers() {
     type:    c.type,
     phone:   c.phone   || '',
     email:   c.email   || '',
-    // Invoices print the invoice-address override when Jon has set one
-    address: c.invoiceAddress || c.address || '',
+    // The customer's own address always prints. Where Jon has set an invoice
+    // address as well, that prints alongside it under "Send invoice to" —
+    // a trade client can want the bill sent somewhere other than the site it
+    // was delivered to, and the invoice needs to show both.
+    address:   c.address || '',
+    invoiceTo: c.invoiceAddress || '',
     billingMode: c.billingMode || 'per_delivery',
     prefix:  c.name.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase(),
     nextInv: Math.floor(10000 + Math.random() * 90000),
@@ -9411,6 +9420,42 @@ function renderInvoiceItemsTableHTML(groups, grandTotal) {
   return body;
 }
 
+// The "Bill to" block, shared by every invoice view so they can't drift apart.
+//
+// Where Jon has set an invoice address on the customer, BOTH addresses print:
+// the customer's own address (the site the food went to) and, beside it, where
+// the bill itself should be sent. A trade client can want invoices going to a
+// head office or a home address while the delivery goes to the premises, and
+// an invoice showing only the billing address leaves them unable to tell which
+// site it was for.
+function billToBlockHTML(name, address, invoiceTo) {
+  const esc = s => escapeHtmlAttr(s || '');
+  const hasInvTo = invoiceTo && String(invoiceTo).trim()
+                   && String(invoiceTo).trim() !== String(address || '').trim();
+  if (!hasInvTo) {
+    return `
+    <div class="inv-section">
+      <h4>Bill to</h4>
+      <p style="font-size:13px;font-weight:700;color:var(--ink)">${esc(name)}</p>
+      <p style="font-size:12px;color:var(--ink-soft)">${esc(address) || '—'}</p>
+    </div>`;
+  }
+  return `
+    <div class="inv-section">
+      <div style="display:flex;gap:26px;flex-wrap:wrap">
+        <div style="flex:1;min-width:180px">
+          <h4>Bill to</h4>
+          <p style="font-size:13px;font-weight:700;color:var(--ink)">${esc(name)}</p>
+          <p style="font-size:12px;color:var(--ink-soft)">${esc(address) || '—'}</p>
+        </div>
+        <div style="flex:1;min-width:180px">
+          <h4>Send invoice to</h4>
+          <p style="font-size:12px;color:var(--ink-soft);margin-top:2px">${esc(invoiceTo)}</p>
+        </div>
+      </div>
+    </div>`;
+}
+
 function generateInvoicePreview() {
   const custId = document.getElementById('inv-customer').value;
   const date   = document.getElementById('inv-date').value;
@@ -9442,11 +9487,7 @@ function generateInvoicePreview() {
       </div>
     </div>
 
-    <div class="inv-section">
-      <h4>Bill to</h4>
-      <p style="font-size:13px;font-weight:700;color:var(--ink)">${cust.name}</p>
-      <p style="font-size:12px;color:var(--ink-soft)">${cust.address || '—'}</p>
-    </div>
+    ${billToBlockHTML(cust.name, cust.address, cust.invoiceTo)}
 
     <div class="inv-section">
       <h4>Items</h4>
@@ -9513,11 +9554,7 @@ async function viewInvoice(invId) {
       </div>
     </div>
 
-    <div class="inv-section">
-      <h4>Bill to</h4>
-      <p style="font-size:13px;font-weight:700;color:var(--ink)">${escapeHtmlAttr(d.name)}</p>
-      <p style="font-size:12px;color:var(--ink-soft)">${escapeHtmlAttr(d.address || '—')}</p>
-    </div>
+    ${billToBlockHTML(d.name, d.address, d.invoiceTo)}
 
     <div class="inv-section">
       <h4>Items</h4>
@@ -9686,15 +9723,40 @@ function buildInvoiceDoc(data) {
   let y = 150;
 
   // ── Bill to ──
+  // Where an invoice address is set it prints in a second column alongside,
+  // rather than replacing the customer's own address — the delivery site and
+  // the billing address are two different things and the customer needs both.
+  const invTo = (data.invoiceTo || '').trim();
+  const showInvTo = invTo && invTo !== String(data.custAddress || '').trim();
+
   doc.setFont('helvetica','bold').setFontSize(8).setTextColor(GOLD[0],GOLD[1],GOLD[2]);
   doc.text(data.type === 'receipt' ? 'RECEIPT FOR' : 'BILL TO', L, y);
   doc.setFont('helvetica','bold').setFontSize(12).setTextColor(NAVYD[0],NAVYD[1],NAVYD[2]);
   doc.text(data.custName || '—', L, y + 16);
+
+  // Long addresses wrap rather than running off the edge of the column.
+  const addrWidth = showInvTo ? (R - L) / 2 - 20 : R - L;
+  let leftLines = 0;
   if (data.custAddress) {
     doc.setFont('helvetica','normal').setFontSize(9).setTextColor(INKSOFT[0],INKSOFT[1],INKSOFT[2]);
-    doc.text(String(data.custAddress), L, y + 30);
+    const wrapped = doc.splitTextToSize(String(data.custAddress), addrWidth);
+    doc.text(wrapped, L, y + 30);
+    leftLines = wrapped.length;
   }
-  y += 56;
+
+  let rightLines = 0;
+  if (showInvTo) {
+    const CL = L + (R - L) / 2 + 10;   // second column
+    doc.setFont('helvetica','bold').setFontSize(8).setTextColor(GOLD[0],GOLD[1],GOLD[2]);
+    doc.text('SEND INVOICE TO', CL, y);
+    doc.setFont('helvetica','normal').setFontSize(9).setTextColor(INKSOFT[0],INKSOFT[1],INKSOFT[2]);
+    const wrappedTo = doc.splitTextToSize(invTo, addrWidth);
+    doc.text(wrappedTo, CL, y + 16);
+    rightLines = wrappedTo.length;
+  }
+
+  // Leave room for whichever column ran longer.
+  y += 56 + Math.max(0, Math.max(leftLines, rightLines) - 1) * 11;
 
   // ── Items table (navy header, zebra rows) ──
   const cDesc = L, cQty = R - 200, cPrice = R - 110, cTot = R;
@@ -9784,7 +9846,7 @@ async function downloadInvoicePDF() {
   const dateVal = document.getElementById('inv-date')?.value;
   const doc = buildInvoiceDoc({
     ref: currentInvoiceRef, type: currentInvoiceType,
-    custName: cust.name, custAddress: cust.address || '',
+    custName: cust.name, custAddress: cust.address || '', invoiceTo: cust.invoiceTo || '',
     dateFmt: dateVal ? new Date(dateVal).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB'),
     weekStart: (cust.billingMode === 'weekly' && dateVal) ? mondayOf(dateVal) : null,
     items, total: items.reduce((s,i) => s + i.qty*i.price, 0),
@@ -9942,7 +10004,7 @@ async function downloadInvoiceById(invId) {
   const d = await getSendData(invId);
   if (!d || !d.items || !d.items.length) { alert('Could not load this invoice to download.'); return; }
   const doc = buildInvoiceDoc({
-    ref: d.ref, type: d.type, custName: d.name, custAddress: d.address,
+    ref: d.ref, type: d.type, custName: d.name, custAddress: d.address, invoiceTo: d.invoiceTo,
     dateFmt: new Date().toLocaleDateString('en-GB'), weekStart: d.weekStart,
     items: d.items, total: d.total,
   });
@@ -11130,7 +11192,7 @@ const HELP_PAGES = {
       { icon:'🎁', title:'Referral reward', body:'When a new customer was recommended by an existing one, put the existing customer\'s name in the <strong>Referred by</strong> field. It\'s flagged so you remember to thank the person who referred them with a free pack of sausages or bacon on their next delivery.' },
       { icon:'🏢', title:'Trade accounts', body:'Trade customers have a <strong>Trade</strong> badge. When a business creates a trade account on the website, you get an <strong>email straight away</strong>, an alert appears on your <strong>Dashboard</strong>, and they\'re pinned to the <strong>top of this list</strong> with a <strong>🕐 Approve login</strong> badge until you deal with them. Open their profile and press <strong>✓ Approve trade access</strong> — once approved, they see your trade-only items when they sign in. Your 5pm daily email also reminds you of any still waiting.' },
       { icon:'💷', title:'Trade prices (per customer)', body:'Every trade customer can have their own agreed prices. Open their profile and press <strong>💷 Set this customer\'s trade prices</strong> — you\'ll see your whole availability list (trade-only items first) with a price box for each. Fill in only what you\'ve agreed; leave the rest blank. By default they see <strong>no prices</strong> on the website, just "speak to Jon about pricing" — tick <strong>Show these prices to the customer</strong> when you\'re ready for them to see their agreed prices. Their orders and invoices use these prices automatically. Prices are always subject to the market — update them here whenever things change.' },
-      { icon:'🏠', title:'A different address on their invoices', body:'If a customer wants a different address printed on their invoices (e.g. their home address rather than the delivery address), open their <strong>Edit</strong> screen and fill in <strong>Invoice address</strong>. Leave it blank and invoices use their normal address as always.' },
+      { icon:'🏠', title:'Sending the invoice somewhere else', body:'Some customers want the bill sent to a different address from the one you deliver to — a head office, an accounts department, or someone\'s home. Open their <strong>Edit</strong> screen and fill in <strong>Invoice address</strong>.<br><br>The invoice then shows <strong>both</strong>: <strong>Bill to</strong> with their name and the address you deliver to, and <strong>Send invoice to</strong> alongside it with where the bill goes. They can see which site the order was for and where to send the money from, which is what a business needs to match it up.<br><br>Leave it blank and the invoice just shows their normal address, as always.' },
       { icon:'🗓️', title:'One invoice a week instead of one per delivery', body:'Some customers take two, three or four deliveries a week and only want <strong>one bill</strong> for the lot. Open their <strong>Edit</strong> screen and under <strong>How this customer is invoiced</strong> choose <strong>One invoice a week</strong>. From then on, every delivery you log for them Monday to Sunday goes onto the same invoice, and a fresh one starts automatically each Monday. Everyone else carries on getting an invoice per delivery — you don\'t need to change anything for them.' },
       { icon:'📍', title:'Customers with more than one address', body:'If you deliver to two or more addresses for the same customer, add the extra ones under <strong>Delivery sites</strong> in their Edit screen. After that, every time you log an order for them the form asks <strong>which site</strong> it\'s going to — pick their main address or one of the extra sites. Their invoice then shows each address as its own section with its own subtotal, and one grand total at the bottom.' },
       { icon:'📍', title:'Delivery sites (customers with more than one address)', body:'Open a customer\'s <strong>Edit</strong> screen and look for <strong>Delivery sites</strong>. Add one row per extra address (e.g. two pub sites for the same business). Once any sites are listed: <strong>Log Order</strong> will ask which site each delivery is for, the delivery run and route show the right address, and — instead of a separate invoice per delivery — all their orders build up onto <strong>one running invoice</strong> with a subtotal per site, until you finalise and send it from the Invoices tab. No sites listed = nothing changes, it works exactly as before.' },
