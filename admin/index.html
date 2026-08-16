@@ -139,6 +139,8 @@
   .pick-sub{font-size:11px;color:var(--gold-soft);margin:4px 0 16px}
   .pick-line{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px dashed rgba(224,189,114,.22)}
   .pick-line:last-of-type{border-bottom:none}
+  .pick-group-head{font-size:10px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;color:var(--gold-soft);margin:14px 0 2px;padding-bottom:4px;border-bottom:1px solid rgba(224,189,114,.28)}
+  .pick-group-head:first-child{margin-top:0}
   .pick-line span{color:rgba(255,255,255,.85);font-size:13px}
   .pick-line b{font-family:var(--display);color:var(--gold-bright);font-size:15px;font-weight:600}
   .pick-actions{margin-top:16px;display:flex;gap:8px}
@@ -828,7 +830,7 @@
       <div class="pick-sub">Total quantities to pack</div>
       <div id="pickListLines"></div>
       <div class="pick-actions">
-        <button class="pf-print" onclick="window.print()">🖨 Print list</button>
+        <button class="pf-print" onclick="printPickList()">🖨 Print list</button>
         <button class="pf-ai" onclick="generateAIRoute()">✦ AI route tip</button>
       </div>
       <div class="ai-result" id="aiRouteResult" style="display:none">
@@ -3492,9 +3494,144 @@ function renderPickList(dateStr) {
     return;
   }
 
-  linesEl.innerHTML = keys.map(k =>
-    `<div class="pick-line"><span>${k}</span><b>×${totals[k]}</b></div>`
-  ).join('');
+  // Grouped the same way it prints, so what's on screen and what's in his
+  // hand at the supplier are the same list in the same order.
+  const groups = groupPickTotals(totals);
+  linesEl.innerHTML = groups.map(g => `
+    <div class="pick-group-head">${g.label}</div>
+    ${g.lines.map(l => `<div class="pick-line"><span>${l.name}</span><b>×${l.qty}</b></div>`).join('')}
+  `).join('');
+}
+
+// Sort the day's totals into the categories the products are filed under.
+// Jon collects from several suppliers and works through a shop section by
+// section, so a list grouped by type is quicker to work than one long A–Z.
+// Anything that doesn't match a product on file (one-off items typed onto an
+// order) goes at the end under "Other" rather than being dropped.
+function groupPickTotals(totals) {
+  const catOf = {};
+  (sampleProducts || []).forEach(p => { if (p.name) catOf[p.name.trim().toLowerCase()] = p.cat || ''; });
+
+  const byCat = {};
+  Object.keys(totals).forEach(name => {
+    // Product options are appended to the line as "Name (Extra hot)" — strip
+    // that to find the product, but keep the full text on the list so Jon
+    // still knows which version to pick up.
+    const base = name.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+    const cat  = catOf[name.trim().toLowerCase()] ?? catOf[base] ?? '';
+    const key  = cat || 'Other';
+    (byCat[key] = byCat[key] || []).push({ name, qty: totals[name] });
+  });
+
+  const names = Object.keys(byCat).sort((a, b) => {
+    if (a === 'Other') return 1;          // stragglers last
+    if (b === 'Other') return -1;
+    return a.localeCompare(b);
+  });
+  return names.map(label => ({
+    label,
+    lines: byCat[label].sort((a, b) => a.name.localeCompare(b.name)),
+  }));
+}
+
+// A clean one-job sheet to take round the supplier — big tick boxes, big
+// quantities, grouped by section. Printing the admin page itself ran to five
+// sheets of orders, menus and screen furniture; this prints just the list.
+function printPickList() {
+  const dateStr = currentRunDay;
+  const orders  = sampleOrders.filter(o => o.date === dateStr && o.status !== 'delivered' && o.status !== 'cancelled');
+  if (!orders.length) { alert('There are no orders for this day yet, so there\'s nothing to pick.'); return; }
+
+  const totals = {};
+  orders.forEach(o => {
+    if (!o.items) return;
+    o.items.split(',').forEach(seg => {
+      const m = seg.trim().match(/^(.+?)\s*[×x]\s*(\d+)$/);
+      if (m) totals[m[1].trim()] = (totals[m[1].trim()] || 0) + parseInt(m[2], 10);
+    });
+  });
+
+  const groups = groupPickTotals(totals);
+  if (!groups.length) { alert('No items found on this day\'s orders.'); return; }
+
+  const esc = s => String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  const lineCount = groups.reduce((s, g) => s + g.lines.length, 0);
+  const dayLabel  = runDayLabel(dateStr) || '';
+  const dateLong  = dateStr
+    ? new Date(dateStr + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' })
+    : new Date().toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+
+  // Laid out with tables on purpose. Print engines disagree about flexbox and
+  // this sheet has to come out of Jon's printer looking the way it does on
+  // screen, every time.
+  const body = groups.map(g => `
+    <section class="grp">
+      <h2>${esc(g.label)}</h2>
+      <table>
+        <colgroup><col class="c1"><col class="c2"><col class="c3"></colgroup>
+        ${g.lines.map(l => `
+        <tr>
+          <td class="box"><span></span></td>
+          <td class="nm">${esc(l.name)}</td>
+          <td class="qty">${l.qty}</td>
+        </tr>`).join('')}
+      </table>
+    </section>`).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Pick list — ${esc(dayLabel || dateLong)}</title>
+<style>
+  @page { size: A4 portrait; margin: 14mm 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+         color: #16273f; margin: 0; }
+  header { border-bottom: 3px solid #16273f; padding-bottom: 10px; margin-bottom: 16px; }
+  .brand { font-size: 21pt; font-weight: 800; letter-spacing: -0.4px; }
+  .brand span { font-weight: 600; color: #6a5f51; font-size: 11pt; padding-left: 12px; }
+  .when { font-size: 15pt; font-weight: 800; margin-top: 6px; }
+  .count { font-size: 10.5pt; color: #6a5f51; margin-top: 3px; }
+  .grp { break-inside: avoid; page-break-inside: avoid; margin-bottom: 15px; }
+  h2 { font-size: 11pt; font-weight: 800; text-transform: uppercase; letter-spacing: 1.1px;
+       color: #8c6d2f; margin: 0 0 4px; padding-bottom: 3px; border-bottom: 1.5px solid #e0d4bb; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  col.c1 { width: 8%; } col.c2 { width: 74%; } col.c3 { width: 18%; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  td { padding: 7px 0; border-bottom: 1px dotted #cfc7b8; vertical-align: middle; }
+  td.box span { display: inline-block; width: 15px; height: 15px;
+                border: 2px solid #16273f; border-radius: 3px; }
+  td.nm  { font-size: 13pt; line-height: 1.25; }
+  td.qty { font-size: 17pt; font-weight: 800; text-align: right; white-space: nowrap; }
+  footer { margin-top: 22px; padding-top: 9px; border-top: 1.5px solid #cfc7b8;
+           font-size: 10pt; color: #6a5f51; }
+  footer .right { float: right; }
+  @media print { .noprint { display: none !important; } }
+  .noprint { text-align: center; padding: 14px; background: #f1e8d6; }
+  .noprint button { font: inherit; font-weight: 700; padding: 9px 20px; margin: 0 5px;
+                    border: 1px solid #16273f; border-radius: 7px; background: #16273f;
+                    color: #fff; cursor: pointer; }
+  .noprint button.alt { background: #fff; color: #16273f; }
+</style></head><body>
+<div class="noprint">
+  <button onclick="window.print()">🖨 Print this list</button>
+  <button class="alt" onclick="window.close()">Close</button>
+</div>
+<header>
+  <div class="brand">JG Foods<span>&nbsp; · &nbsp;Pick list</span></div>
+  <div class="when">${esc(dateLong)}</div>
+  <div class="count">${lineCount} item${lineCount === 1 ? '' : 's'} to collect · ${orders.length} order${orders.length === 1 ? '' : 's'}</div>
+</header>
+${body}
+<footer><span class="right">Printed ${esc(new Date().toLocaleDateString('en-GB'))}</span><span>Tick each one off as you load it</span></footer>
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) { alert('Your browser blocked the print window. Allow pop-ups for this site and try again.'); return; }
+  w.document.write(html);
+  w.document.close();
+  // Give it a moment to lay the page out before the print dialogue opens.
+  w.onload = () => setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 250);
 }
 
 function orderCard(o) {
@@ -11123,6 +11260,7 @@ const HELP_PAGES = {
     label: 'Delivery Runs',
     sections: [
       { icon:'🚚', title:'What is this page?', body:'Delivery Runs shows all orders grouped by delivery day. Each delivery day has its own tab — tap a tab to see that day\'s orders and pick list. Each card is one customer order. You choose which days you\'re delivering on the <strong>Schedule</strong> page.' },
+      { icon:'🖨️', title:'Printing the pick list for the supplier', body:'The pick list adds up every order for that day into one total per item — so it\'s what you need to collect, not a list of who ordered what.<br><br>Press <strong>🖨 Print list</strong> and a clean sheet opens ready to print: one page, big writing, a tick box against every line and the quantity in large figures on the right. It\'s grouped into sections (Bacon, Pies, Cheese and so on) so you can work through a supplier a section at a time instead of hunting up and down an A–Z list. Tick each one off as you load it.<br><br>It prints just the list — no screen menus or order cards. If nothing happens when you press it, your browser has blocked the pop-up: allow pop-ups for this site and press it again.' },
       { icon:'📋', title:'Order cards', body:'Each card shows the customer\'s name, whether they\'re domestic or trade, the order status, and how the order came in (website, phone, social media). Tap a card to open the full order details.' },
       { icon:'📍', title:'Route planner', body:'Press <strong>Plan route</strong> to see that day\'s stops as a tidy run, then <strong>Open in Google Maps</strong> for live, turn-by-turn directions and drive times — straight to your phone, free. You can also copy the route link to share it.' },
       { icon:'✅', title:'Marking as delivered', body:'Open an order card and change the status to <strong>Delivered</strong> once you\'ve dropped it off. It then asks for the <strong>fridge/cool-box temperature</strong> — pop the reading in and tap <strong>Save &amp; mark delivered</strong>, and it\'s saved straight to your Temperature Log for you. Not got it to hand? Tap <strong>Skip</strong> and add it later on the Temperature Log page.' },
