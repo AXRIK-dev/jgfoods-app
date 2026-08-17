@@ -448,6 +448,23 @@ The threshold and amount move into `app_settings` under `min_order`, so the webs
 
 ---
 
+### 44. `044_daily_takings.sql`
+**What it does:** Gives Jon his day's takings on the dashboard, and makes the running total look after itself.
+
+`takings_for_day(date)` returns everything the new **Taken today** panel needs in one call: money actually received that day split cash vs bank transfer, what the day's deliveries were worth, and how much of that is still to collect. Admin-only, and `SECURITY DEFINER` because it reads `daily_payment_allocations`, which is deliberately not exposed to the API.
+
+The bigger change is underneath. Until now every path that touched a payment had to remember to call `recompute_daily_sales` itself. They all did — but that rule lived in the JavaScript, and the first feature that forgot would have skewed the takings silently, straight through to the weekly sheet and the accountant. Triggers on `invoice_payments` (insert, update, delete) and on `orders` (invoice link, delivery slot, status) now rebuild the affected days automatically, whatever caused the change.
+
+The sums move into `recompute_daily_sales_unchecked(date)`, which has no role check, so a trigger firing as a non-admin — a card webhook, say — can't abort someone's payment with "Only an admin can update takings". It's granted to nobody and only reachable from inside a `SECURITY DEFINER` function. `recompute_daily_sales(date)` keeps its admin check and delegates, so nothing loses a guard.
+
+**This does not replace `delete_invoice_cascade` (041).** When an invoice goes, its payments cascade with it and the invoice row is already gone by the time the trigger fires — there's nothing left to work the delivery dates out from. 041 captures those days first, which is still the only way. Keep calling it.
+
+Ends with a one-off catch-up that rebuilds every day with a payment against it, so anything that drifted before the triggers existed is corrected now.
+
+**When to run:** After 043 (and it needs 037 and 041 to be in). Safe to re-run; changes no data except correcting days that were already wrong.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

@@ -101,6 +101,29 @@
   .sc-sub b{color:var(--green);font-weight:700}
   .stat-card.red .sc-val{color:var(--oxblood)}
 
+  /* ============ TODAY'S TAKINGS PANEL ============ */
+  .takings-panel{background:linear-gradient(170deg,var(--navy),var(--navy-deep));border:1px solid rgba(224,189,114,.22);border-radius:14px;padding:20px 22px;margin-bottom:18px;position:relative;overflow:hidden}
+  .takings-panel::after{content:"";position:absolute;right:-40px;top:-40px;width:150px;height:150px;border-radius:50%;background:var(--gold);opacity:.07;pointer-events:none}
+  .tk-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .tk-head h3{font-family:var(--display);color:#fff;font-size:17px;font-weight:600;line-height:1.2}
+  .tk-eyebrow{font-size:9.5px;font-weight:800;letter-spacing:1.3px;text-transform:uppercase;color:var(--gold-soft);margin-bottom:3px}
+  .tk-refresh{background:rgba(224,189,114,.12);border:1px solid rgba(224,189,114,.3);color:var(--gold-bright);width:32px;height:32px;border-radius:8px;font-size:15px;flex-shrink:0;transition:.15s}
+  .tk-refresh:hover{background:rgba(224,189,114,.24)}
+  .tk-refresh.spin{animation:tkspin .7s linear infinite}
+  @keyframes tkspin{to{transform:rotate(360deg)}}
+  .tk-total{font-family:var(--display);font-size:clamp(34px,7vw,46px);font-weight:600;color:var(--gold-bright);line-height:1;margin-top:14px;letter-spacing:-.5px}
+  .tk-total-sub{font-size:11.5px;color:var(--gold-soft);margin-top:6px}
+  .tk-split{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+  .tk-split-item{background:rgba(255,255,255,.05);border:1px solid rgba(224,189,114,.16);border-radius:10px;padding:11px 13px}
+  .tk-split-label{font-size:10.5px;font-weight:700;color:var(--gold-soft);letter-spacing:.3px}
+  .tk-split-val{font-family:var(--display);font-size:20px;font-weight:600;color:#fff;margin-top:4px;line-height:1}
+  .tk-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:15px;padding-top:13px;border-top:1px solid rgba(224,189,114,.2);font-size:11.5px;color:var(--gold-soft);line-height:1.5}
+  .tk-foot b{color:#fff;font-weight:700}
+  .tk-owed{color:#f0c9a0;font-weight:700}
+  .tk-link{color:var(--gold-bright);font-size:11.5px;font-weight:700;background:none;white-space:nowrap;flex-shrink:0}
+  .tk-link:hover{color:#fff}
+  @media(max-width:420px){.tk-split{grid-template-columns:1fr}}
+
   /* ============ TABS ============ */
   .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:20px;padding-bottom:0;flex-wrap:nowrap;min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .tabs::-webkit-scrollbar{display:none}
@@ -718,6 +741,40 @@
           <button class="btn-navy" style="font-size:12px;padding:9px 14px" onclick="retentionSnooze()">Remind me next month</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ============ TODAY'S TAKINGS (migration 044) ============
+       The number Jon asked to see every day. Money actually received
+       today, split cash vs bank, with what the day's deliveries were
+       worth underneath. Updates itself whenever a payment is logged,
+       switched, removed, or an invoice is deleted. -->
+  <div class="takings-panel" id="takingsPanel">
+    <div class="tk-head">
+      <div>
+        <div class="tk-eyebrow" id="tkEyebrow">Today</div>
+        <h3>Taken today</h3>
+      </div>
+      <button class="tk-refresh" onclick="refreshTodayTakings(true)" title="Check for anything logged since you opened the app">↻</button>
+    </div>
+
+    <div class="tk-total" id="tkTotal">£0.00</div>
+    <div class="tk-total-sub" id="tkTotalSub">Nothing logged yet today</div>
+
+    <div class="tk-split">
+      <div class="tk-split-item">
+        <div class="tk-split-label">💷 Cash</div>
+        <div class="tk-split-val" id="tkCash">£0.00</div>
+      </div>
+      <div class="tk-split-item">
+        <div class="tk-split-label">🏦 Bank transfer</div>
+        <div class="tk-split-val" id="tkBank">£0.00</div>
+      </div>
+    </div>
+
+    <div class="tk-foot" id="tkFoot">
+      <span id="tkDeliveries">No deliveries today.</span>
+      <button class="tk-link" onclick="showPage('finance');switchTab('finance','daily')">Daily Sales →</button>
     </div>
   </div>
 
@@ -1382,7 +1439,7 @@
   <!-- DAILY SALES -->
   <div class="tab-panel active" id="finance-daily">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-      <p style="font-size:13px;color:var(--ink-soft)">Each day's takings fill in automatically from your paid orders (shown in green). Only add to the <b>+ extra</b> box if you took money that wasn't logged as an order.</p>
+      <p style="font-size:13px;color:var(--ink-soft)"><b>Today is at the top.</b> Each day's takings fill in automatically from your paid orders (shown in green). Only add to the <b>+ extra</b> box if you took money that wasn't logged as an order.</p>
       <button class="btn-navy" style="font-size:12px" onclick="addDailySalesRow()">+ Add day</button>
     </div>
     <div id="dsDropZone" ondragover="event.preventDefault();this.style.borderColor='var(--gold)'" ondragleave="this.style.borderColor='var(--line)'" ondrop="dsHandleDrop(event)" style="border:1.5px dashed var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--paper)">
@@ -3068,6 +3125,7 @@ async function loadAppData() {
             id: p.id, method: p.method, amount: parseFloat(p.amount) || 0,
             note: p.note || '',
             at: p.created_at || inv.created_at,
+            paidAt: p.paid_at || p.created_at || inv.created_at,   // raw, for today's takings
             date: new Date(p.paid_at || p.created_at || inv.created_at)
               .toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }),
           })),
@@ -3180,6 +3238,12 @@ function friendlyCutoff(cutoffAt, today0) {
 function renderDashboard() {
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   const now = new Date();
+
+  // Today's takings — read fresh from the database every time the dashboard
+  // draws, so marking something paid, switching cash to bank, removing a
+  // payment or deleting an invoice all move the figure straight away.
+  if (typeof refreshTodayTakings === 'function') refreshTodayTakings();
+
   const today0 = new Date(); today0.setHours(0, 0, 0, 0);
 
   // ── New trade signups waiting for Jon's approval ──
@@ -10189,6 +10253,114 @@ async function downloadInvoiceById(invId) {
   doc.save(`${d.ref}-${safe}.pdf`);
 }
 
+// ============ TODAY'S TAKINGS (dashboard panel — migration 044) ============
+// Jon's one number: what he's taken today, split cash vs bank transfer.
+// It's a running total — every payment logged, switched, removed, or lost
+// to a deleted invoice moves it, because it's read fresh from the database
+// rather than held in the page.
+let takingsBusy = false;
+let takingsAgain = false;   // a refresh asked for while one was in flight
+
+function tkMoney(n) {
+  return '£' + (Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// Fallback for the moment before migration 044 is run, or if the database
+// is unreachable — adds up the payments already loaded in the page. Less
+// complete than the real thing (it can't see the "+ extra" boxes), but the
+// panel shows a sensible figure rather than an error.
+function takingsFromMemory(iso) {
+  let cash = 0, bank = 0, n = 0;
+  (sampleInvoices || []).forEach(inv => {
+    (inv.payments || []).forEach(p => {
+      const when = p.paidAt || p.at;
+      if (!when) return;
+      if (new Date(when).toLocaleDateString('en-CA') !== iso) return;
+      const amt = Number(p.amount) || 0;
+      if (p.method === 'cash') cash += amt; else bank += amt;
+      n++;
+    });
+  });
+  const dayOrders = (sampleOrders || []).filter(o => o.date === iso && o.status !== 'cancelled');
+  const delivered = dayOrders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+  return {
+    received_cash: cash, received_bank: bank, received_total: cash + bank,
+    payment_count: n, delivered_value: delivered, delivered_paid: 0,
+    delivered_unpaid: 0, order_count: dayOrders.length, _partial: true,
+  };
+}
+
+async function refreshTodayTakings(spin) {
+  const panel = document.getElementById('takingsPanel');
+  if (!panel) return;
+  // Don't drop a refresh that lands mid-flight — a payment logged a moment
+  // ago would leave the panel showing the figure from before it. Queue it.
+  if (takingsBusy) { takingsAgain = true; return; }
+  takingsBusy = true;
+  const btn = panel.querySelector('.tk-refresh');
+  if (spin && btn) btn.classList.add('spin');
+
+  const iso = todayISO();
+  let t = null;
+  try {
+    if (window.supabase) {
+      const { data, error } = await window.supabase.rpc('takings_for_day', { p_date: iso });
+      if (error) throw error;
+      t = Array.isArray(data) ? data[0] : data;
+    }
+  } catch (e) {
+    console.warn('takings_for_day unavailable — falling back to loaded payments.', e);
+  }
+  if (!t) t = takingsFromMemory(iso);
+
+  renderTodayTakings(t, iso);
+  if (btn) btn.classList.remove('spin');
+  takingsBusy = false;
+  if (takingsAgain) { takingsAgain = false; refreshTodayTakings(); }
+}
+
+function renderTodayTakings(t, iso) {
+  const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  const setHTML = (id, v) => { const e = document.getElementById(id); if (e) e.innerHTML = v; };
+
+  const cash  = Number(t.received_cash)  || 0;
+  const bank  = Number(t.received_bank)  || 0;
+  const total = Number(t.received_total) || (cash + bank);
+  const n     = Number(t.payment_count)  || 0;
+
+  set('tkEyebrow', 'Today · ' + new Date(iso + 'T00:00:00')
+    .toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }));
+  set('tkTotal', tkMoney(total));
+  set('tkCash',  tkMoney(cash));
+  set('tkBank',  tkMoney(bank));
+
+  set('tkTotalSub', total > 0
+    ? `From ${n} payment${n !== 1 ? 's' : ''} logged today`
+    : 'Nothing logged yet today');
+
+  // What today's deliveries were worth, and anything still to collect.
+  const delivered = Number(t.delivered_value)  || 0;
+  const unpaid    = Number(t.delivered_unpaid) || 0;
+  const orders    = Number(t.order_count)      || 0;
+
+  if (!orders) {
+    setHTML('tkDeliveries', t._partial
+      ? 'No deliveries today.'
+      : 'No deliveries today — anything above is money in from other days.');
+  } else {
+    const owed = (!t._partial && unpaid > 0)
+      ? ` · <span class="tk-owed">${tkMoney(unpaid)} still to collect</span>`
+      : (!t._partial ? ' · <b>all paid ✓</b>' : '');
+    setHTML('tkDeliveries',
+      `Today's ${orders} deliver${orders !== 1 ? 'ies' : 'y'} worth <b>${tkMoney(delivered)}</b>${owed}`);
+  }
+}
+
 // ============ DAILY SALES ============
 let dailySalesRows = [];
 let dailyRowSeq = 0;
@@ -10214,9 +10386,25 @@ async function loadDailySales() {
       ordBank: parseFloat(r.orders_bank) || 0, ordCash: parseFloat(r.orders_cash) || 0,
       holiday: !!r.is_holiday,
     }));
-    if (!dailySalesRows.length) addDailySalesRow();   // one blank row to start
-    else renderDailySales();
+    // Today always has a row, at the top, whether or not there's money on it
+    // yet — so Jon opens the tab and sees today rather than hunting for it.
+    const today = todayISO();
+    if (!dailySalesRows.some(r => r.date === today)) {
+      dailySalesRows.push({ id: ++dailyRowSeq, date: today, bank: 0, cash: 0, ordBank: 0, ordCash: 0, holiday: false });
+    }
+    sortDailySalesRows();
+    renderDailySales();
   } catch (e) { console.error('loadDailySales', e); }
+}
+
+// Newest first. The table grows by a row a day forever, so the days Jon
+// actually cares about belong at the top, not buried at the bottom.
+function sortDailySalesRows() {
+  dailySalesRows.sort((a, b) => {
+    if (!a.date) return -1;
+    if (!b.date) return 1;
+    return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
+  });
 }
 
 // Upsert a single day's takings (keyed by date)
@@ -10302,13 +10490,17 @@ async function importDailySalesFile(file) {
 function renderDailySales() {
   const tbody = document.getElementById('dailySalesBody');
   if (!tbody) return;
+  const todayStr = todayISO();
   tbody.innerHTML = dailySalesRows.map(row => {
     const ordBank = row.ordBank || 0, ordCash = row.ordCash || 0;
     const rowTotal = ordBank + (parseFloat(row.bank)||0) + ordCash + (parseFloat(row.cash)||0);
     const auto = v => v > 0 ? `<div style="font-size:11px;color:#1a6640;font-weight:700" title="From paid orders">£${v.toFixed(2)} <span style="font-weight:600;color:var(--ink-soft)">orders</span></div>` : '';
+    const isToday = row.date === todayStr;
+    const rowStyle = row.holiday ? 'opacity:.5'
+                   : isToday ? 'background:#fdf9ef;box-shadow:inset 3px 0 0 var(--gold)' : '';
     return `
-    <tr ${row.holiday ? 'style="opacity:.5"' : ''}>
-      <td><input type="date" class="fin-input" style="padding:6px 8px;font-size:12px" value="${row.date}" onchange="updateDailyRow(${row.id},'date',this.value)"></td>
+    <tr ${rowStyle ? `style="${rowStyle}"` : ''}>
+      <td><input type="date" class="fin-input" style="padding:6px 8px;font-size:12px" value="${row.date}" onchange="updateDailyRow(${row.id},'date',this.value)">${isToday ? '<div style="font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--gold);margin-top:3px">Today</div>' : ''}</td>
       <td class="right">${auto(ordBank)}<input type="number" step="0.01" value="${row.bank || ''}" placeholder="+ extra" title="Add anything not captured as an order" oninput="updateDailyRow(${row.id},'bank',this.value)" style="font-size:12px;width:84px;border:none;background:transparent;text-align:right;color:var(--ink-soft)"></td>
       <td class="right">${auto(ordCash)}<input type="number" step="0.01" value="${row.cash || ''}" placeholder="+ extra" title="Add anything not captured as an order" oninput="updateDailyRow(${row.id},'cash',this.value)" style="font-size:12px;width:84px;border:none;background:transparent;text-align:right;color:var(--ink-soft)"></td>
       <td class="right" style="font-family:var(--display);font-size:14px;font-weight:600;color:var(--navy)">£${rowTotal.toFixed(2)}${row.holiday ? ' 🏖' : ''}</td>
@@ -11267,8 +11459,11 @@ const HELP_PAGES = {
   dashboard: {
     label: 'Dashboard',
     sections: [
-      { icon:'📊', title:'What is this page?', body:'The Dashboard is your home screen. It gives you a quick snapshot of what\'s happening today — orders waiting, money owed, and anything that needs your attention.' },
-      { icon:'📦', title:'The cards at the top', body:'These update live: <strong>Next run</strong> shows how many orders are booked for your next delivery day, <strong>This week revenue</strong>, <strong>Unpaid invoices</strong>, and <strong>Active customers</strong>. The date and greeting at the top, and the cut-off reminder, all follow your actual next delivery day from the Schedule.' },
+      { icon:'📊', title:'What is this page?', body:'The Dashboard is your home screen. It gives you a quick snapshot of what\'s happening today — what you\'ve taken, orders waiting, money owed, and anything that needs your attention.' },
+      { icon:'💷', title:'Taken today', body:'The navy panel at the top is your day\'s takings. The big gold figure is <strong>every penny that\'s come in today</strong>, and underneath it splits into <strong>cash</strong> and <strong>bank transfer</strong> so you know what should be in your pocket and what should be in the bank.<br><br>You don\'t enter anything here — it fills itself in. Every time you mark an order paid on the run, or press <strong>Log payment</strong> on an invoice, this goes up within seconds.' },
+      { icon:'🔄', title:'It corrects itself', body:'It\'s a running total, so it goes <em>down</em> as well as up. Delete an invoice and its money comes straight back out. Remove a payment and it comes off. And if you marked something cash when it was actually a bank transfer, switch it over (the <strong>↔</strong> button next to the payment) and both figures move to match — the total stays the same, it just moves across.<br><br>You never have to go back and correct this figure by hand. Press <strong>↻</strong> in the corner if you want to check for anything logged since you opened the app.' },
+      { icon:'🚚', title:'The line at the bottom of the panel', body:'Underneath, it tells you what <strong>today\'s deliveries were worth</strong> and whether anything is still to collect. That\'s a different question to what you\'ve taken, and it\'s worth knowing both.<br><br>They\'re usually the same on a domestic day, because you take the money at the door. They\'ll differ when a pub pays you on the Friday for a whole week\'s deliveries — that money counts as <strong>taken</strong> on the Friday, but the <strong>sales</strong> belong to the days the meat actually went out. That\'s how your weekly sheet and your accountant\'s figures work too, so nothing disagrees with anything else.<br><br>Tap <strong>Daily Sales →</strong> to see the same figures day by day.' },
+      { icon:'📦', title:'The cards below', body:'These update live: <strong>Next run</strong> shows how many orders are booked for your next delivery day, <strong>This week revenue</strong>, <strong>Unpaid invoices</strong>, and <strong>Active customers</strong>. The date and greeting at the top, and the cut-off reminder, all follow your actual next delivery day from the Schedule.' },
       { icon:'⚡', title:'Quick actions', body:'The buttons in the middle let you do the most common tasks in one click — log an order, view your delivery runs, edit availability, or check finances.' },
       { icon:'💰', title:'Money owed', body:'The <strong>Outstanding</strong> figure shows what trade customers still owe you. Click it to go to Invoices and see exactly who hasn\'t paid.' },
       { icon:'📈', title:'Revenue chart', body:'The <strong>Revenue — last 6 weeks</strong> chart shows your actual takings each week, worked out from your orders. Gold bars are past weeks and the navy bar is this week — hover any bar to see the exact figure. The line underneath tells you how this week compares to last, and how close you are to the £10k/week target.' },
@@ -11382,7 +11577,7 @@ const HELP_PAGES = {
     label: 'Finance',
     sections: [
       { icon:'💰', title:'What is this page?', body:'Finance has five tabs that match your bookkeeping: <strong>Daily Sales</strong>, <strong>Weekly</strong>, <strong>Expenses &amp; Purchases</strong>, <strong>Payments</strong>, and <strong>Monthly (Accountant)</strong>. You log your costs once on the Expenses tab and everything else adds up on its own.' },
-      { icon:'📅', title:'Daily Sales tab', body:'This fills itself in. Each day\'s takings come <strong>automatically from every payment you log</strong> — whether you marked an order Cash or Bank on the delivery run, or pressed <strong>Log payment</strong> on an invoice. You only type in the <strong>+ extra</strong> box if you took money that isn\'t against an order or an invoice at all. Totals update live, and it all stays in step if you edit, delete or unmark anything.' },
+      { icon:'📅', title:'Daily Sales tab', body:'<strong>Today is always the top row, marked in gold</strong>, with the rest underneath newest first — so you\'re not scrolling to find the day you\'re after. (The same day\'s total is on your Dashboard too, if you just want the one number.)<br><br>This fills itself in. Each day\'s takings come <strong>automatically from every payment you log</strong> — whether you marked an order Cash or Bank on the delivery run, or pressed <strong>Log payment</strong> on an invoice. You only type in the <strong>+ extra</strong> box if you took money that isn\'t against an order or an invoice at all. Totals update live, and it all stays in step if you edit, delete or unmark anything.' },
       { icon:'🗓️', title:'Where a weekly invoice\'s money lands', body:'When a customer on <strong>one invoice a week</strong> pays, that money covers several deliveries at once — so it\'s spread across those days in proportion to what each delivery was worth, rather than all landing on one. A £300 invoice covering a £200 Monday and a £100 Thursday puts £200 on the Monday and £100 on the Thursday. Part payments split the same way. You don\'t have to do anything — it just adds up correctly across the week.' },
       { icon:'📥', title:'Import past takings', body:'Already got your figures in a spreadsheet? On the Daily Sales tab, drag your Excel or CSV file onto the <strong>Import past takings</strong> box (or tap Choose file). As long as it has <strong>Date</strong>, <strong>Bank</strong> and <strong>Cash</strong> columns, it reads them straight in — so you\'re not starting from scratch. Days you already have are updated, not duplicated.' },
       { icon:'💰', title:'Cash tabs', body:'Some customers pay their full week\'s cash in one go on a set day. These are tracked in the <strong>Cash Tabs</strong> section at the bottom of the Daily tab — separate from your daily cash total. Use <strong>+ Add tab order</strong> to log each delivery against their tab. On payment day, press <strong>Settle tab</strong> and the total moves into that day\'s cash automatically.' },
