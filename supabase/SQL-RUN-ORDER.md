@@ -465,6 +465,21 @@ Ends with a one-off catch-up that rebuilds every day with a payment against it, 
 
 ---
 
+### 45. `045_takings_breakdown.sql`
+**What it does:** The list behind the day's total — who paid, how, and who hasn't.
+
+`takings_breakdown_for_day(date)` returns two groups. **`run`** is every stop on that day's delivery round with what it came to and whether the money's in (`cash`, `bank`, `split`, `part`, `unpaid`). **`other`** is money received that day against a *different* day's deliveries — a pub settling last week's invoice — which is real cash in Jon's tin tonight but nothing to do with today's round. Without that second group his count would never balance.
+
+`order_payment_state` works out how much of each individual order has been paid. For a plain per-delivery invoice that's just the invoice's payments. For a weekly invoice covering several deliveries it apportions by what each delivery was worth — the same split migration 037 uses for days — so the per-customer list adds up to exactly the same money as the headline figure. Anything else and Jon reconciles against a number that contradicts his own dashboard.
+
+The `part` state exists so a weekly customer who's paid half doesn't show a green tick against every delivery on the invoice.
+
+Read-only. `order_payment_state` is REVOKEd from the API for the same reason as `daily_payment_allocations` — it's only read from inside `SECURITY DEFINER` functions.
+
+**When to run:** After 044. Safe to re-run; adds one view and one function, changes no data.
+
+---
+
 ## After running all migrations
 
 ### Add the anon key to the admin app

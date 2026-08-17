@@ -123,6 +123,32 @@
   .tk-link{color:var(--gold-bright);font-size:11.5px;font-weight:700;background:none;white-space:nowrap;flex-shrink:0}
   .tk-link:hover{color:#fff}
   @media(max-width:420px){.tk-split{grid-template-columns:1fr}}
+  /* Who paid what — the reconciliation list */
+  .tk-toggle{width:100%;margin-top:13px;padding:10px;border-radius:9px;background:rgba(224,189,114,.12);border:1px solid rgba(224,189,114,.3);color:var(--gold-bright);font-size:12px;font-weight:800;letter-spacing:.4px;transition:.15s}
+  .tk-toggle:hover{background:rgba(224,189,114,.22)}
+  .tk-break{margin-top:12px}
+  .tk-grp{font-size:9.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--gold-soft);margin:14px 0 7px;padding-bottom:5px;border-bottom:1px solid rgba(224,189,114,.22)}
+  .tk-grp:first-child{margin-top:0}
+  .tk-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+  .tk-row:last-child{border-bottom:none}
+  .tk-tick{width:20px;flex-shrink:0;font-size:13px;text-align:center;line-height:1}
+  .tk-who{flex:1;min-width:0}
+  .tk-who b{display:block;font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tk-who span{display:block;font-size:10.5px;color:var(--gold-soft);margin-top:1px}
+  .tk-amt{font-family:var(--display);font-size:14px;font-weight:600;color:#fff;flex-shrink:0;text-align:right}
+  .tk-amt small{display:block;font-family:var(--body);font-size:10px;font-weight:700;margin-top:2px}
+  .tk-pay{display:flex;gap:5px;flex-shrink:0}
+  .tk-pay button{font-size:11px;font-weight:800;padding:7px 9px;border-radius:7px;border:1px solid rgba(224,189,114,.34);background:rgba(255,255,255,.07);color:var(--gold-bright);white-space:nowrap;transition:.15s}
+  .tk-pay button:hover{background:var(--gold);color:var(--navy-deep);border-color:var(--gold)}
+  .tk-pay button[disabled]{opacity:.5;pointer-events:none}
+  .tk-count{margin-top:14px;padding-top:12px;border-top:1px solid rgba(224,189,114,.28);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--gold-soft)}
+  .tk-count b{color:#fff}
+  .tk-empty{font-size:11.5px;color:var(--gold-soft);padding:8px 0}
+  @media(max-width:460px){
+    .tk-row{flex-wrap:wrap}
+    .tk-pay{width:100%;padding-left:30px}
+    .tk-pay button{flex:1}
+  }
 
   /* ============ TABS ============ */
   .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:20px;padding-bottom:0;flex-wrap:nowrap;min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
@@ -783,6 +809,14 @@
     <div class="tk-foot" id="tkFoot">
       <span id="tkDeliveries">No deliveries today.</span>
       <button class="tk-link" onclick="showPage('finance');switchTab('finance','daily')">Daily Sales →</button>
+    </div>
+
+    <!-- Who paid what — Jon's daily reconciliation list (migration 045) -->
+    <button class="tk-toggle" id="tkToggle" onclick="toggleTakingsBreakdown()"
+            aria-expanded="false">Show who's paid ▾</button>
+    <div class="tk-break" id="tkBreak" style="display:none">
+      <div id="tkBreakBody"></div>
+      <div class="tk-count" id="tkCount"></div>
     </div>
   </div>
 
@@ -3257,6 +3291,7 @@ function renderDashboard() {
   // Today's takings — read fresh from the database every time the dashboard
   // draws, so marking something paid, switching cash to bank, removing a
   // payment or deleting an invoice all move the figure straight away.
+  if (typeof applyTakingsBreakdownState === 'function') applyTakingsBreakdownState();
   if (typeof refreshTodayTakings === 'function') refreshTodayTakings();
 
   const today0 = new Date(); today0.setHours(0, 0, 0, 0);
@@ -4186,41 +4221,91 @@ async function syncDailySalesForOrder(orderId) {
   catch (e) { console.error('Daily sales sync failed:', e); }
 }
 
+// Find (or create) an order's invoice. Shared by the order card and the
+// dashboard's who-paid-what list so there's only one version of this logic.
+async function findOrCreateOrderInvoice(orderId, known) {
+  const invSel = 'id, order_id, invoice_number, total_amount, status, invoice_type, invoice_payments(id, method, amount)';
+  if (known && known.id) return known;
+  try {
+    await supabase.rpc('create_invoice_for_order', { p_order_id: orderId });
+    let r = await supabase.from('invoices').select(invSel).eq('order_id', orderId).maybeSingle();
+    if (!r.data) {
+      // Weekly or multi-site customer (032/036) — the invoice is linked the
+      // other way round, via orders.invoice_id.
+      const { data: link } = await supabase.from('orders').select('invoice_id').eq('id', orderId).maybeSingle();
+      if (link?.invoice_id) r = await supabase.from('invoices').select(invSel).eq('id', link.invoice_id).maybeSingle();
+    }
+    return r.data || null;
+  } catch (e) {
+    console.error('Invoice lookup/creation on mark-paid failed:', e);
+    return null;
+  }
+}
+
+// The one place an order gets marked paid. Settles the balance outstanding on
+// its invoice — so a weekly invoice part-paid earlier is topped up rather than
+// double-charged. Returns true if money was recorded.
+async function markOrderPaidById(orderId, method, knownInv, quiet) {
+  if (!supabase || !orderId) return false;
+  const inv = await findOrCreateOrderInvoice(orderId, knownInv);
+  if (!inv || !inv.id) {
+    if (!quiet) alert('Couldn\'t create an invoice for this order. Check it has at least one item, then try again in a moment.');
+    return false;
+  }
+  const already = (inv.invoice_payments || []).reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+  let total = parseFloat(inv.total_amount) || 0;
+  if (!total) {
+    const { data: o } = await supabase.from('orders').select('total_amount').eq('id', orderId).maybeSingle();
+    total = parseFloat(o?.total_amount) || 0;
+  }
+  const balance = Math.round(Math.max(0, total - already) * 100) / 100;
+  if (balance <= 0) { if (!quiet) alert('This order is already marked paid.'); return false; }
+
+  const res = await supabase.from('invoice_payments').insert({ invoice_id: inv.id, method, amount: balance });
+  if (res.error) throw res.error;
+  await supabase.from('invoices').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', inv.id);
+  await supabase.from('orders').update({ payment_method: method }).eq('id', orderId);
+  // Weekly/multi-site invoices cover several delivery days, so let the database
+  // work out which days this money belongs to (migration 037) rather than
+  // assuming it's all this one order's date.
+  await syncDailySalesForInvoice(inv.id);
+  return true;
+}
+
 async function orderMarkPaid(method) {
   const f = currentOrderFull; if (!f || !f.ord) return;
-  // Self-heal: if there's no invoice yet, create it now rather than dead-ending
-  if (!f.inv || !f.inv.id) {
-    try {
-      await supabase.rpc('create_invoice_for_order', { p_order_id: f.ord.id });
-      const invSel = 'id, order_id, invoice_number, total_amount, status, invoice_type, invoice_payments(id, method, amount)';
-      let r = await supabase.from('invoices').select(invSel).eq('order_id', f.ord.id).maybeSingle();
-      if (!r.data) {
-        // Multi-site customer (migration 032) — invoice is linked via orders.invoice_id
-        const { data: link } = await supabase.from('orders').select('invoice_id').eq('id', f.ord.id).maybeSingle();
-        if (link?.invoice_id) r = await supabase.from('invoices').select(invSel).eq('id', link.invoice_id).maybeSingle();
-      }
-      if (r.data) f.inv = r.data;
-    } catch (e) { console.error('Invoice creation on mark-paid failed:', e); }
-    if (!f.inv || !f.inv.id) { alert('Couldn\'t create an invoice for this order. Check it has at least one item, then reopen it in a moment.'); return; }
-  }
-  const already = (f.inv.invoice_payments || []).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
-  const total = parseFloat(f.inv.total_amount) || parseFloat(f.ord.total_amount) || 0;
-  const balance = Math.max(0, total - already);
-  if (balance <= 0) { alert('This order is already marked paid.'); return; }
   try {
-    let res = await supabase.from('invoice_payments').insert({ invoice_id: f.inv.id, method, amount: balance });
-    if (res.error) throw res.error;
-    await supabase.from('invoices').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', f.inv.id);
-    await supabase.from('orders').update({ payment_method: method }).eq('id', f.ord.id);
-    // Weekly/multi-site invoices cover several delivery days, so let the
-    // database work out which days this money belongs to (migration 037)
-    // rather than assuming it's all this one order's date.
-    await syncDailySalesForInvoice(f.inv.id);                     // auto-fill Daily Sales
+    const done = await markOrderPaidById(f.ord.id, method, f.inv);
+    if (!done) return;
     if (typeof loadAppData === 'function') await loadAppData();   // refresh Finance/dashboard
     await openOrderModal(f.ord.id);
   } catch (e) {
     console.error('Mark paid failed:', e);
     alert('Could not record the payment: ' + (e.message || e));
+  }
+}
+
+// Marking someone paid straight from the dashboard list, which is where Jon
+// reconciles at the end of the day rather than opening each order in turn.
+async function tkMarkPaid(orderId, method, btn) {
+  if (!orderId || orderId === 'null') return;
+  const row = tkBreakRows.find(r => r.order_id === orderId);
+  const who = row ? (row.customer_name || 'this customer') : 'this customer';
+  const amt = row ? Math.max((Number(row.amount) || 0) - (Number(row.paid_amount) || 0), 0) : 0;
+  const lbl = method === 'cash' ? 'cash' : 'bank transfer';
+  if (!confirm(`Mark ${who} as paid ${lbl}${amt ? ' — ' + tkMoney(amt) : ''}?`)) return;
+
+  const pay = btn && btn.parentElement;
+  if (pay) pay.querySelectorAll('button').forEach(b => b.disabled = true);
+  try {
+    const done = await markOrderPaidById(orderId, method, null, true);
+    if (!done) { alert('That one looks settled already — refreshing the list.'); }
+    await loadTakingsBreakdown();
+    if (typeof loadAppData === 'function') await loadAppData();   // moves the headline total too
+  } catch (e) {
+    console.error('tkMarkPaid failed:', e);
+    alert('Could not record the payment: ' + (e.message || e));
+    if (pay) pay.querySelectorAll('button').forEach(b => b.disabled = false);
   }
 }
 
@@ -10423,9 +10508,12 @@ async function refreshTodayTakings(spin) {
   if (btn) btn.classList.remove('spin');
   takingsBusy = false;
   if (takingsAgain) { takingsAgain = false; refreshTodayTakings(); }
+  // Keep the who-paid-what list in step with the headline figure
+  if (tkBreakOpen) loadTakingsBreakdown();
 }
 
 function renderTodayTakings(t, iso) {
+  tkToday = t;   // the reconciliation count reads these, so the two always agree
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   const setHTML = (id, v) => { const e = document.getElementById(id); if (e) e.innerHTML = v; };
 
@@ -10459,6 +10547,136 @@ function renderTodayTakings(t, iso) {
       : (!t._partial ? ' · <b>all paid ✓</b>' : '');
     setHTML('tkDeliveries',
       `Today's ${orders} deliver${orders !== 1 ? 'ies' : 'y'} worth <b>${tkMoney(delivered)}</b>${owed}`);
+  }
+}
+
+// ============ WHO PAID WHAT — daily reconciliation (migration 045) ============
+// Jon's own words: "so I can reconcile on a daily basis". The headline figure
+// tells him what he took; this tells him who it came from and who still owes
+// him, and lets him tick people off as he counts up.
+let tkBreakOpen = false;
+let tkBreakRows = [];
+let tkToday = null;         // the day's totals, so the count can't drift from the headline
+// Remember whether he left it open — if he reconciles every day he shouldn't
+// have to tap it open every morning.
+try { tkBreakOpen = localStorage.getItem('tkBreakOpen') === '1'; } catch (e) {}
+
+function toggleTakingsBreakdown() {
+  tkBreakOpen = !tkBreakOpen;
+  try { localStorage.setItem('tkBreakOpen', tkBreakOpen ? '1' : '0'); } catch (e) {}
+  applyTakingsBreakdownState();
+  if (tkBreakOpen) loadTakingsBreakdown();
+}
+
+function applyTakingsBreakdownState() {
+  const box = document.getElementById('tkBreak');
+  const btn = document.getElementById('tkToggle');
+  if (box) box.style.display = tkBreakOpen ? '' : 'none';
+  if (btn) {
+    btn.textContent = tkBreakOpen ? "Hide who's paid ▴" : "Show who's paid ▾";
+    btn.setAttribute('aria-expanded', tkBreakOpen ? 'true' : 'false');
+  }
+}
+
+async function loadTakingsBreakdown() {
+  const body = document.getElementById('tkBreakBody');
+  if (!body || !tkBreakOpen) return;
+  if (!window.supabase) { body.innerHTML = '<p class="tk-empty">Not connected to the database.</p>'; return; }
+  if (!tkBreakRows.length) body.innerHTML = '<p class="tk-empty">Loading…</p>';
+  try {
+    const { data, error } = await window.supabase
+      .rpc('takings_breakdown_for_day', { p_date: todayISO() });
+    if (error) throw error;
+    tkBreakRows = data || [];
+    renderTakingsBreakdown();
+  } catch (e) {
+    console.warn('takings_breakdown_for_day unavailable', e);
+    body.innerHTML = '<p class="tk-empty">The who-paid-what list needs migration 045 running in Supabase.</p>';
+    const c = document.getElementById('tkCount'); if (c) c.innerHTML = '';
+  }
+}
+
+function tkStateBits(state) {
+  switch (state) {
+    case 'cash':   return { tick: '✓', label: '💷 Cash',  colour: '#8fd6a8' };
+    case 'bank':   return { tick: '✓', label: '🏦 Bank',  colour: '#a8c8ea' };
+    case 'split':  return { tick: '✓', label: 'Cash + bank', colour: '#e0bd72' };
+    case 'part':   return { tick: '◑', label: 'Part paid', colour: '#f0c9a0' };
+    default:       return { tick: '○', label: '',         colour: 'var(--gold-soft)' };
+  }
+}
+
+function renderTakingsBreakdown() {
+  const body = document.getElementById('tkBreakBody');
+  const foot = document.getElementById('tkCount');
+  if (!body) return;
+
+  const run   = tkBreakRows.filter(r => r.grp === 'run');
+  const other = tkBreakRows.filter(r => r.grp === 'other');
+
+  if (!run.length && !other.length) {
+    body.innerHTML = '<p class="tk-empty">No deliveries today and nothing paid in yet.</p>';
+    if (foot) foot.innerHTML = '';
+    return;
+  }
+
+  const money = n => tkMoney(n);
+  let html = '';
+
+  if (run.length) {
+    html += `<div class="tk-grp">Today's run · ${run.length} stop${run.length !== 1 ? 's' : ''}</div>`;
+    html += run.map(r => {
+      const bits  = tkStateBits(r.pay_state);
+      const owed  = (Number(r.amount) || 0) - (Number(r.paid_amount) || 0);
+      const who   = ordEsc(r.customer_name || 'Customer');
+      const site  = r.site_label ? ordEsc(r.site_label) : '';
+      const sub   = [site, r.pay_state === 'part' ? `${money(r.paid_amount)} of ${money(r.amount)} in` : bits.label, r.detail ? ordEsc(r.detail) : '']
+                      .filter(Boolean).join(' · ');
+      const needs = r.pay_state === 'unpaid' || r.pay_state === 'part';
+      return `
+      <div class="tk-row">
+        <div class="tk-tick" style="color:${bits.colour}">${bits.tick}</div>
+        <div class="tk-who"><b>${who}</b>${sub ? `<span>${sub}</span>` : ''}</div>
+        <div class="tk-amt">${money(r.amount)}${needs ? `<small style="color:#f0c9a0">${money(owed)} owed</small>` : ''}</div>
+        ${needs ? `<div class="tk-pay">
+          <button onclick="tkMarkPaid('${r.order_id}','cash',this)">💷 Cash</button>
+          <button onclick="tkMarkPaid('${r.order_id}','bacs',this)">🏦 Bank</button>
+        </div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  if (other.length) {
+    html += `<div class="tk-grp">Also paid in today · ${other.length}</div>`;
+    html += other.map(r => {
+      const bits = tkStateBits(r.pay_state);
+      return `
+      <div class="tk-row">
+        <div class="tk-tick" style="color:${bits.colour}">${bits.tick}</div>
+        <div class="tk-who"><b>${ordEsc(r.customer_name || 'Customer')}</b>
+          <span>${bits.label}${r.detail ? ' · ' + ordEsc(r.detail) : ''}</span></div>
+        <div class="tk-amt">${money(r.amount)}</div>
+      </div>`;
+    }).join('');
+  }
+
+  body.innerHTML = html;
+
+  // The end-of-day count. Cash and bank come from the SAME figures as the big
+  // number at the top, not from adding up the list — a stop can have been paid
+  // in advance on another day, so its tick isn't money in today's tin. If these
+  // were summed from the rows they could quietly disagree with the headline,
+  // which is the one thing a reconciliation tool must never do.
+  const cash = tkToday ? (Number(tkToday.received_cash) || 0)
+                       : tkBreakRows.reduce((s, r) => s + (Number(r.paid_cash) || 0), 0);
+  const bank = tkToday ? (Number(tkToday.received_bank) || 0)
+                       : tkBreakRows.reduce((s, r) => s + (Number(r.paid_bank) || 0), 0);
+  const owed = run.reduce((s, r) => s + Math.max((Number(r.amount) || 0) - (Number(r.paid_amount) || 0), 0), 0);
+  if (foot) {
+    foot.innerHTML =
+      `<span>💷 Cash to count <b>${money(cash)}</b></span>` +
+      `<span>🏦 Bank <b>${money(bank)}</b></span>` +
+      (owed > 0.005 ? `<span style="color:#f0c9a0">Still owed <b style="color:#f0c9a0">${money(owed)}</b></span>` : `<span><b>All collected ✓</b></span>`);
   }
 }
 
@@ -11563,6 +11781,9 @@ const HELP_PAGES = {
       { icon:'📊', title:'What is this page?', body:'The Dashboard is your home screen. It gives you a quick snapshot of what\'s happening today — what you\'ve taken, orders waiting, money owed, and anything that needs your attention.' },
       { icon:'💷', title:'Taken today', body:'The navy panel at the top is your day\'s takings. The big gold figure is <strong>every penny that\'s come in today</strong>, and underneath it splits into <strong>cash</strong> and <strong>bank transfer</strong> so you know what should be in your pocket and what should be in the bank.<br><br>You don\'t enter anything here — it fills itself in. Every time you mark an order paid on the run, or press <strong>Log payment</strong> on an invoice, this goes up within seconds.' },
       { icon:'🔄', title:'It corrects itself', body:'It\'s a running total, so it goes <em>down</em> as well as up. Delete an invoice and its money comes straight back out. Remove a payment and it comes off. And if you marked something cash when it was actually a bank transfer, switch it over (the <strong>↔</strong> button next to the payment) and both figures move to match — the total stays the same, it just moves across.<br><br>You never have to go back and correct this figure by hand. Press <strong>↻</strong> in the corner if you want to check for anything logged since you opened the app.' },
+      { icon:'📋', title:'Show who\'s paid — reconciling the day', body:'Tap <strong>Show who\'s paid</strong> at the bottom of the panel and it opens the list behind the figure.<br><br><strong>Today\'s run</strong> lists every drop you\'re doing today. A green <strong>✓</strong> means the money\'s in and it tells you whether it was cash or bank. A <strong>○</strong> means they haven\'t paid yet, with the amount owed next to it. Anyone part-paid shows <strong>◑</strong> and how much is still outstanding.<br><br><strong>Also paid in today</strong> is money that landed today against a different day\'s deliveries — a pub settling last week\'s invoice, say. It\'s in your pocket tonight even though it\'s nothing to do with today\'s round, so it has to be in the count.<br><br>It stays open once you\'ve opened it, so it\'ll be there tomorrow.' },
+      { icon:'✅', title:'Ticking people off as you count up', body:'Any unpaid line has <strong>💷 Cash</strong> and <strong>🏦 Bank</strong> buttons on it. Tap one and that customer is marked paid then and there — no need to go and find their order. It asks you to confirm first so a mis-tap in your pocket can\'t log a payment.<br><br>The figures at the top move as you go, so by the time you\'ve worked down the list the day\'s total is right. It\'s exactly the same as marking them paid on the order card — just all in one place.' },
+      { icon:'🧮', title:'The count at the bottom', body:'<strong>Cash to count</strong> is what should physically be in your tin — count it against that. <strong>Bank</strong> is what to tick off your statement. <strong>Still owed</strong> is what you didn\'t collect on today\'s round, so you know who to chase before you forget.<br><br>If a customer is on weekly billing their delivery shows <em>On their weekly invoice</em> — they\'re not meant to pay at the door, so don\'t chase them for it.' },
       { icon:'🚚', title:'The line at the bottom of the panel', body:'Underneath, it tells you what <strong>today\'s deliveries were worth</strong> and whether anything is still to collect. That\'s a different question to what you\'ve taken, and it\'s worth knowing both.<br><br>They\'re usually the same on a domestic day, because you take the money at the door. They\'ll differ when a pub pays you on the Friday for a whole week\'s deliveries — that money counts as <strong>taken</strong> on the Friday, but the <strong>sales</strong> belong to the days the meat actually went out. That\'s how your weekly sheet and your accountant\'s figures work too, so nothing disagrees with anything else.<br><br>Tap <strong>Daily Sales →</strong> to see the same figures day by day.' },
       { icon:'📦', title:'The cards below', body:'These update live: <strong>Next run</strong> shows how many orders are booked for your next delivery day, <strong>This week revenue</strong>, <strong>Unpaid invoices</strong>, and <strong>Active customers</strong>. The date and greeting at the top, and the cut-off reminder, all follow your actual next delivery day from the Schedule.' },
       { icon:'⚡', title:'Quick actions', body:'The buttons in the middle let you do the most common tasks in one click — log an order, view your delivery runs, edit availability, or check finances.' },
