@@ -87,6 +87,14 @@
   .btn-gold:hover{background:var(--gold-bright)}
   .btn-row{display:flex;gap:9px;flex-wrap:wrap}
 
+  /* One-tap date periods on the Invoices page. Sized for a thumb on a
+     tablet in the van, not a mouse. */
+  .inv-period{background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);
+    font-weight:800;font-size:12px;padding:8px 14px;border-radius:9px;cursor:pointer;
+    font-family:var(--body);transition:.15s}
+  .inv-period:hover{border-color:var(--gold);color:var(--ink)}
+  .inv-period.active{background:var(--navy);border-color:var(--navy);color:#fff}
+
   /* ============ STAT CARDS ============ */
   .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:13px;margin-bottom:22px}
   .stat-card{background:#fff;border:1px solid var(--line-soft);border-radius:13px;padding:16px 18px;position:relative;overflow:hidden}
@@ -1985,16 +1993,26 @@
       </div>
       <div style="flex:1;min-width:135px">
         <label style="display:block;font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">From</label>
-        <input type="date" id="inv-from" onchange="renderInvoices()"
+        <input type="date" id="inv-from" onchange="invDateRangeChanged()"
           style="width:100%;background:var(--paper);border:1.5px solid var(--line);border-radius:9px;padding:10px 12px;font-size:13px">
       </div>
       <div style="flex:1;min-width:135px">
         <label style="display:block;font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">To</label>
-        <input type="date" id="inv-to" onchange="renderInvoices()"
+        <input type="date" id="inv-to" onchange="invDateRangeChanged()"
           style="width:100%;background:var(--paper);border:1.5px solid var(--line);border-radius:9px;padding:10px 12px;font-size:13px">
       </div>
       <button onclick="clearInvoiceSearch()" title="Clear the search and dates"
         style="padding:10px 14px;border-radius:9px;font-weight:800;font-size:12.5px;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer">Clear</button>
+
+      <!-- One-tap periods. Typing two dates into a date picker on a phone is
+           the bit Jon won't do, so the periods he actually asks for are
+           buttons. Combine with the search box to get one customer's week. -->
+      <div style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;padding-top:4px">
+        <span style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.8px;align-self:center">Jump to</span>
+        <button class="inv-period" data-period="this-week"  onclick="setInvoicePeriod('this-week', this)">This week</button>
+        <button class="inv-period" data-period="last-week"  onclick="setInvoicePeriod('last-week', this)">Last week</button>
+        <button class="inv-period" data-period="this-month" onclick="setInvoicePeriod('this-month', this)">This month</button>
+      </div>
     </div>
 
     <div id="invoiceCombineHint" style="display:none"></div>
@@ -6137,6 +6155,81 @@ function filterCustomers(type) {
   renderCustomers(type);
 }
 
+// ── A customer's invoices, on their own record ────────────────
+// Jon's question is nearly always "what does this customer owe me, and for
+// which deliveries" — and until now their record showed orders only, with no
+// mention of money. A pub with three deliveries a week gets three invoices,
+// and they all belong here, newest first, each one tappable.
+//
+// Reads the already-loaded list rather than querying again, so the dates and
+// paid/unpaid status can't disagree with the Invoices page.
+function customerInvoicesHtml(custId) {
+  const rows = (sampleInvoices || [])
+    .filter(i => i.custId === custId)
+    .sort((a, b) => String(b.deliveryDate || b.weekStart || b.created || '')
+                    .localeCompare(String(a.deliveryDate || a.weekStart || a.created || '')));
+
+  const head = (extra) => `
+    <div style="margin-top:16px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft)">Invoices &amp; receipts</div>
+        ${extra}
+      </div>`;
+
+  if (!rows.length) {
+    return head('') + `
+      <p style="font-size:12.5px;color:var(--ink-soft);padding:10px;background:var(--cream);border-radius:8px">No invoices yet for this customer.</p>
+    </div>`;
+  }
+
+  const owed = rows.reduce((s, i) => s + invBalance(i), 0);
+  const owedChip = owed > 0.001
+    ? `<div style="font-size:11px;color:var(--ink-soft)"><b style="color:var(--oxblood)">£${owed.toFixed(2)}</b> outstanding</div>`
+    : `<div style="font-size:11px;color:#1a6640;font-weight:700">All settled</div>`;
+
+  // Capped so a long-standing customer's record doesn't become a wall of
+  // rows on a phone. The Invoices page holds the full history.
+  const CAP = 12;
+  const shown = rows.slice(0, CAP);
+
+  const body = shown.map(inv => {
+    const bal   = invBalance(inv);
+    const paid  = invPaidTotal(inv);
+    const draft = inv.status === 'draft';
+    const label = draft ? (inv.weekStart ? 'this week' : 'running tab')
+                : (paid > 0 && bal > 0) ? 'part paid'
+                : (inv.status === 'sent' && inv.invType === 'receipt') ? 'unpaid'
+                : inv.status;
+    const bg  = draft ? '#eef1f6' : inv.status === 'paid' ? '#d9f0e0'
+              : inv.status === 'overdue' ? '#fdd' : (paid > 0 && bal > 0) ? '#e8f0fe' : '#f6e5cf';
+    const col = draft ? 'var(--navy)' : inv.status === 'paid' ? '#1a6640'
+              : inv.status === 'overdue' ? '#a00' : (paid > 0 && bal > 0) ? '#1a4fad' : 'var(--oxblood)';
+    const when = inv.weekStart ? weekLabel(inv.weekStart) : (inv.date || '');
+    return `
+      <div onclick="viewInvoiceFromCustomer('${inv.id}')" style="padding:9px 0;border-bottom:1px solid var(--line-soft);font-size:12.5px;cursor:pointer" title="Tap to open this invoice">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span style="font-weight:700;color:var(--navy)">£${(Number(inv.amount) || 0).toFixed(2)}</span>
+          <span style="font-size:10.5px;padding:2px 7px;border-radius:5px;font-weight:700;background:${bg};color:${col};text-transform:uppercase;letter-spacing:.4px">${label}</span>
+        </div>
+        <div style="color:var(--ink-soft);font-size:11.5px;margin-top:2px">${escapeHtmlAttr(inv.ref || '')}${when ? ' · ' + escapeHtmlAttr(when) : ''}</div>
+        ${bal > 0.001 && paid > 0 ? `<div style="color:#1a4fad;font-size:11px;font-weight:700;margin-top:2px">£${bal.toFixed(2)} still to pay</div>` : ''}
+      </div>`;
+  }).join('');
+
+  const more = rows.length > CAP
+    ? `<p style="font-size:11px;color:var(--ink-soft);margin-top:8px">Showing the latest ${CAP} of ${rows.length}. Use Invoices → Search for the rest.</p>`
+    : '';
+
+  return head(owedChip) + body + more + '</div>';
+}
+
+// Opening an invoice from a customer's record: close the profile first, or
+// the two modals stack and the back button lands him somewhere confusing.
+function viewInvoiceFromCustomer(invId) {
+  closeModal('orderModal');
+  viewInvoice(invId);
+}
+
 async function openCustomerDetail(id) {
   const c = sampleCustomers.find(x => x.id === id);
   if (!c) return;
@@ -6168,6 +6261,7 @@ async function openCustomerDetail(id) {
       : `<div style="background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:10px 13px;margin-top:10px;font-size:12.5px;color:var(--ink-soft);font-weight:700">£5 small-order charge applies under £20 — change it with Edit</div>`}
     ${c.type === 'trade' ? tradeSectionHtml(c) : ''}
     ${contactBtns}
+    ${customerInvoicesHtml(c.id)}
     <div id="custOrderHistory" style="margin-top:14px">
       <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px">Order History</div>
       <p style="font-size:12.5px;color:var(--ink-soft);padding:10px;background:var(--cream);border-radius:8px">Loading…</p>
@@ -6711,7 +6805,59 @@ function renderFinance() {
 // (and so the payment/split/merge actions can re-render without resetting it).
 let invoiceStatusFilter = 'all';
 
+// ── One-tap date periods ──────────────────────────────────────
+// Fills the From/To boxes for the periods Jon actually asks for. It leaves
+// the search box alone on purpose: type a customer's name, tap "This week",
+// and you get that customer's week — which is the question he's really
+// asking when a pub has had three deliveries since Monday.
+// Weeks run Monday–Sunday, matching how the weekly invoices are filed.
+function setInvoicePeriod(period, btn) {
+  const today = new Date();
+  let from, to;
+
+  if (period === 'this-week') {
+    from = mondayOf(today);
+    to   = addDaysStr(from, 6);
+  } else if (period === 'last-week') {
+    from = addDaysStr(mondayOf(today), -7);
+    to   = addDaysStr(from, 6);
+  } else if (period === 'this-month') {
+    from = toDateStr(new Date(today.getFullYear(), today.getMonth(), 1));
+    to   = toDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+  } else {
+    return;
+  }
+
+  // Tapping the button you're already on clears it, so it works as a toggle
+  // rather than trapping him in a period with no obvious way out.
+  const alreadyOn = btn && btn.classList.contains('active');
+  document.querySelectorAll('.inv-period').forEach(b => b.classList.remove('active'));
+
+  const fromEl = document.getElementById('inv-from');
+  const toEl   = document.getElementById('inv-to');
+  if (alreadyOn) {
+    if (fromEl) fromEl.value = '';
+    if (toEl)   toEl.value   = '';
+  } else {
+    if (fromEl) fromEl.value = from;
+    if (toEl)   toEl.value   = to;
+    if (btn) btn.classList.add('active');
+  }
+
+  // Show everything in the period regardless of paid/unpaid — a period is a
+  // question about dates, not about status.
+  renderInvoices('all');
+}
+
+// Picking dates by hand means he's no longer on a preset — drop the
+// highlight so the buttons never claim a period that isn't showing.
+function invDateRangeChanged() {
+  document.querySelectorAll('.inv-period').forEach(b => b.classList.remove('active'));
+  renderInvoices();
+}
+
 function clearInvoiceSearch() {
+  document.querySelectorAll('.inv-period').forEach(b => b.classList.remove('active'));
   ['inv-search', 'inv-from', 'inv-to'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
@@ -12018,6 +12164,7 @@ const HELP_PAGES = {
     sections: [
       { icon:'👥', title:'What is this page?', body:'The Customers page is your full customer list — domestic and trade. You can search, filter, and open any customer to see their history.' },
       { icon:'🔍', title:'Finding a customer', body:'Type a name or postcode in the search bar at the top. Use the <strong>All / Domestic / Trade</strong> buttons to filter by customer type.' },
+      { icon:'📄', title:'Their invoices, on their record', body:'Open any customer and you\'ll see <strong>Invoices &amp; receipts</strong> — every bill you\'ve raised for them, newest first, with what\'s still owed shown at the top right. A pub with three deliveries a week has three invoices and they\'re all listed. <strong>Tap any one to open it</strong>, then download or send it from there. For the full history, or to pull up one particular week, use the Invoices page.' },
       { icon:'📧', title:'Their account email', body:'Open a customer\'s <strong>Edit</strong> and you\'ll see their <strong>Account email</strong> — the address they signed up with on the website. It\'s shown for reference and can\'t be changed here (it\'s their login). Customers you added by hand show "No account".' },
       { icon:'⭐', title:'Exempt customers', body:'Family and friends who shouldn\'t be charged the £5 small-order fee can be marked as <strong>Exempt</strong> on their profile. Tick the box in their customer record.' },
       { icon:'🎁', title:'Referral reward', body:'When a new customer was recommended by an existing one, put the existing customer\'s name in the <strong>Referred by</strong> field. It\'s flagged so you remember to thank the person who referred them with a free pack of sausages or bacon on their next delivery.' },
@@ -12076,7 +12223,9 @@ const HELP_PAGES = {
       { icon:'⚠️', title:'"Unrecorded" in amber', body:'This means the receipt says it was paid, but no actual cash or bank transfer was ever recorded against it — so <strong>that money is not in your takings</strong>. It only affects receipts created before this was tightened up. Press <strong>Log payment</strong>, put in what the customer actually paid, and it drops into the right day\'s figures. Once they\'re all cleared you won\'t see amber again.' },
       { icon:'➕', title:'Building one by hand', body:'Need a one-off? Select the customer — their details fill in automatically. For each line, pick an item from the <strong>availability list</strong> (the price fills in — a trade customer\'s <strong>agreed trade price</strong> is used automatically where you\'ve set one) or choose <strong>✏️ Custom item</strong> for something you\'ve sourced specially, with its own description and price. Press <strong>Generate invoice</strong> to preview, then <strong>Save invoice</strong>. It picks receipt or invoice automatically based on the customer.' },
       { icon:'🛒', title:'One-off items you\'ve sourced for a customer', body:'A trade customer asks you to get them something that\'s not on your list? Two easy ways to bill it: build an invoice by hand and use <strong>✏️ Custom item</strong> for each special line, or — if they\'ve already got an order that day — open the order on the delivery run, tap <strong>➕ Add an item</strong>, and type the one-off item with its price. Either way it lands on their invoice like anything else.' },
-      { icon:'🔍', title:'Finding an invoice', body:'Don\'t scroll — use the <strong>Search</strong> box above the list. Type any part of a customer\'s name or an invoice number and the list narrows as you type. Use <strong>From</strong> and <strong>To</strong> to pull up a particular week or month, on their own or alongside the search. It shows how many match and what they add up to, so you can see at a glance what one customer owes for a week. Press <strong>Clear</strong> to go back to everything. The All / Running / Unpaid / Paid / Overdue buttons still work on top of the search.' },
+      { icon:'🔍', title:'Finding an invoice', body:'Don\'t scroll — use the <strong>Search</strong> box above the list. Type any part of a customer\'s name or an invoice number and the list narrows as you type. Press <strong>Clear</strong> to go back to everything. The All / Running / Unpaid / Paid / Overdue buttons still work on top of the search.' },
+      { icon:'📆', title:'One customer\'s week — the quick way', body:'Type the customer\'s name in <strong>Search</strong>, then tap <strong>This week</strong> under "Jump to". You get every invoice for that customer this week, however many deliveries they\'ve had, with the <strong>number of invoices and the total</strong> shown just above the list. <strong>Last week</strong> and <strong>This month</strong> work the same way. Tap the same button again to come back out. Weeks run Monday to Sunday.' },
+      { icon:'📅', title:'Any other dates', body:'Use <strong>From</strong> and <strong>To</strong> to pick your own range — on their own, or alongside a search. These go by the <strong>delivery date</strong>, so asking for a week gives you that week\'s deliveries, not whatever happened to be typed up that week.' },
       { icon:'🔁', title:'Copying a recent order onto an invoice', body:'Building an invoice by hand for a regular? Pick the customer and a <strong>Copy a recent order</strong> panel appears. Tap <strong>Use this</strong> and that order\'s items drop straight in as invoice lines at the prices they were charged. Tap a second one to add it underneath — handy for putting Monday\'s and Thursday\'s deliveries on one weekly invoice. If the order went to a named site, its heading goes in automatically.' },
       { icon:'🗓️', title:'Weekly invoices', body:'A customer set to <strong>one invoice a week</strong> gets a single running invoice instead of one per delivery. It shows here marked <strong>this week</strong> with the dates it covers, and every order you log for them that week is added to it. It\'s headed <strong>W/C</strong> (week commencing), laid out with a section and subtotal per delivery address and one grand total — the same way you always did them by hand. If the same item comes on more than one day it appears <strong>once with the week\'s total quantity</strong>, so the customer doesn\'t have to add it up. It closes on its own each Monday — or press <strong>Finalise &amp; send</strong> to send it early.' },
       { icon:'✂️', title:'Splitting a weekly invoice up', body:'Customer changed their mind and wants each delivery billed separately? Open the <strong>Actions</strong> menu on the running invoice and choose <strong>Split into one per delivery</strong>. Each delivery becomes its own invoice, dated the day it went out. Nothing is sent to the customer — the new invoices just appear in this list for you to check.' },
