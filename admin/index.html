@@ -6273,7 +6273,7 @@ function statementRange(period, fromVal, toVal) {
 // each. Read from the SAME loaded list the Invoices page uses, so the
 // statement, the invoice list, the dashboard and Finance can never disagree
 // about what's owed. Nothing here writes anything.
-async function fetchStatementRows(customerId, range) {
+async function fetchStatementRows(customerId, range, mainAddress) {
   const invs = (sampleInvoices || [])
     .filter(i => i.custId === customerId)
     .filter(i => {
@@ -6292,15 +6292,42 @@ async function fetchStatementRows(customerId, range) {
       if (ids.length) {
         const { data } = await window.supabase
           .from('invoice_items')
-          .select('invoice_id, description, quantity')
+          .select('invoice_id, description, quantity, site_label, created_at')
           .in('invoice_id', ids);
         (data || []).forEach(it => {
-          (itemsByInv[it.invoice_id] = itemsByInv[it.invoice_id] || [])
-            .push(`${it.description} ×${it.quantity}`);
+          (itemsByInv[it.invoice_id] = itemsByInv[it.invoice_id] || []).push(it);
         });
       }
     }
   } catch (e) { console.error('Statement items load failed:', e); }
+
+  // A customer with more than one address needs to see which of them took
+  // what — otherwise they can't check the statement against their own
+  // paperwork. Lines are grouped by site exactly as they are on the invoice.
+  // The lines with no site are the customer's own address, so they get
+  // labelled with it rather than left as an unheaded block: on a statement
+  // covering several drops, an unlabelled group is ambiguous.
+  const groupBySite = (rows, mainLabel) => {
+    const order = [];
+    const bySite = new Map();
+    (rows || [])
+      .slice()
+      .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+      .forEach(it => {
+        const key = it.site_label || '';
+        if (!bySite.has(key)) { bySite.set(key, []); order.push(key); }
+        bySite.get(key).push(`${it.description} ×${it.quantity}`);
+      });
+    // Main address first, then named sites — same order as the invoice.
+    order.sort((a, b) => (a === '' ? 0 : 1) - (b === '' ? 0 : 1));
+    const multi = order.length > 1;
+    return order.map(key => ({
+      // With only one address there's nothing to distinguish, so no heading —
+      // it would just be noise repeating what's already at the top.
+      label: multi ? (key || mainLabel || 'Main address') : null,
+      items: bySite.get(key).join(', '),
+    }));
+  };
 
   return invs.map(inv => {
     const paid = invPaidTotal(inv);
@@ -6309,11 +6336,11 @@ async function fetchStatementRows(customerId, range) {
       dateFmt: inv.weekStart
         ? 'w/c ' + new Date(inv.weekStart + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' })
         : new Date(String(key) + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' }),
-      ref:   inv.ref || '',
-      itemsSummary: (itemsByInv[inv.id] || []).join(', '),
-      total: Number(inv.amount) || 0,
-      paid:  paid,
-      owed:  invBalance(inv),
+      ref:    inv.ref || '',
+      groups: groupBySite(itemsByInv[inv.id], mainAddress),
+      total:  Number(inv.amount) || 0,
+      paid:   paid,
+      owed:   invBalance(inv),
     };
   });
 }
@@ -6325,7 +6352,7 @@ async function generateStatement(customerId, range, btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Building…'; }
 
   try {
-    const rows = await fetchStatementRows(customerId, range);
+    const rows = await fetchStatementRows(customerId, range, c.address || '');
     if (!rows.length) {
       alert(`No deliveries for ${c.name} in that period (${range.label}).`);
       return;
@@ -10957,6 +10984,16 @@ async function downloadInvoicePDF() {
 // what they've paid and what's still owed. It is NOT a bill — every line on
 // it has already been invoiced on the day, and saying so on the page is what
 // stops an accounts department paying the same meat twice.
+// ── The weekly statement PDF ──────────────────────────────────
+// One page showing a customer their week: every delivery, which of their
+// addresses it went to, what it came to, what they've paid and what's still
+// owed. It is NOT a bill — every line has already been invoiced on the day,
+// and saying so on the page is what stops an accounts department paying the
+// same meat twice.
+//
+// Sites matter here. A customer with more than one address needs to see which
+// of them took what, or they can't check it against their own paperwork — so
+// the items cell is broken down by address exactly as their invoices are.
 function buildStatementDoc(data) {
   const JS = window.jspdf && window.jspdf.jsPDF;
   if (!JS) return null;
@@ -10966,8 +11003,10 @@ function buildStatementDoc(data) {
   const doc = new JS({ unit:'pt', format:'a4' });
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
   const L = 48, R = W - 48;
-  // Six columns: date, invoice no, items, total, paid, owed.
-  const cDate = L, cRef = L + 66, cItems = L + 132, cTot = R - 150, cPaid = R - 78, cOwed = R;
+  // Six columns. The gutter before TOTAL is deliberately wide — a long items
+  // list used to run straight into the money and make it unreadable.
+  const cDate = L, cRef = L + 60, cItems = L + 122, cTot = R - 152, cPaid = R - 78, cOwed = R;
+  const itemsW = cTot - cItems - 40;
 
   function header() {
     doc.setFillColor(...NAVYD).rect(0, 0, W, 104, 'F');
@@ -10988,11 +11027,22 @@ function buildStatementDoc(data) {
     doc.setFont('helvetica','bold').setFontSize(8).setTextColor(255,255,255);
     doc.text('DELIVERED', cDate + 4, y + 3);
     doc.text('INVOICE', cRef, y + 3);
-    doc.text('ITEMS', cItems, y + 3);
+    doc.text('DELIVERED TO / ITEMS', cItems, y + 3);
     doc.text('TOTAL', cTot, y + 3, { align:'right' });
     doc.text('PAID',  cPaid, y + 3, { align:'right' });
     doc.text('OWED',  cOwed - 4, y + 3, { align:'right' });
     return y + 27;
+  }
+
+  // Work out how tall a row is before drawing it, so a page break never
+  // splits one delivery across two pages.
+  function rowHeight(r) {
+    let h = 7;
+    (r.groups || []).forEach(g => {
+      if (g.label) h += 11;
+      h += 12 * doc.splitTextToSize(g.items || '—', itemsW).length;
+    });
+    return Math.max(h, 20);
   }
 
   header();
@@ -11012,33 +11062,48 @@ function buildStatementDoc(data) {
   y += 56;
   y = tableHead(y);
 
-  doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INK);
   (data.rows || []).forEach((r, idx) => {
-    const itemLines = doc.splitTextToSize(r.itemsSummary || '—', cTot - cItems - 14);
-    const rowH = 12 * itemLines.length + 7;
+    doc.setFont('helvetica','normal').setFontSize(9);
+    const rowH = rowHeight(r);
     if (y + rowH > H - 90) {
       doc.addPage(); header(); y = 150; y = tableHead(y);
-      doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INK);
     }
     if (idx % 2 === 1) doc.setFillColor(248,244,236).rect(L, y - 11, R - L, rowH, 'F');
-    doc.setTextColor(...INK);
+
+    // Left columns and the money sit on the row's first line.
+    doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INK);
     doc.text(r.dateFmt, cDate + 4, y);
-    doc.setTextColor(...INKSOFT); doc.setFontSize(8.5);
+    doc.setFontSize(8.5).setTextColor(...INKSOFT);
     doc.text(r.ref || '', cRef, y);
+
     doc.setFontSize(9).setTextColor(...INK);
-    doc.text(itemLines, cItems, y);
     doc.text('£' + r.total.toFixed(2), cTot, y, { align:'right' });
     doc.setTextColor(...GREEN);
     doc.text(r.paid > 0 ? '£' + r.paid.toFixed(2) : '—', cPaid, y, { align:'right' });
-    doc.setTextColor(r.owed > 0.001 ? OX[0] : INKSOFT[0], r.owed > 0.001 ? OX[1] : INKSOFT[1], r.owed > 0.001 ? OX[2] : INKSOFT[2]);
-    doc.setFont('helvetica', r.owed > 0.001 ? 'bold' : 'normal');
-    doc.text(r.owed > 0.001 ? '£' + r.owed.toFixed(2) : '—', cOwed - 4, y, { align:'right' });
-    doc.setFont('helvetica','normal');
+    const owing = r.owed > 0.001;
+    doc.setTextColor(owing ? OX[0] : INKSOFT[0], owing ? OX[1] : INKSOFT[1], owing ? OX[2] : INKSOFT[2]);
+    doc.setFont('helvetica', owing ? 'bold' : 'normal');
+    doc.text(owing ? '£' + r.owed.toFixed(2) : '—', cOwed - 4, y, { align:'right' });
+
+    // Items, broken down by the address they went to.
+    let iy = y;
+    (r.groups || []).forEach(g => {
+      if (g.label) {
+        doc.setFont('helvetica','bold').setFontSize(8).setTextColor(...OX);
+        doc.text(doc.splitTextToSize(g.label, itemsW)[0], cItems, iy);
+        iy += 11;
+      }
+      doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INK);
+      const lines = doc.splitTextToSize(g.items || '—', itemsW);
+      doc.text(lines, cItems, iy);
+      iy += 12 * lines.length;
+    });
+
     y += rowH;
   });
 
   // ── Totals ──
-  if (y > H - 150) { doc.addPage(); header(); y = 150; }
+  if (y > H - 160) { doc.addPage(); header(); y = 150; }
   doc.setDrawColor(...GOLD).setLineWidth(1.2).line(cItems, y + 2, R, y + 2);
   y += 20;
   doc.setFont('helvetica','bold').setFontSize(10).setTextColor(...NAVYD);
