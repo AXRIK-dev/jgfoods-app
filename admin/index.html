@@ -6169,6 +6169,184 @@ function filterCustomers(type) {
   renderCustomers(type);
 }
 
+// ============ CUSTOMER STATEMENTS ============
+// A STATEMENT is not an invoice, and the difference is the whole point.
+//
+// Jon raises an invoice for every delivery — that's his financial record and
+// it's what puts the money in that day's sales. Some trade customers don't
+// want a bill per drop though; they want one summary covering the week. So
+// the statement is a PRINTOUT ONLY: it's built from deliveries that have
+// already happened, it creates nothing, it carries no invoice number, and it
+// can't double-count because it never touches the books. Jon can run one for
+// any period, as often as he likes, without affecting a thing on his side.
+//
+// This replaces the old fixed "last 12 months" button.
+
+function statementPickerHtml(custId) {
+  return `
+    <div style="margin-top:16px;background:var(--cream);border:1px solid var(--line);border-radius:11px;padding:13px 15px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft);margin-bottom:4px">Statement for the customer</div>
+      <p style="font-size:11.5px;color:var(--ink-soft);margin:0 0 10px">A summary of their deliveries over any period, to hand or send them. It doesn't change your invoices or your takings.</p>
+      <select id="stmt-period" onchange="stmtPeriodChanged()" style="width:100%;background:#fff;border:1.5px solid var(--line);border-radius:9px;padding:10px 12px;font-size:13px">
+        <option value="this-week">This week (week commencing)</option>
+        <option value="last-week">Last week</option>
+        <option value="this-month">This month</option>
+        <option value="last-month">Last month</option>
+        <option value="this-quarter">This quarter</option>
+        <option value="this-year">This year</option>
+        <option value="last-12">Last 12 months</option>
+        <option value="custom">Choose my own dates…</option>
+      </select>
+      <div id="stmt-custom" style="display:none;gap:8px;margin-top:8px">
+        <div style="flex:1">
+          <label style="display:block;font-size:11px;font-weight:700;color:var(--ink-soft);margin-bottom:4px">From</label>
+          <input type="date" id="stmt-from" style="width:100%;background:#fff;border:1.5px solid var(--line);border-radius:9px;padding:9px 11px;font-size:13px">
+        </div>
+        <div style="flex:1">
+          <label style="display:block;font-size:11px;font-weight:700;color:var(--ink-soft);margin-bottom:4px">To</label>
+          <input type="date" id="stmt-to" style="width:100%;background:#fff;border:1.5px solid var(--line);border-radius:9px;padding:9px 11px;font-size:13px">
+        </div>
+      </div>
+      <button class="btn-add" style="width:100%;margin-top:10px;font-size:13px;padding:12px;justify-content:center" onclick="downloadStatement('${custId}', this)">📄 Download statement (PDF)</button>
+    </div>`;
+}
+
+function stmtPeriodChanged() {
+  const wrap = document.getElementById('stmt-custom');
+  const isCustom = document.getElementById('stmt-period')?.value === 'custom';
+  if (wrap) wrap.style.display = isCustom ? 'flex' : 'none';
+}
+
+// Works out the dates a period covers, and how it should read on the
+// document. Weeks are headed "Week commencing" because that's the wording
+// Jon and his trade customers have always used.
+function statementRange(period, fromVal, toVal) {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const firstOf = (yy, mm) => toDateStr(new Date(yy, mm, 1));
+  const lastOf  = (yy, mm) => toDateStr(new Date(yy, mm + 1, 0));
+  const uk = s => new Date(s + 'T12:00:00').toLocaleDateString('en-GB');
+
+  switch (period) {
+    case 'this-week': {
+      const f = mondayOf(now);
+      return { from: f, to: addDaysStr(f, 6), label: 'Week commencing ' + uk(f) };
+    }
+    case 'last-week': {
+      const f = addDaysStr(mondayOf(now), -7);
+      return { from: f, to: addDaysStr(f, 6), label: 'Week commencing ' + uk(f) };
+    }
+    case 'this-month':
+      return { from: firstOf(y, m), to: lastOf(y, m),
+               label: now.toLocaleDateString('en-GB', { month:'long', year:'numeric' }) };
+    case 'last-month': {
+      const d = new Date(y, m - 1, 1);
+      return { from: firstOf(d.getFullYear(), d.getMonth()), to: lastOf(d.getFullYear(), d.getMonth()),
+               label: d.toLocaleDateString('en-GB', { month:'long', year:'numeric' }) };
+    }
+    case 'this-quarter': {
+      const q = Math.floor(m / 3), qs = q * 3;
+      const names = ['Jan–Mar', 'Apr–Jun', 'Jul–Sep', 'Oct–Dec'];
+      return { from: firstOf(y, qs), to: lastOf(y, qs + 2), label: `${names[q]} ${y}` };
+    }
+    case 'this-year':
+      return { from: firstOf(y, 0), to: lastOf(y, 11), label: String(y) };
+    case 'last-12': {
+      const s = new Date(now); s.setFullYear(s.getFullYear() - 1);
+      return { from: toDateStr(s), to: toDateStr(now),
+               label: `${uk(toDateStr(s))} – ${uk(toDateStr(now))}` };
+    }
+    case 'custom':
+    default: {
+      if (!fromVal || !toVal) return null;
+      if (fromVal > toVal) return null;
+      return { from: fromVal, to: toVal, label: `${uk(fromVal)} – ${uk(toVal)}` };
+    }
+  }
+}
+
+// Build and download the statement. Deliveries are found by the DELIVERY
+// SLOT's date, not when the order was typed in — same rule as everywhere
+// else, so a week means that week's deliveries.
+async function downloadStatement(customerId, btn) {
+  const c = sampleCustomers.find(x => x.id === customerId) || { name:'Customer', address:'' };
+  const period = document.getElementById('stmt-period')?.value || 'this-week';
+  const range  = statementRange(period,
+    document.getElementById('stmt-from')?.value,
+    document.getElementById('stmt-to')?.value);
+
+  if (!range) { alert('Please pick a From and To date — and make sure the From date comes first.'); return; }
+
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customerId);
+  if (!supabase || !isUUID) { alert('Statements need the live database — available once a customer has real deliveries.'); return; }
+
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Building…'; }
+
+  try {
+    // Which delivery days fall in the period. Doing it this way round means
+    // the period is judged on the delivery date, which is the only date the
+    // customer recognises.
+    const { data: slots, error: slotErr } = await supabase
+      .from('delivery_slots')
+      .select('id, delivery_date, day_label')
+      .gte('delivery_date', range.from)
+      .lte('delivery_date', range.to);
+    if (slotErr) throw slotErr;
+
+    if (!slots || !slots.length) {
+      alert(`No deliveries for ${c.name} in that period (${range.label}).`);
+      return;
+    }
+    const slotById = {};
+    slots.forEach(s => { slotById[s.id] = s; });
+
+    const { data: orders, error } = await supabase
+      .from('orders')
+      .select('id, status, total_amount, delivery_slot_id, order_items (product_name, quantity)')
+      .eq('customer_id', customerId)
+      .in('delivery_slot_id', slots.map(s => s.id))
+      .neq('status', 'cancelled');
+    if (error) throw error;
+
+    if (!orders || !orders.length) {
+      alert(`No deliveries for ${c.name} in that period (${range.label}).`);
+      return;
+    }
+
+    const rows = orders.map(o => {
+      const slot = slotById[o.delivery_slot_id] || {};
+      return {
+        _sort:   slot.delivery_date || '',
+        dateFmt: slot.delivery_date
+          ? new Date(slot.delivery_date + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
+          : '—',
+        day: slot.day_label || '',
+        itemsSummary: (o.order_items || []).map(i => `${i.product_name} ×${i.quantity}`).join(', '),
+        amount: parseFloat(o.total_amount || 0),
+      };
+    }).sort((a, b) => a._sort.localeCompare(b._sort));   // oldest first, like a delivery note run
+
+    const doc = buildYearStatementDoc({
+      custName: c.name, custAddress: c.address || '',
+      periodLabel: range.label,
+      orders: rows,
+      total: rows.reduce((s, r) => s + r.amount, 0),
+      count: rows.length,
+    });
+    if (!doc) { alert('PDF builder is still loading — please try again in a second.'); return; }
+
+    const safeName = (c.name || 'customer').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    const safePeriod = range.from === range.to ? range.from : `${range.from}_to_${range.to}`;
+    doc.save(`JG-Foods-statement-${safeName}-${safePeriod}.pdf`);
+  } catch (e) {
+    console.error('Statement failed:', e);
+    alert('Could not build that statement — ' + (e.message || e));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label || '📄 Download statement (PDF)'; }
+  }
+}
+
 // ── A customer's invoices, on their own record ────────────────
 // Jon's question is nearly always "what does this customer owe me, and for
 // which deliveries" — and until now their record showed orders only, with no
@@ -6280,7 +6458,7 @@ async function openCustomerDetail(id) {
       <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px">Order History</div>
       <p style="font-size:12.5px;color:var(--ink-soft);padding:10px;background:var(--cream);border-radius:8px">Loading…</p>
     </div>
-    <button class="btn-add" style="width:100%;margin-top:14px;font-size:13px;padding:12px" onclick="downloadYearStatement('${c.id}')">📄 Download year's order statement (PDF)</button>
+    ${statementPickerHtml(c.id)}
   `;
   document.getElementById('orderModal').classList.add('show');
 
@@ -10769,6 +10947,23 @@ function buildYearStatementDoc(data) {
   doc.text('Total for period', cItems, y);
   doc.setFontSize(13).setTextColor(...OX);
   doc.text('£' + (data.total || 0).toFixed(2), cTot - 8, y, { align:'right' });
+  y += 26;
+
+  // For a customer billed this way the statement is the ONLY document they
+  // receive, so it has to tell them how to pay. Without this they'd have a
+  // total and no way to settle it.
+  if (y > H - 140) { doc.addPage(); header(); y = 150; }
+  const boxH = 76;
+  doc.setFillColor(...CREAM).rect(L, y, R - L, boxH, 'F');
+  doc.setFillColor(...GOLD).rect(L, y, 4, boxH, 'F');
+  doc.setFont('helvetica','bold').setFontSize(9).setTextColor(...NAVYD);
+  doc.text('Bank details for payment', L + 16, y + 20);
+  doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INKSOFT);
+  doc.text('HSBC  ·  Mr J B Green', L + 16, y + 35);
+  doc.text('Account: 51476998   ·   Sort code: 40-31-33', L + 16, y + 48);
+  doc.setFont('helvetica','bold').setFontSize(9).setTextColor(...INK);
+  doc.text('Please use ' + (data.custName || 'your business name') + ' as your reference',
+           L + 16, y + 63);
 
   doc.setFont('helvetica','normal').setFontSize(8).setTextColor(150,142,130);
   doc.text('Thank you for your custom  ·  JG Foods', W / 2, H - 30, { align:'center' });
@@ -10776,46 +10971,9 @@ function buildYearStatementDoc(data) {
 }
 
 // ── Pull a customer's last 12 months of orders and download the statement ──
-async function downloadYearStatement(customerId) {
-  const c = sampleCustomers.find(x => x.id === customerId) || { name:'Customer', address:'' };
-  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customerId);
-  if (!supabase || !isUUID) { alert('Order statements need the live database — available once a customer has real orders.'); return; }
-
-  const since = new Date(); since.setFullYear(since.getFullYear() - 1); since.setHours(0,0,0,0);
-  const { data: orders, error } = await supabase
-    .from('orders')
-    .select('status, total_amount, created_at, delivery_slots (day_label, delivery_date), order_items (product_name, quantity)')
-    .eq('customer_id', customerId)
-    .gte('created_at', since.toISOString())
-    .neq('status', 'cancelled')
-    .order('created_at', { ascending: true });
-
-  if (error) { alert('Could not load orders: ' + error.message); return; }
-  if (!orders || !orders.length) { alert(`No orders for ${c.name} in the last 12 months.`); return; }
-
-  const rows = orders.map(o => {
-    const dWhen = o.delivery_slots?.delivery_date
-      ? new Date(o.delivery_slots.delivery_date + 'T00:00:00')
-      : new Date(o.created_at);
-    const itemsSummary = (o.order_items || []).map(i => `${i.product_name} ×${i.quantity}`).join(', ');
-    return {
-      dateFmt: dWhen.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }),
-      day: o.delivery_slots?.day_label || '',
-      itemsSummary,
-      amount: parseFloat(o.total_amount || 0),
-    };
-  });
-  const total = rows.reduce((s, r) => s + r.amount, 0);
-  const periodLabel = `${since.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })} – ${new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })}`;
-
-  const doc = buildYearStatementDoc({
-    custName: c.name, custAddress: c.address || '',
-    periodLabel, orders: rows, total, count: rows.length,
-  });
-  if (!doc) { alert('PDF builder is still loading — please try again in a second.'); return; }
-  const safeName = (c.name || 'customer').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-  doc.save(`JG-Foods-statement-${safeName}.pdf`);
-}
+// Superseded by downloadStatement() — the statement is no longer fixed to
+// the last 12 months; Jon picks the period. Kept out of the file rather
+// than left as a second way of doing the same thing.
 
 // ── Generate the PDF and upload it to Storage; returns a public URL (or null) ──
 async function uploadInvoicePdf(data) {
@@ -12293,6 +12451,7 @@ const HELP_PAGES = {
     sections: [
       { icon:'👥', title:'What is this page?', body:'The Customers page is your full customer list — domestic and trade. You can search, filter, and open any customer to see their history.' },
       { icon:'🔍', title:'Finding a customer', body:'Type a name or postcode in the search bar at the top. Use the <strong>All / Domestic / Trade</strong> buttons to filter by customer type.' },
+      { icon:'🧾', title:'Statements — one summary for the customer', body:'Some trade customers don\'t want a bill for every drop, they want one summary. Open the customer and use <strong>Statement for the customer</strong>: pick <strong>This week</strong> (it prints as "week commencing"), last week, a month, a quarter, a year, or <strong>choose your own dates</strong>, then <strong>Download statement</strong>.<br><br>You get a branded PDF listing every delivery in that period — the date, what they had, and each delivery\'s total — with the total for the period and your bank details at the bottom, so they can pay straight from it.<br><br><strong>It changes nothing on your side.</strong> It isn\'t an invoice, it has no invoice number, and it doesn\'t touch your takings or your figures. Your own invoice for each delivery stays exactly as it is. Run one as often as you like.' },
       { icon:'📄', title:'Their invoices, on their record', body:'Open any customer and you\'ll see <strong>Invoices &amp; receipts</strong> — every bill you\'ve raised for them, newest first, with what\'s still owed shown at the top right. A pub with three deliveries a week has three invoices and they\'re all listed. <strong>Tap any one to open it</strong>, then download or send it from there. For the full history, or to pull up one particular week, use the Invoices page.' },
       { icon:'📧', title:'Their account email', body:'Open a customer\'s <strong>Edit</strong> and you\'ll see their <strong>Account email</strong> — the address they signed up with on the website. It\'s shown for reference and can\'t be changed here (it\'s their login). Customers you added by hand show "No account".' },
       { icon:'⭐', title:'Exempt customers', body:'Family and friends who shouldn\'t be charged the £5 small-order fee can be marked as <strong>Exempt</strong> on their profile. Tick the box in their customer record.' },
