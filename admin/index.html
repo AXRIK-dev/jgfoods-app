@@ -6307,6 +6307,15 @@ async function fetchStatementRows(customerId, range, mainAddress) {
   // The lines with no site are the customer's own address, so they get
   // labelled with it rather than left as an unheaded block: on a statement
   // covering several drops, an unlabelled group is ambiguous.
+  // Whether to head each block with an address is decided ACROSS THE WHOLE
+  // statement, not per delivery. Deciding it per invoice meant one delivery
+  // showed its two addresses while another on the same page showed none,
+  // which reads like a mistake.
+  const sitesUsed = new Set();
+  Object.values(itemsByInv).forEach(list =>
+    (list || []).forEach(it => sitesUsed.add(it.site_label || '')));
+  const showAddresses = sitesUsed.size > 1;
+
   const groupBySite = (rows, mainLabel) => {
     const order = [];
     const bySite = new Map();
@@ -6320,11 +6329,10 @@ async function fetchStatementRows(customerId, range, mainAddress) {
       });
     // Main address first, then named sites — same order as the invoice.
     order.sort((a, b) => (a === '' ? 0 : 1) - (b === '' ? 0 : 1));
-    const multi = order.length > 1;
     return order.map(key => ({
-      // With only one address there's nothing to distinguish, so no heading —
-      // it would just be noise repeating what's already at the top.
-      label: multi ? (key || mainLabel || 'Main address') : null,
+      // Only one address anywhere on the statement means there's nothing to
+      // tell apart, so no heading — it would just repeat the top of the page.
+      label: showAddresses ? (key || mainLabel || 'Main address') : null,
       items: bySite.get(key).join(', '),
     }));
   };
@@ -11005,8 +11013,8 @@ function buildStatementDoc(data) {
   const L = 48, R = W - 48;
   // Six columns. The gutter before TOTAL is deliberately wide — a long items
   // list used to run straight into the money and make it unreadable.
-  const cDate = L, cRef = L + 60, cItems = L + 122, cTot = R - 152, cPaid = R - 78, cOwed = R;
-  const itemsW = cTot - cItems - 40;
+  const cDate = L, cRef = L + 50, cItems = L + 106, cTot = R - 150, cPaid = R - 76, cOwed = R;
+  const itemsW = cTot - cItems - 34;
 
   function header() {
     doc.setFillColor(...NAVYD).rect(0, 0, W, 104, 'F');
@@ -11037,9 +11045,14 @@ function buildStatementDoc(data) {
   // Work out how tall a row is before drawing it, so a page break never
   // splits one delivery across two pages.
   function rowHeight(r) {
-    let h = 7;
-    (r.groups || []).forEach(g => {
-      if (g.label) h += 11;
+    let h = 8;
+    (r.groups || []).forEach((g, n) => {
+      if (n > 0) h += 4;                       // breathing space between addresses
+      if (g.label) {
+        doc.setFont('helvetica','bold').setFontSize(8);
+        h += 10.5 * doc.splitTextToSize(g.label, itemsW).length;
+      }
+      doc.setFont('helvetica','normal').setFontSize(9);
       h += 12 * doc.splitTextToSize(g.items || '—', itemsW).length;
     });
     return Math.max(h, 20);
@@ -11087,11 +11100,16 @@ function buildStatementDoc(data) {
 
     // Items, broken down by the address they went to.
     let iy = y;
-    (r.groups || []).forEach(g => {
+    (r.groups || []).forEach((g, n) => {
+      if (n > 0) iy += 4;
       if (g.label) {
+        // The whole address, wrapped. Truncating it to one line left the
+        // customer reading "Box On The Docks, Wirral Business Centre," with
+        // no town and no postcode — worse than no heading at all.
         doc.setFont('helvetica','bold').setFontSize(8).setTextColor(...OX);
-        doc.text(doc.splitTextToSize(g.label, itemsW)[0], cItems, iy);
-        iy += 11;
+        const labelLines = doc.splitTextToSize(g.label, itemsW);
+        doc.text(labelLines, cItems, iy);
+        iy += 10.5 * labelLines.length;
       }
       doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INK);
       const lines = doc.splitTextToSize(g.items || '—', itemsW);
