@@ -87,6 +87,13 @@
   .btn-gold:hover{background:var(--gold-bright)}
   .btn-row{display:flex;gap:9px;flex-wrap:wrap}
 
+  /* A stat card that goes somewhere. The arrow is the only cue Jon needs —
+     without it a tappable card looks identical to a decorative one. */
+  .stat-card-link{cursor:pointer}
+  .stat-card-link:hover{border-color:var(--gold);transform:translateY(-1px)}
+  .sc-go{font-size:10.5px;font-weight:800;letter-spacing:.4px;color:var(--gold);
+    margin-top:6px;text-transform:uppercase}
+
   /* One-tap date periods on the Invoices page. Sized for a thumb on a
      tablet in the van, not a mouse. */
   .inv-period{background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);
@@ -839,10 +846,11 @@
       <div class="sc-val" id="dashRevVal">£0</div>
       <div class="sc-sub" id="dashRevSub">0 orders this week</div>
     </div>
-    <div class="stat-card blue">
+    <div class="stat-card blue stat-card-link" onclick="goToUnpaid('sent')" title="Tap to see who hasn't paid">
       <div class="sc-label">Unpaid invoices</div>
       <div class="sc-val" id="dash-unpaid-count">0</div>
       <div class="sc-sub" id="dash-unpaid-sub">£0 outstanding</div>
+      <div class="sc-go">Tap to chase →</div>
     </div>
     <div class="stat-card">
       <div class="sc-label">Active customers</div>
@@ -1461,15 +1469,17 @@
       <div class="sc-val" id="finPaidVal">£0</div>
       <div class="sc-sub" id="finPaidSub">This month's receipts &amp; paid invoices</div>
     </div>
-    <div class="stat-card red">
+    <div class="stat-card red stat-card-link" onclick="goToUnpaid('sent')" title="Tap to see who hasn't paid">
       <div class="sc-label">Unpaid</div>
       <div class="sc-val" id="finUnpaidVal">£0</div>
       <div class="sc-sub" id="finUnpaidSub">0 invoices outstanding</div>
+      <div class="sc-go">Tap to chase →</div>
     </div>
-    <div class="stat-card gold">
+    <div class="stat-card gold stat-card-link" onclick="goToUnpaid('overdue')" title="Tap to see the overdue ones">
       <div class="sc-label">Overdue (30+ days)</div>
       <div class="sc-val" id="finOverdueVal">£0</div>
       <div class="sc-sub" id="finOverdueSub">Nothing overdue</div>
+      <div class="sc-go">Tap to chase →</div>
     </div>
     <div class="stat-card blue">
       <div class="sc-label">Month total</div>
@@ -2015,6 +2025,7 @@
       </div>
     </div>
 
+    <div id="invoiceChaseBar" style="display:none"></div>
     <div id="invoiceCombineHint" style="display:none"></div>
     <div id="invoiceCount" style="font-size:11.5px;color:var(--ink-soft);margin-bottom:9px"></div>
     <div id="invoiceList" style="display:flex;flex-direction:column;gap:9px"></div>
@@ -3434,8 +3445,11 @@ function renderDashboard() {
 
   set('dashActiveVal', sampleCustomers.length);
 
-  const unpaid      = sampleInvoices.filter(i => i.status === 'sent' || i.status === 'overdue');
-  const unpaidTotal = unpaid.reduce((s, i) => s + (i.amount || 0), 0);
+  // Counts what's still OWED, not the invoice totals — a customer who's paid
+  // half shouldn't show on the dashboard as still owing the lot. (This used
+  // to read i.amount, so the outstanding figure here disagreed with Finance.)
+  const unpaid      = sampleInvoices.filter(i => (i.status === 'sent' || i.status === 'overdue') && invBalance(i) > 0.001);
+  const unpaidTotal = unpaid.reduce((s, i) => s + invBalance(i), 0);
   set('dash-unpaid-count', unpaid.length);
   set('dash-unpaid-sub', '£' + unpaidTotal.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' outstanding');
 
@@ -6805,6 +6819,89 @@ function renderFinance() {
 // (and so the payment/split/merge actions can re-render without resetting it).
 let invoiceStatusFilter = 'all';
 
+// ── "Who owes me?" — one tap from the dashboard or Finance ────
+// Chasing money was the one job that meant knowing where to look. Now the
+// unpaid figure IS the way in: it clears any search or date range that would
+// hide someone, opens the list filtered, and scrolls straight to it.
+function goToUnpaid(filter) {
+  showPage('invoices');
+  ['inv-search', 'inv-from', 'inv-to'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.querySelectorAll('.inv-period').forEach(b => b.classList.remove('active'));
+  populateInvoiceCustomerSelect();
+  renderInvoices(filter || 'sent');
+  // Let the page switch paint before scrolling, or it lands in the wrong place
+  setTimeout(() => {
+    document.getElementById('invoiceList')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 60);
+}
+
+// How long the money has been owed. Counted from the DELIVERY, not from when
+// the invoice was raised — that's the date the customer recognises, and it's
+// the honest measure of how late they are.
+function invoiceAgeDays(inv) {
+  const basis = inv.deliveryDate || inv.weekStart
+                || (inv.created ? String(inv.created).slice(0, 10) : '');
+  if (!basis) return null;
+  const then = new Date(String(basis).slice(0, 10) + 'T12:00:00');
+  if (isNaN(then)) return null;
+  const now = new Date(); now.setHours(12, 0, 0, 0);
+  return Math.max(0, Math.round((now - then) / 86400000));
+}
+
+// Their number, shown on the chase list so Jon can ring without digging it
+// out of the customer record — half his chasing is still a phone call.
+function invCustPhone(inv) {
+  return (sampleCustomers.find(c => c.id === inv.custId) || {}).phone || '';
+}
+
+function invoiceAgeLabel(inv) {
+  const d = invoiceAgeDays(inv);
+  if (d == null) return '';
+  if (d === 0) return 'today';
+  if (d === 1) return '1 day';
+  if (d < 7)   return `${d} days`;
+  if (d < 14)  return '1 week';
+  if (d < 61)  return `${Math.floor(d / 7)} weeks`;
+  return `${Math.floor(d / 30)} months`;
+}
+
+// ── Chase a payment ───────────────────────────────────────────
+// A reminder, not a demand. Jon rebuilt this business on relationships and
+// cold calling — a stiff letter would cost him more than the invoice is
+// worth. It opens in WhatsApp pre-written so he can change a word before it
+// goes, and it quotes the balance still owed rather than the invoice total,
+// so a part-paid customer is never asked for money he's already sent.
+function chaseInvoice(invId) {
+  const inv = sampleInvoices.find(i => i.id === invId);
+  if (!inv) return;
+  const cust = sampleCustomers.find(c => c.id === inv.custId);
+  const wa   = toWhatsAppNumber(cust?.phone || '');
+
+  const bal   = invBalance(inv);
+  const first = (inv.name || 'there').split(' ')[0];
+  const when  = inv.weekStart ? `week commencing ${new Date(inv.weekStart + 'T12:00:00').toLocaleDateString('en-GB')}`
+              : inv.deliveryDate ? `your delivery on ${new Date(String(inv.deliveryDate).slice(0,10) + 'T12:00:00').toLocaleDateString('en-GB')}`
+              : `invoice ${inv.ref}`;
+  const part  = invPaidTotal(inv) > 0.001 ? ' (the balance after what you\'ve already paid)' : '';
+
+  const msg = `Hi ${first}, hope you're well! Just a gentle reminder about ${when} — invoice ${inv.ref}, £${bal.toFixed(2)} still outstanding${part}.\n\n`
+    + `Bank transfer is easiest: HSBC, Mr J B Green, Acc 51476998, Sort 40-31-33, ref ${inv.ref}.\n\n`
+    + `No rush if it's already on its way. Any questions just give me a shout. Thanks! Jon — JG Foods, 07702 852704`;
+
+  if (!wa) {
+    // No number saved — don't silently do nothing, and don't lose the wording
+    // he was about to send.
+    navigator.clipboard?.writeText(msg);
+    alert(`There's no phone number saved for ${inv.name}.\n\nThe reminder has been copied — paste it into a message, or add their number on their customer record and the button will work next time.`);
+    return;
+  }
+  window.open(`https://wa.me/${wa}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
 // ── One-tap date periods ──────────────────────────────────────
 // Fills the From/To boxes for the periods Jon actually asks for. It leaves
 // the search box alone on purpose: type a customer's name, tap "This week",
@@ -6960,7 +7057,35 @@ function renderInvoices(filter) {
     }
   }
 
+  // Chasing mode: oldest debt first, because that's the order you ring people
+  // in. Every other view stays newest-first, which is how you look things up.
+  const chasing = status === 'sent' || status === 'overdue';
+  if (chasing) {
+    shown.sort((a, b) => (invoiceAgeDays(b) ?? 0) - (invoiceAgeDays(a) ?? 0));
+  }
+
   renderCombineHint(shown);
+
+  // A one-line answer to "how much am I owed and by how many people",
+  // sitting directly above the list he's about to work down.
+  const chaseBar = document.getElementById('invoiceChaseBar');
+  if (chaseBar) {
+    if (chasing && shown.length) {
+      const owed = shown.reduce((s, i) => s + invBalance(i), 0);
+      const oldest = invoiceAgeLabel(shown[0]);
+      chaseBar.style.display = 'block';
+      chaseBar.innerHTML = `
+        <div style="background:var(--navy);color:#fff;border-radius:11px;padding:13px 16px;margin-bottom:12px">
+          <div style="font-size:15px;font-weight:800">£${owed.toFixed(2)} owed across ${shown.length} invoice${shown.length !== 1 ? 's' : ''}</div>
+          <div style="font-size:11.5px;color:#cfd6e0;margin-top:3px">
+            Oldest first${oldest ? ' — longest waiting is ' + oldest : ''}. Tap 💬 Chase to send a friendly reminder.
+          </div>
+        </div>`;
+    } else {
+      chaseBar.style.display = 'none';
+      chaseBar.innerHTML = '';
+    }
+  }
 
   if (!shown.length) {
     const searching = q || from || to;
@@ -6997,6 +7122,7 @@ function renderInvoices(filter) {
         <div style="font-size:14px;font-weight:800;color:var(--ink);margin-top:2px">${inv.name}</div>
         <div style="font-size:11px;color:var(--ink-soft);margin-top:2px">${isWeekly ? weekLabel(inv.weekStart) + (isDraft ? ' · still collecting' : '') : (isDraft ? 'Still collecting deliveries — ' + inv.date : inv.date)}${payNote ? ' · ' + payNote : ''}</div>
         ${partPaid ? `<div style="font-size:11px;color:#1a4fad;margin-top:2px;font-weight:700">£${paid.toFixed(2)} paid · £${bal.toFixed(2)} remaining</div>` : ''}
+        ${chasing && !isDraft ? `<div style="font-size:11px;margin-top:3px;font-weight:800;color:${(invoiceAgeDays(inv) ?? 0) >= 30 ? '#a00' : 'var(--oxblood)'}">⏳ Waiting ${invoiceAgeLabel(inv)}${invCustPhone(inv) ? ' · ' + escapeHtmlAttr(invCustPhone(inv)) : ''}</div>` : ''}
         ${claimsPaid ? `<div style="font-size:11px;color:#b06000;margin-top:2px;font-weight:700">Marked paid but no money recorded — it isn't in your takings</div>` : ''}
       </div>
       <div style="font-family:var(--display);font-size:17px;font-weight:600;color:var(--navy);min-width:70px;text-align:right">£${inv.amount.toFixed(2)}</div>
@@ -7004,7 +7130,9 @@ function renderInvoices(filter) {
       <div style="display:flex;gap:6px;align-items:center">
         ${isDraft
           ? `<button style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:var(--navy);color:#fff;cursor:pointer;border:none" onclick="finalizeInvoice('${inv.id}')" title="Close this running tab and send it — the next order for this customer starts a fresh one">Finalise &amp; send</button>`
-          : (bal > 0.001 ? `<button style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:var(--oxblood);color:#fff;cursor:pointer;border:none" onclick="openPaymentModal('${inv.id}')" title="${claimsPaid ? 'This is marked paid but no money has been recorded against it — log it so it counts in your takings' : 'Record the money for this invoice'}">Log payment</button>` : '')}
+          : (bal > 0.001 ? `
+              ${chasing ? `<button style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:#1a6640;color:#fff;cursor:pointer;border:none" onclick="chaseInvoice('${inv.id}')" title="Send ${escapeHtmlAttr(inv.name)} a friendly reminder on WhatsApp">💬 Chase</button>` : ''}
+              <button style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:var(--oxblood);color:#fff;cursor:pointer;border:none" onclick="openPaymentModal('${inv.id}')" title="${claimsPaid ? 'This is marked paid but no money has been recorded against it — log it so it counts in your takings' : 'Record the money for this invoice'}">Log payment</button>` : '')}
         <div class="actions-wrap">
           <button class="actions-btn" style="font-size:11px;padding:6px 12px" id="ia-${inv.id}" onclick="toggleActionsMenu('iam-${inv.id}','ia-${inv.id}')">
             Actions
@@ -12062,6 +12190,7 @@ const HELP_PAGES = {
     label: 'Dashboard',
     sections: [
       { icon:'📊', title:'What is this page?', body:'The Dashboard is your home screen. It gives you a quick snapshot of what\'s happening today — what you\'ve taken, orders waiting, money owed, and anything that needs your attention.' },
+      { icon:'\ud83d\udcac', title:'Chasing money \u2014 tap the Unpaid card', body:'The <strong>Unpaid invoices</strong> card isn\'t just a number \u2014 <strong>tap it</strong>. It opens your chase list with whoever\'s been waiting longest at the top, their phone number on each row, and a <strong>\ud83d\udcac Chase</strong> button that writes a polite WhatsApp reminder for you. The figure shown is what\'s <strong>still owed</strong>, so anyone who\'s part paid only counts for their balance.' },
       { icon:'💷', title:'Taken today', body:'The navy panel at the top is your day\'s takings. The big gold figure is <strong>every penny that\'s come in today</strong>, and underneath it splits into <strong>cash</strong> and <strong>bank transfer</strong> so you know what should be in your pocket and what should be in the bank.<br><br>You don\'t enter anything here — it fills itself in. Every time you mark an order paid on the run, or press <strong>Log payment</strong> on an invoice, this goes up within seconds.' },
       { icon:'🔄', title:'It corrects itself', body:'It\'s a running total, so it goes <em>down</em> as well as up. Delete an invoice and its money comes straight back out. Remove a payment and it comes off. And if you marked something cash when it was actually a bank transfer, switch it over (the <strong>↔</strong> button next to the payment) and both figures move to match — the total stays the same, it just moves across.<br><br>You never have to go back and correct this figure by hand. Press <strong>↻</strong> in the corner if you want to check for anything logged since you opened the app.' },
       { icon:'📋', title:'Show who\'s paid — reconciling the day', body:'Tap <strong>Show who\'s paid</strong> at the bottom of the panel and it opens the list behind the figure.<br><br><strong>Today\'s run</strong> lists every drop you\'re doing today. A green <strong>✓</strong> means the money\'s in and it tells you whether it was cash or bank. A <strong>○</strong> means they haven\'t paid yet, with the amount owed next to it. Anyone part-paid shows <strong>◑</strong> and how much is still outstanding.<br><br><strong>Also paid in today</strong> is money that landed today against a different day\'s deliveries — a pub settling last week\'s invoice, say. It\'s in your pocket tonight even though it\'s nothing to do with today\'s round, so it has to be in the count.<br><br>It stays open once you\'ve opened it, so it\'ll be there tomorrow.' },
@@ -12183,6 +12312,7 @@ const HELP_PAGES = {
     label: 'Finance',
     sections: [
       { icon:'💰', title:'What is this page?', body:'Finance has five tabs that match your bookkeeping: <strong>Daily Sales</strong>, <strong>Weekly</strong>, <strong>Expenses &amp; Purchases</strong>, <strong>Payments</strong>, and <strong>Monthly (Accountant)</strong>. You log your costs once on the Expenses tab and everything else adds up on its own.' },
+      { icon:'\ud83d\udcac', title:'Who owes me? \u2014 tap Unpaid or Overdue', body:'The <strong>Unpaid</strong> and <strong>Overdue</strong> cards at the top are <strong>tappable</strong>. Either one takes you straight to a chase list \u2014 longest waiting first, with how long each has been outstanding, their phone number, and a <strong>\ud83d\udcac Chase</strong> button that opens a friendly reminder in WhatsApp ready to send. Quickest way to work through everyone who owes you in one go.' },
       { icon:'📅', title:'Daily Sales tab', body:'<strong>Today is always the top row, marked in gold</strong>, with the rest underneath newest first — so you\'re not scrolling to find the day you\'re after. (The same day\'s total is on your Dashboard too, if you just want the one number.)<br><br>This fills itself in. Each day\'s takings come <strong>automatically from every payment you log</strong> — whether you marked an order Cash or Bank on the delivery run, or pressed <strong>Log payment</strong> on an invoice. You only type in the <strong>+ extra</strong> box if you took money that isn\'t against an order or an invoice at all. Totals update live, and it all stays in step if you edit, delete or unmark anything.' },
       { icon:'🗓️', title:'Where a weekly invoice\'s money lands', body:'When a customer on <strong>one invoice a week</strong> pays, that money covers several deliveries at once — so it\'s spread across those days in proportion to what each delivery was worth, rather than all landing on one. A £300 invoice covering a £200 Monday and a £100 Thursday puts £200 on the Monday and £100 on the Thursday. Part payments split the same way. You don\'t have to do anything — it just adds up correctly across the week.' },
       { icon:'📥', title:'Import past takings', body:'Already got your figures in a spreadsheet? On the Daily Sales tab, drag your Excel or CSV file onto the <strong>Import past takings</strong> box (or tap Choose file). As long as it has <strong>Date</strong>, <strong>Bank</strong> and <strong>Cash</strong> columns, it reads them straight in — so you\'re not starting from scratch. Days you already have are updated, not duplicated.' },
@@ -12243,7 +12373,8 @@ const HELP_PAGES = {
       { icon:'↩️', title:'Logged a payment by mistake', body:'Press the <strong>×</strong> next to it in the Log payment box. It asks you to confirm, then removes it and puts the day\'s takings back to what they should be. If the invoice was marked paid it goes back to unpaid.' },
       { icon:'🔀', title:'Split payments', body:'If a customer pays part in cash and part by bank transfer, just log both separately using <strong>Log payment</strong>. Each entry shows up on the invoice with its method and amount. The remaining balance updates as you go.' },
       { icon:'↔️', title:'Marked it cash when it was bank (or the other way round)', body:'Easily fixed — nothing needs deleting. On the invoice, press <strong>Log payment</strong> and each payment listed has a small <strong>↔ Cash / ↔ Bank</strong> button next to it; press it, confirm, and it swaps over. From an order on the run there\'s a <strong>“Wrong one? Change to…”</strong> link under the Payment line that does the same thing. The amount and the date stay exactly as they were, the invoice stays paid, and your cash and bank figures for that day correct themselves straight away.' },
-      { icon:'🔴', title:'Overdue invoices', body:'Any invoice not paid <strong>30 days after the delivery</strong> turns <strong>Overdue</strong> and shows in red. You\'ll see a count on the Dashboard too.' },
+      { icon:'💬', title:'Chasing money owed', body:'On the <strong>Dashboard</strong> tap the <strong>Unpaid invoices</strong> card, or on <strong>Finance</strong> tap <strong>Unpaid</strong> or <strong>Overdue</strong>. It takes you straight to a chase list — <strong>whoever\'s been waiting longest at the top</strong>, with a navy bar telling you the total owed and how many. Each one shows <strong>how long it\'s been waiting</strong> and their phone number, so you can ring them there and then. Tap <strong>💬 Chase</strong> and a polite reminder opens in WhatsApp already written — the invoice number, what\'s still owed and your bank details. Read it, change anything you like, press send. If someone\'s part paid it only asks for the balance, never the full amount again.' },
+      { icon:'🔴', title:'Overdue invoices', body:'Any invoice not paid <strong>30 days after the delivery</strong> turns <strong>Overdue</strong> and shows in red, and the waiting time on the chase list turns red with it. You\'ll see a count on the Dashboard and on Finance too.' },
     ]
   },
   users: {
