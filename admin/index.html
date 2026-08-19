@@ -3001,12 +3001,33 @@ async function removeUser(userId, email) {
 }
 
 // ============ LOAD APP DATA FROM SUPABASE ============
+
+// invoices.delivery_date and issued_at are read by everything that prints a
+// date. delivery_date arrives with migration 046 — and PostgREST rejects the
+// WHOLE query if you ask for a column that isn't there yet, which would empty
+// Jon's invoice list and his dashboard figures rather than just losing a date.
+// So they're asked for optimistically: one rejection and we drop back to the
+// old column set for the rest of the session and carry on working.
+// Never let a pending migration take the live app down.
+let HAS_INVOICE_DELIVERY_DATE = true;
+
+const INVOICE_SELECT_NEW = 'id, order_id, invoice_number, invoice_type, total_amount, status, created_at, issued_at, delivery_date, week_start, week_end, customer_id, customers (name, customer_type, billing_mode), invoice_payments (id, method, amount, note, paid_at, created_at)';
+const INVOICE_SELECT_OLD = 'id, order_id, invoice_number, invoice_type, total_amount, status, created_at, week_start, week_end, customer_id, customers (name, customer_type, billing_mode), invoice_payments (id, method, amount, note, paid_at, created_at)';
+
+// "That column doesn't exist" as Postgres (42703) and PostgREST (PGRST204)
+// each phrase it. Anything else is a real error and must not be swallowed.
+function isMissingColumnError(err) {
+  if (!err) return false;
+  const s = [err.code, err.message, err.details, err.hint].filter(Boolean).join(' ');
+  return /42703|PGRST204|does not exist/i.test(s);
+}
+
 async function loadAppData() {
   if (!supabase) return;
 
   try {
     // Fetch all in parallel
-    const [productsRes, customersRes, ordersRes, invoicesRes, runSlotsRes, categoriesRes, sitesRes] = await Promise.all([
+    let [productsRes, customersRes, ordersRes, invoicesRes, runSlotsRes, categoriesRes, sitesRes] = await Promise.all([
       supabase
         .from('products')
         .select('id, name, category, price, description, is_available, img_url, sort_order, options, option_label, trade_only')
@@ -3032,7 +3053,7 @@ async function loadAppData() {
 
       supabase
         .from('invoices')
-        .select('id, order_id, invoice_number, invoice_type, total_amount, status, created_at, issued_at, delivery_date, week_start, week_end, customer_id, customers (name, customer_type, billing_mode), invoice_payments (id, method, amount, note, paid_at, created_at)')
+        .select(HAS_INVOICE_DELIVERY_DATE ? INVOICE_SELECT_NEW : INVOICE_SELECT_OLD)
         .order('created_at', { ascending: false })
         .limit(200),
 
@@ -3052,6 +3073,20 @@ async function loadAppData() {
         .select('id, customer_id, label, address_line_1, address_line_2, city, postcode, sort_order')
         .order('sort_order').order('created_at'),
     ]);
+
+    // Migration 046 not run yet? Ask again without the new columns rather
+    // than losing the whole invoice list. Dates fall back to the order's
+    // delivery date, which is how it behaved before 046.
+    if (invoicesRes && invoicesRes.error && HAS_INVOICE_DELIVERY_DATE
+        && isMissingColumnError(invoicesRes.error)) {
+      console.warn('invoices.delivery_date missing — migration 046 has not been run. Using the old columns.');
+      HAS_INVOICE_DELIVERY_DATE = false;
+      invoicesRes = await supabase
+        .from('invoices')
+        .select(INVOICE_SELECT_OLD)
+        .order('created_at', { ascending: false })
+        .limit(200);
+    }
 
     // ── Run days (delivery slots) ─────────────────────────
     runDaySlots = (runSlotsRes && !runSlotsRes.error) ? (runSlotsRes.data || []) : [];
@@ -3172,9 +3207,14 @@ async function loadAppData() {
           // show the day the meat went out. invoices.delivery_date (migration
           // 046) is the stored answer — the order and issued_at are only
           // fallbacks for anything raised before that column existed.
-          deliveryDate: inv.delivery_date || ord?.date
+          // The ORDER's delivery day comes first: when an invoice covers one
+          // order that slot date is the authoritative answer, and preferring
+          // it means the list reads correctly even if the stored column is
+          // stale. Multi-delivery invoices have no single order, so they fall
+          // through to the stored delivery_date.
+          deliveryDate: ord?.date || inv.delivery_date
                         || (inv.issued_at ? String(inv.issued_at).slice(0, 10) : null),
-          date:     prettyInvoiceDate(inv.delivery_date || ord?.date || inv.issued_at || inv.created_at),
+          date:     prettyInvoiceDate(ord?.date || inv.delivery_date || inv.issued_at || inv.created_at),
           created:  inv.created_at,
           amount:   parseFloat(inv.total_amount),
           status:   inv.status,
@@ -7232,10 +7272,28 @@ async function getSendData(invId, custName, invRef, amount) {
   let dateFmt = '', deliveryDate = null;
 
   if (invId && window.supabase) {
-    const { data: inv, error } = await window.supabase
+    const SEND_COLS = (withNew) =>
+      'invoice_number, invoice_type, total_amount, week_start, week_end, '
+      + (withNew ? 'delivery_date, issued_at, ' : '')
+      + 'created_at, customers(name, phone, email, address_line_1, invoice_address, customer_type), '
+      + 'invoice_items(description, unit_price, quantity, site_label, delivery_date, created_at)';
+
+    let { data: inv, error } = await window.supabase
       .from('invoices')
-      .select('invoice_number, invoice_type, total_amount, week_start, week_end, delivery_date, issued_at, created_at, customers(name, phone, email, address_line_1, invoice_address, customer_type), invoice_items(description, unit_price, quantity, site_label, delivery_date, created_at)')
+      .select(SEND_COLS(HAS_INVOICE_DELIVERY_DATE))
       .eq('id', invId).single();
+
+    // Same guard as loadAppData: a pending migration 046 must not stop Jon
+    // downloading or sending an invoice. The line items still carry their
+    // delivery dates, so the date on the document stays right either way.
+    if (error && HAS_INVOICE_DELIVERY_DATE && isMissingColumnError(error)) {
+      HAS_INVOICE_DELIVERY_DATE = false;
+      ({ data: inv, error } = await window.supabase
+        .from('invoices')
+        .select(SEND_COLS(false))
+        .eq('id', invId).single());
+    }
+
     if (!error && inv) {
       ref     = inv.invoice_number;
       type    = inv.invoice_type;
@@ -7263,7 +7321,10 @@ async function getSendData(invId, custName, invRef, amount) {
       // Order of preference: the invoice's own delivery date, then the earliest
       // delivery on its lines, then when it was issued.
       const lineDates = (inv.invoice_items || []).map(i => i.delivery_date).filter(Boolean).sort();
-      deliveryDate = inv.delivery_date || lineDates[0]
+      // Same preference as the list: the delivery day already worked out from
+      // the linked order wins, so the PDF and the list can never disagree.
+      const listed = (sampleInvoices || []).find(x => x.id === invId);
+      deliveryDate = listed?.deliveryDate || inv.delivery_date || lineDates[0]
                      || (inv.issued_at ? String(inv.issued_at).slice(0, 10) : null)
                      || (inv.created_at ? String(inv.created_at).slice(0, 10) : null);
       dateFmt = deliveryDate
@@ -10117,7 +10178,7 @@ async function saveInvoice() {
   if (!window.supabase) { alert('Not connected to the database — please refresh and try again.'); return; }
 
   try {
-    const { data: inv, error } = await window.supabase.from('invoices').insert({
+    const row = {
       invoice_number: invRef,
       customer_id:    custId,
       invoice_type:   invType,
@@ -10131,7 +10192,21 @@ async function saveInvoice() {
       subtotal:       total,
       vat_amount:     0,
       total_amount:   total,
-    }).select('id, invoice_number, total_amount, status, created_at, customers (name)').single();
+    };
+    const backCols = 'id, invoice_number, total_amount, status, created_at, customers (name)';
+    if (!HAS_INVOICE_DELIVERY_DATE) delete row.delivery_date;
+
+    let { data: inv, error } = await window.supabase.from('invoices')
+      .insert(row).select(backCols).single();
+
+    // Migration 046 pending — save it without the new column rather than
+    // losing Jon's typed-up invoice. issued_at still carries the date.
+    if (error && HAS_INVOICE_DELIVERY_DATE && isMissingColumnError(error)) {
+      HAS_INVOICE_DELIVERY_DATE = false;
+      delete row.delivery_date;
+      ({ data: inv, error } = await window.supabase.from('invoices')
+        .insert(row).select(backCols).single());
+    }
     if (error) throw error;
 
     const lineRows = items.map(i => ({
