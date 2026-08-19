@@ -7319,7 +7319,7 @@ function renderInvoices(filter) {
           <div class="actions-menu" id="iam-${inv.id}">
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');viewInvoice('${inv.id}')"><span class="ai-icon">👁️</span> View invoice</div>
             ${isDraft ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');finalizeInvoice('${inv.id}')"><span class="ai-icon">✅</span> Finalise &amp; send</div>` : (bal > 0.001 ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openPaymentModal('${inv.id}')"><span class="ai-icon">💷</span> Log payment</div>` : '')}
-            ${isDraft ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');splitInvoice('${inv.id}')"><span class="ai-icon">✂️</span> Split into one per delivery</div>` : ''}
+            ${inv.status !== 'paid' && paid <= 0.001 ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');splitInvoice('${inv.id}')"><span class="ai-icon">✂️</span> Split into one per delivery</div>` : ''}
             ${inv.status !== 'paid' ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');mergeInvoiceWeek('${inv.id}')"><span class="ai-icon">🧾</span> Combine this week onto one</div>` : ''}
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');downloadInvoiceById('${inv.id}')"><span class="ai-icon">📄</span> Download PDF</div>
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openSendModal('email','${inv.name}','${inv.ref}','${inv.amount}','${inv.id}')"><span class="ai-icon">✉️</span> Send via email</div>
@@ -7379,11 +7379,22 @@ async function splitInvoice(id) {
   const { data, error } = await window.supabase.rpc('split_invoice_by_delivery', { p_invoice_id: id });
   if (error) { alert('Could not split this invoice — ' + error.message); return; }
   if (!data) {
-    alert(`${inv.ref} only has one delivery on it, so there's nothing to split.`);
+    // Says WHY nothing happened. The old wording claimed one delivery even
+    // when the real reason was that the lines carried no delivery date.
+    alert(
+      `Nothing to split on ${inv.ref}.\n\n` +
+      `Everything on it is for the same delivery day, so it's already one ` +
+      `invoice per delivery.\n\nIf you were expecting two or more days on ` +
+      `here, open it and check each line has the right delivery date.`
+    );
     return;
   }
   await loadAppData();
-  alert(`${inv.ref} split into ${data} separate invoice${data === 1 ? '' : 's'} for ${inv.name}.`);
+  alert(
+    `${inv.ref} split into ${data} separate invoice${data === 1 ? '' : 's'} for ${inv.name}.\n\n` +
+    `Each one is dated the day it went out and has its own invoice number. ` +
+    `You'll find them in the list below.`
+  );
 }
 
 async function mergeInvoiceWeek(id) {
@@ -12517,7 +12528,7 @@ const HELP_PAGES = {
       { icon:'📅', title:'Any other dates', body:'Use <strong>From</strong> and <strong>To</strong> to pick your own range — on their own, or alongside a search. These go by the <strong>delivery date</strong>, so asking for a week gives you that week\'s deliveries, not whatever happened to be typed up that week.' },
       { icon:'🔁', title:'Copying a recent order onto an invoice', body:'Building an invoice by hand for a regular? Pick the customer and a <strong>Copy a recent order</strong> panel appears. Tap <strong>Use this</strong> and that order\'s items drop straight in as invoice lines at the prices they were charged. Tap a second one to add it underneath — handy for putting Monday\'s and Thursday\'s deliveries on one weekly invoice. If the order went to a named site, its heading goes in automatically.' },
       { icon:'🗓️', title:'Weekly invoices', body:'A customer set to <strong>one invoice a week</strong> gets a single running invoice instead of one per delivery. It shows here marked <strong>this week</strong> with the dates it covers, and every order you log for them that week is added to it. It\'s headed <strong>W/C</strong> (week commencing), laid out with a section and subtotal per delivery address and one grand total — the same way you always did them by hand. If the same item comes on more than one day it appears <strong>once with the week\'s total quantity</strong>, so the customer doesn\'t have to add it up. It closes on its own each Monday — or press <strong>Finalise &amp; send</strong> to send it early.' },
-      { icon:'✂️', title:'Splitting a weekly invoice up', body:'Customer changed their mind and wants each delivery billed separately? Open the <strong>Actions</strong> menu on the running invoice and choose <strong>Split into one per delivery</strong>. Each delivery becomes its own invoice, dated the day it went out. Nothing is sent to the customer — the new invoices just appear in this list for you to check.' },
+      { icon:'✂️', title:'Splitting a weekly invoice up', body:'Customer changed their mind and wants each delivery billed separately? Open the <strong>Actions</strong> menu on the invoice and choose <strong>Split into one per delivery</strong>. Each delivery becomes its own invoice, <strong>dated the day it went out</strong>, with its own invoice number. Nothing is sent to the customer — the new invoices just appear in this list for you to check.<br><br>It works whether the invoice is still running or you\'ve already finalised it. The only thing that stops it is <strong>money already logged against it</strong> — remove the payment first, or the cash would end up on the wrong delivery. If it tells you there\'s nothing to split, everything on that invoice is for the same day.' },
       { icon:'🧾', title:'Combining a week onto one invoice', body:'Ended up with two or three invoices for the same customer in the same week and want to hand them one bill? A <strong>blue bar appears above the list</strong> telling you so — press <strong>Combine into one invoice</strong> and they\'re brought together, grouped by delivery and by site, keeping the earliest invoice number so the customer sees a reference they recognise. You can also do it from <strong>Actions</strong> on any of them. It picks up invoices you raised by hand as well as ones the system created, and anything already marked paid is left exactly as it is.' },
       { icon:'📅', title:'The date on an invoice is the delivery date', body:'Every invoice and receipt is dated the day the meat <strong>goes out</strong> — not the day you make it, and not the day you print it. So you can run off tomorrow\'s invoices tonight and they\'ll show tomorrow\'s date, and if you reprint Monday\'s invoice next month it still says Monday. Printing something again never changes its date. Weekly invoices are headed <strong>W/C</strong> with the week they cover, same as always.' },
       { icon:'✏️', title:'Correcting a date', body:'Got one wrong? Build the invoice by hand with the right <strong>Delivery date</strong> and delete the wrong one from its <strong>Actions</strong> menu. On invoices you build yourself, the Delivery date box at the top sets the date — it defaults to today, so change it if the delivery is another day.' },
