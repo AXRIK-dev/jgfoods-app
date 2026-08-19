@@ -1036,6 +1036,14 @@
           <option value="wed">Wednesday</option>
           <option value="thu">Thursday</option>
         </select>
+        <!-- This list only shows days that are OPEN on the Schedule page. A
+             day Jon hasn't opened simply isn't there, with nothing on screen
+             saying why — which reads as "it won't let me". -->
+        <p style="font-size:11.5px;color:var(--ink-soft);margin-top:6px">
+          Day not in the list? Open it first on
+          <a onclick="showPage('schedule')" style="color:var(--navy);font-weight:700;text-decoration:underline;cursor:pointer">🗓️ Schedule</a>
+          — only days you've opened show up here.
+        </p>
       </div>
       <div class="field">
         <label>Customer type</label>
@@ -12611,6 +12619,7 @@ const HELP_PAGES = {
       { icon:'✏️', title:'What is this page?', body:'Use Log Order to record any order that came in by phone, text, or social media — so everything ends up in one place.' },
       { icon:'📋', title:'Paste a message (AI fills it in)', body:'Got an order in a WhatsApp or Facebook message? Tap <strong>📋 Paste a message</strong>, paste the whole thing in, and press <strong>✦ Extract details</strong>. The AI reads it and fills in the customer, address, day and items for you. Always give it a quick check before saving — then it\'s saved like any other order (and a receipt/invoice is created automatically).' },
       { icon:'👤', title:'Customer lookup', body:'Or enter it manually: start typing a customer\'s name in the search box. If they\'ve ordered before, they\'ll appear in the list and their address fills in automatically.' },
+      { icon:'🗓️', title:'The day you want isn\'t in the list', body:'The <strong>Delivery slot</strong> dropdown only shows days you\'ve <strong>opened on the Schedule page</strong>. So if you want to take an order for a Friday and Friday isn\'t one of your usual days, it won\'t be there yet.<br><br>Go to <strong>🗓️ Schedule</strong>, use <strong>Add a one-off delivery day</strong>, pick the date, and it appears in the list straight away — come back to Log Order and it\'s there.<br><br>This has <strong>nothing to do with your other orders</strong>. You never have to deliver or finish one day before taking orders for another; you can take orders for as many days ahead as you like. And if it\'s a delivery you\'ve <em>already</em> done, use <strong>📅 A delivery I\'ve already done</strong> at the bottom of the list instead.' },
       { icon:'🛒', title:'Adding items', body:'Select a product from the dropdown, enter the quantity, and press <strong>+ Add another item</strong>. Repeat for each product in the order. The total updates automatically. The <strong>×</strong> next to a line removes it.' },
       { icon:'✏️', title:'Something that\'s not on the list', body:'Sourced something specially, or selling something you haven\'t added to your products yet? Pick <strong>✏️ Something else (type it in)</strong> at the bottom of the product dropdown — a box appears for what it is and what you\'re charging. It goes on the order and their invoice exactly like anything else. Handy for one-offs you don\'t want cluttering up your product list.' },
       { icon:'📅', title:'Delivery day', body:'The delivery day list shows the days you\'ve opened on the <strong>Schedule</strong> page, each with its date. Pick the one the customer wants and the order lands in that day\'s run. If a day you need isn\'t listed, open it first on the Schedule page.' },
