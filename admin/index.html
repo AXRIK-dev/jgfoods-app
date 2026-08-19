@@ -2025,6 +2025,7 @@
       </div>
     </div>
 
+    <div id="invoiceStatementBar" style="display:none"></div>
     <div id="invoiceChaseBar" style="display:none"></div>
     <div id="invoiceCombineHint" style="display:none"></div>
     <div id="invoiceCount" style="font-size:11.5px;color:var(--ink-soft);margin-bottom:9px"></div>
@@ -6268,83 +6269,110 @@ function statementRange(period, fromVal, toVal) {
 // Build and download the statement. Deliveries are found by the DELIVERY
 // SLOT's date, not when the order was typed in — same rule as everywhere
 // else, so a week means that week's deliveries.
-async function downloadStatement(customerId, btn) {
+// Gather a customer's invoices for a period, with what's been paid against
+// each. Read from the SAME loaded list the Invoices page uses, so the
+// statement, the invoice list, the dashboard and Finance can never disagree
+// about what's owed. Nothing here writes anything.
+async function fetchStatementRows(customerId, range) {
+  const invs = (sampleInvoices || [])
+    .filter(i => i.custId === customerId)
+    .filter(i => {
+      const k = invoiceDateKey(i);
+      return k && k >= range.from && k <= range.to;
+    })
+    .sort((a, b) => String(invoiceDateKey(a)).localeCompare(String(invoiceDateKey(b))));
+
+  if (!invs.length) return [];
+
+  // One query for all the line items, so a week is a single round trip.
+  let itemsByInv = {};
+  try {
+    if (window.supabase) {
+      const ids = invs.map(i => i.id).filter(id => /^[0-9a-f-]{36}$/i.test(id));
+      if (ids.length) {
+        const { data } = await window.supabase
+          .from('invoice_items')
+          .select('invoice_id, description, quantity')
+          .in('invoice_id', ids);
+        (data || []).forEach(it => {
+          (itemsByInv[it.invoice_id] = itemsByInv[it.invoice_id] || [])
+            .push(`${it.description} ×${it.quantity}`);
+        });
+      }
+    }
+  } catch (e) { console.error('Statement items load failed:', e); }
+
+  return invs.map(inv => {
+    const paid = invPaidTotal(inv);
+    const key  = invoiceDateKey(inv);
+    return {
+      dateFmt: inv.weekStart
+        ? 'w/c ' + new Date(inv.weekStart + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' })
+        : new Date(String(key) + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' }),
+      ref:   inv.ref || '',
+      itemsSummary: (itemsByInv[inv.id] || []).join(', '),
+      total: Number(inv.amount) || 0,
+      paid:  paid,
+      owed:  invBalance(inv),
+    };
+  });
+}
+
+// Shared by both ways in: the customer's record, and the Invoices page.
+async function generateStatement(customerId, range, btn) {
   const c = sampleCustomers.find(x => x.id === customerId) || { name:'Customer', address:'' };
-  const period = document.getElementById('stmt-period')?.value || 'this-week';
-  const range  = statementRange(period,
-    document.getElementById('stmt-from')?.value,
-    document.getElementById('stmt-to')?.value);
-
-  if (!range) { alert('Please pick a From and To date — and make sure the From date comes first.'); return; }
-
-  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customerId);
-  if (!supabase || !isUUID) { alert('Statements need the live database — available once a customer has real deliveries.'); return; }
-
   const label = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = 'Building…'; }
 
   try {
-    // Which delivery days fall in the period. Doing it this way round means
-    // the period is judged on the delivery date, which is the only date the
-    // customer recognises.
-    const { data: slots, error: slotErr } = await supabase
-      .from('delivery_slots')
-      .select('id, delivery_date, day_label')
-      .gte('delivery_date', range.from)
-      .lte('delivery_date', range.to);
-    if (slotErr) throw slotErr;
-
-    if (!slots || !slots.length) {
-      alert(`No deliveries for ${c.name} in that period (${range.label}).`);
-      return;
-    }
-    const slotById = {};
-    slots.forEach(s => { slotById[s.id] = s; });
-
-    const { data: orders, error } = await supabase
-      .from('orders')
-      .select('id, status, total_amount, delivery_slot_id, order_items (product_name, quantity)')
-      .eq('customer_id', customerId)
-      .in('delivery_slot_id', slots.map(s => s.id))
-      .neq('status', 'cancelled');
-    if (error) throw error;
-
-    if (!orders || !orders.length) {
+    const rows = await fetchStatementRows(customerId, range);
+    if (!rows.length) {
       alert(`No deliveries for ${c.name} in that period (${range.label}).`);
       return;
     }
 
-    const rows = orders.map(o => {
-      const slot = slotById[o.delivery_slot_id] || {};
-      return {
-        _sort:   slot.delivery_date || '',
-        dateFmt: slot.delivery_date
-          ? new Date(slot.delivery_date + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
-          : '—',
-        day: slot.day_label || '',
-        itemsSummary: (o.order_items || []).map(i => `${i.product_name} ×${i.quantity}`).join(', '),
-        amount: parseFloat(o.total_amount || 0),
-      };
-    }).sort((a, b) => a._sort.localeCompare(b._sort));   // oldest first, like a delivery note run
-
-    const doc = buildYearStatementDoc({
+    const doc = buildStatementDoc({
       custName: c.name, custAddress: c.address || '',
       periodLabel: range.label,
-      orders: rows,
-      total: rows.reduce((s, r) => s + r.amount, 0),
+      rows,
       count: rows.length,
+      total: rows.reduce((s, r) => s + r.total, 0),
+      paid:  rows.reduce((s, r) => s + r.paid,  0),
+      owed:  rows.reduce((s, r) => s + r.owed,  0),
     });
     if (!doc) { alert('PDF builder is still loading — please try again in a second.'); return; }
 
     const safeName = (c.name || 'customer').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-    const safePeriod = range.from === range.to ? range.from : `${range.from}_to_${range.to}`;
-    doc.save(`JG-Foods-statement-${safeName}-${safePeriod}.pdf`);
+    doc.save(`JG-Foods-statement-${safeName}-${range.from}_to_${range.to}.pdf`);
   } catch (e) {
     console.error('Statement failed:', e);
     alert('Could not build that statement — ' + (e.message || e));
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = label || '📄 Download statement (PDF)'; }
   }
+}
+
+// From the customer's record — uses the period dropdown there.
+async function downloadStatement(customerId, btn) {
+  const period = document.getElementById('stmt-period')?.value || 'this-week';
+  const range  = statementRange(period,
+    document.getElementById('stmt-from')?.value,
+    document.getElementById('stmt-to')?.value);
+  if (!range) { alert('Please pick a From and To date — and make sure the From date comes first.'); return; }
+  await generateStatement(customerId, range, btn);
+}
+
+// From the Invoices page — uses whatever dates are showing. This is the flow
+// Jon described: search the customer, tap This week, see their deliveries,
+// then print the one page that covers them all.
+async function statementFromInvoiceList(customerId, btn) {
+  const from = document.getElementById('inv-from')?.value || '';
+  const to   = document.getElementById('inv-to')?.value   || '';
+  const range = (from && to)
+    ? statementRange('custom', from, to)
+    : statementRange('this-week');
+  if (!range) { alert('Check the From and To dates — the From date needs to come first.'); return; }
+  await generateStatement(customerId, range, btn);
 }
 
 // ── A customer's invoices, on their own record ────────────────
@@ -7198,6 +7226,48 @@ function invoiceDateKey(inv) {
   return '';
 }
 
+// ── "Print them one page for the week" ────────────────────────
+// Appears the moment what's on screen is a single customer — search their
+// name, tap This week, and the button offers exactly the page Jon wants to
+// hand over: every delivery, what's paid, what's still owed. It only summarises
+// the invoices already listed, so nothing is billed twice.
+function renderStatementBar(shown) {
+  const el = document.getElementById('invoiceStatementBar');
+  if (!el) return;
+
+  const ids = [...new Set(shown.map(i => i.custId).filter(Boolean))];
+  const searching = (document.getElementById('inv-search')?.value || '').trim()
+                 || document.getElementById('inv-from')?.value
+                 || document.getElementById('inv-to')?.value;
+
+  if (!shown.length || ids.length !== 1 || !searching) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+
+  const name  = shown[0].name || 'this customer';
+  const total = shown.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+  const owed  = shown.reduce((s, i) => s + invBalance(i), 0);
+  const from  = document.getElementById('inv-from')?.value || '';
+  const to    = document.getElementById('inv-to')?.value   || '';
+  const when  = (from && to)
+    ? `${new Date(from + 'T12:00:00').toLocaleDateString('en-GB')} – ${new Date(to + 'T12:00:00').toLocaleDateString('en-GB')}`
+    : 'this week';
+
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div style="background:var(--cream);border:1px solid var(--gold);border-radius:11px;padding:13px 16px;margin-bottom:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px">
+        <div style="font-size:13.5px;font-weight:800;color:var(--navy)">${escapeHtmlAttr(name)} — ${shown.length} deliver${shown.length === 1 ? 'y' : 'ies'}, £${total.toFixed(2)}</div>
+        <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px">
+          ${owed > 0.001 ? `£${owed.toFixed(2)} still to pay · ` : 'All paid · '}One page for ${escapeHtmlAttr(when)}, showing each delivery and what's owed.
+        </div>
+      </div>
+      <button class="btn-add" style="font-size:12.5px;padding:10px 16px" onclick="statementFromInvoiceList('${ids[0]}', this)">📄 Statement for the customer</button>
+    </div>`;
+}
+
 function renderInvoices(filter) {
   const list = document.getElementById('invoiceList');
   if (!list) return;
@@ -7242,6 +7312,7 @@ function renderInvoices(filter) {
     shown.sort((a, b) => (invoiceAgeDays(b) ?? 0) - (invoiceAgeDays(a) ?? 0));
   }
 
+  renderStatementBar(shown);
   renderCombineHint(shown);
 
   // A one-line answer to "how much am I owed and by how many people",
@@ -10881,15 +10952,22 @@ async function downloadInvoicePDF() {
 }
 
 // ── Build a branded "year's orders" statement PDF (paginates over many rows) ──
-function buildYearStatementDoc(data) {
+// ── The weekly statement PDF ──────────────────────────────────
+// One page showing a customer their week: every delivery, what it came to,
+// what they've paid and what's still owed. It is NOT a bill — every line on
+// it has already been invoiced on the day, and saying so on the page is what
+// stops an accounts department paying the same meat twice.
+function buildStatementDoc(data) {
   const JS = window.jspdf && window.jspdf.jsPDF;
   if (!JS) return null;
   const NAVY=[22,39,63], NAVYD=[13,23,38], GOLD=[194,149,74], GOLDB=[224,189,114],
-        CREAM=[241,232,214], INK=[38,32,25], INKSOFT=[106,95,81], OX=[140,50,44];
+        CREAM=[241,232,214], INK=[38,32,25], INKSOFT=[106,95,81], OX=[140,50,44],
+        GREEN=[26,102,64];
   const doc = new JS({ unit:'pt', format:'a4' });
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
   const L = 48, R = W - 48;
-  const cDate = L, cDay = L + 95, cItems = L + 200, cTot = R;
+  // Six columns: date, invoice no, items, total, paid, owed.
+  const cDate = L, cRef = L + 66, cItems = L + 132, cTot = R - 150, cPaid = R - 78, cOwed = R;
 
   function header() {
     doc.setFillColor(...NAVYD).rect(0, 0, W, 104, 'F');
@@ -10901,24 +10979,25 @@ function buildYearStatementDoc(data) {
     doc.setFont('helvetica','normal').setFontSize(8.5).setTextColor(206,213,222);
     doc.text('07702 852 704   ·   jongreen347@gmail.com', L, 82);
     doc.setFont('helvetica','bold').setFontSize(15).setTextColor(255,255,255);
-    doc.text('ORDER STATEMENT', R, 50, { align:'right' });
+    doc.text('WEEKLY STATEMENT', R, 50, { align:'right' });
     doc.setFont('helvetica','normal').setFontSize(8.5).setTextColor(206,213,222);
-    doc.text('Issued: ' + new Date().toLocaleDateString('en-GB'), R, 68, { align:'right' });
-    doc.text('VAT No: 307458303', R, 80, { align:'right' });
+    doc.text('VAT No: 307458303', R, 68, { align:'right' });
   }
   function tableHead(y) {
     doc.setFillColor(...NAVY).rect(L, y - 13, R - L, 24, 'F');
-    doc.setFont('helvetica','bold').setFontSize(8.5).setTextColor(255,255,255);
-    doc.text('DATE', cDate + 6, y + 3);
-    doc.text('DELIVERY', cDay, y + 3);
+    doc.setFont('helvetica','bold').setFontSize(8).setTextColor(255,255,255);
+    doc.text('DELIVERED', cDate + 4, y + 3);
+    doc.text('INVOICE', cRef, y + 3);
     doc.text('ITEMS', cItems, y + 3);
-    doc.text('TOTAL', cTot - 8, y + 3, { align:'right' });
+    doc.text('TOTAL', cTot, y + 3, { align:'right' });
+    doc.text('PAID',  cPaid, y + 3, { align:'right' });
+    doc.text('OWED',  cOwed - 4, y + 3, { align:'right' });
     return y + 27;
   }
 
   header();
   let y = 150;
-  // Statement-for block
+
   doc.setFont('helvetica','bold').setFontSize(8).setTextColor(...GOLD);
   doc.text('STATEMENT FOR', L, y);
   doc.setFont('helvetica','bold').setFontSize(12).setTextColor(...NAVYD);
@@ -10929,52 +11008,72 @@ function buildYearStatementDoc(data) {
   }
   doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INKSOFT);
   doc.text('Period: ' + data.periodLabel, R, y + 16, { align:'right' });
-  doc.text(`${data.count} order${data.count !== 1 ? 's' : ''}`, R, y + 30, { align:'right' });
+  doc.text(`${data.count} deliver${data.count === 1 ? 'y' : 'ies'}`, R, y + 30, { align:'right' });
   y += 56;
   y = tableHead(y);
 
-  doc.setFont('helvetica','normal').setFontSize(9.5).setTextColor(...INK);
-  (data.orders || []).forEach((o, idx) => {
-    const itemLines = doc.splitTextToSize(o.itemsSummary || '—', cTot - cItems - 60);
-    const rowH = 13 * itemLines.length + 6;
-    if (y + rowH > H - 90) {            // page break
+  doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INK);
+  (data.rows || []).forEach((r, idx) => {
+    const itemLines = doc.splitTextToSize(r.itemsSummary || '—', cTot - cItems - 14);
+    const rowH = 12 * itemLines.length + 7;
+    if (y + rowH > H - 90) {
       doc.addPage(); header(); y = 150; y = tableHead(y);
-      doc.setFont('helvetica','normal').setFontSize(9.5).setTextColor(...INK);
+      doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INK);
     }
     if (idx % 2 === 1) doc.setFillColor(248,244,236).rect(L, y - 11, R - L, rowH, 'F');
     doc.setTextColor(...INK);
-    doc.text(o.dateFmt, cDate + 6, y);
-    doc.setTextColor(...INKSOFT); doc.text(o.day || '—', cDay, y);
-    doc.setTextColor(...INK); doc.text(itemLines, cItems, y);
-    doc.text('£' + (o.amount || 0).toFixed(2), cTot - 8, y, { align:'right' });
+    doc.text(r.dateFmt, cDate + 4, y);
+    doc.setTextColor(...INKSOFT); doc.setFontSize(8.5);
+    doc.text(r.ref || '', cRef, y);
+    doc.setFontSize(9).setTextColor(...INK);
+    doc.text(itemLines, cItems, y);
+    doc.text('£' + r.total.toFixed(2), cTot, y, { align:'right' });
+    doc.setTextColor(...GREEN);
+    doc.text(r.paid > 0 ? '£' + r.paid.toFixed(2) : '—', cPaid, y, { align:'right' });
+    doc.setTextColor(r.owed > 0.001 ? OX[0] : INKSOFT[0], r.owed > 0.001 ? OX[1] : INKSOFT[1], r.owed > 0.001 ? OX[2] : INKSOFT[2]);
+    doc.setFont('helvetica', r.owed > 0.001 ? 'bold' : 'normal');
+    doc.text(r.owed > 0.001 ? '£' + r.owed.toFixed(2) : '—', cOwed - 4, y, { align:'right' });
+    doc.setFont('helvetica','normal');
     y += rowH;
   });
 
-  // Grand total
-  if (y > H - 110) { doc.addPage(); header(); y = 150; }
+  // ── Totals ──
+  if (y > H - 150) { doc.addPage(); header(); y = 150; }
   doc.setDrawColor(...GOLD).setLineWidth(1.2).line(cItems, y + 2, R, y + 2);
+  y += 20;
+  doc.setFont('helvetica','bold').setFontSize(10).setTextColor(...NAVYD);
+  doc.text('Total for the period', cItems, y);
+  doc.text('£' + (data.total || 0).toFixed(2), cTot, y, { align:'right' });
+  doc.setTextColor(...GREEN);
+  doc.text('£' + (data.paid || 0).toFixed(2), cPaid, y, { align:'right' });
+  doc.setTextColor(...OX).setFontSize(12);
+  doc.text('£' + (data.owed || 0).toFixed(2), cOwed - 4, y, { align:'right' });
+  y += 18;
+  doc.setFont('helvetica','bold').setFontSize(11).setTextColor(...OX);
+  doc.text(data.owed > 0.001
+    ? 'Still to pay: £' + data.owed.toFixed(2)
+    : 'Fully paid — thank you', R, y, { align:'right' });
   y += 22;
-  doc.setFont('helvetica','bold').setFontSize(12).setTextColor(...NAVYD);
-  doc.text('Total for period', cItems, y);
-  doc.setFontSize(13).setTextColor(...OX);
-  doc.text('£' + (data.total || 0).toFixed(2), cTot - 8, y, { align:'right' });
-  y += 26;
 
-  // For a customer billed this way the statement is the ONLY document they
-  // receive, so it has to tell them how to pay. Without this they'd have a
-  // total and no way to settle it.
-  if (y > H - 140) { doc.addPage(); header(); y = 150; }
-  const boxH = 76;
-  doc.setFillColor(...CREAM).rect(L, y, R - L, boxH, 'F');
-  doc.setFillColor(...GOLD).rect(L, y, 4, boxH, 'F');
-  doc.setFont('helvetica','bold').setFontSize(9).setTextColor(...NAVYD);
-  doc.text('Bank details for payment', L + 16, y + 20);
-  doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INKSOFT);
-  doc.text('HSBC  ·  Mr J B Green', L + 16, y + 35);
-  doc.text('Account: 51476998   ·   Sort code: 40-31-33', L + 16, y + 48);
-  doc.setFont('helvetica','bold').setFontSize(9).setTextColor(...INK);
-  doc.text('Please use ' + (data.custName || 'your business name') + ' as your reference',
-           L + 16, y + 63);
+  // The line that stops it being paid twice.
+  doc.setFont('helvetica','normal').setFontSize(8.5).setTextColor(...INKSOFT);
+  doc.text('This is a summary of the invoices listed above, which were issued with each delivery. It is not an additional bill.',
+           L, y);
+  y += 18;
+
+  if (data.owed > 0.001) {
+    if (y > H - 120) { doc.addPage(); header(); y = 150; }
+    const boxH = 70;
+    doc.setFillColor(...CREAM).rect(L, y, R - L, boxH, 'F');
+    doc.setFillColor(...GOLD).rect(L, y, 4, boxH, 'F');
+    doc.setFont('helvetica','bold').setFontSize(9).setTextColor(...NAVYD);
+    doc.text('Bank details for payment', L + 16, y + 19);
+    doc.setFont('helvetica','normal').setFontSize(9).setTextColor(...INKSOFT);
+    doc.text('HSBC  ·  Mr J B Green', L + 16, y + 33);
+    doc.text('Account: 51476998   ·   Sort code: 40-31-33', L + 16, y + 46);
+    doc.setFont('helvetica','bold').setFontSize(9).setTextColor(...INK);
+    doc.text('Reference: ' + (data.custName || 'your business name'), L + 16, y + 60);
+  }
 
   doc.setFont('helvetica','normal').setFontSize(8).setTextColor(150,142,130);
   doc.text('Thank you for your custom  ·  JG Foods', W / 2, H - 30, { align:'center' });
@@ -12462,7 +12561,7 @@ const HELP_PAGES = {
     sections: [
       { icon:'👥', title:'What is this page?', body:'The Customers page is your full customer list — domestic and trade. You can search, filter, and open any customer to see their history.' },
       { icon:'🔍', title:'Finding a customer', body:'Type a name or postcode in the search bar at the top. Use the <strong>All / Domestic / Trade</strong> buttons to filter by customer type.' },
-      { icon:'🧾', title:'Statements — one summary for the customer', body:'Some trade customers don\'t want a bill for every drop, they want one summary. Open the customer and use <strong>Statement for the customer</strong>: pick <strong>This week</strong> (it prints as "week commencing"), last week, a month, a quarter, a year, or <strong>choose your own dates</strong>, then <strong>Download statement</strong>.<br><br>You get a branded PDF listing every delivery in that period — the date, what they had, and each delivery\'s total — with the total for the period and your bank details at the bottom, so they can pay straight from it.<br><br><strong>It changes nothing on your side.</strong> It isn\'t an invoice, it has no invoice number, and it doesn\'t touch your takings or your figures. Your own invoice for each delivery stays exactly as it is. Run one as often as you like.' },
+      { icon:'🧾', title:'Weekly statement — one page for the customer', body:'Every delivery gets its own invoice, which you hand over on the day. On top of that, a customer can have <strong>one page covering a whole period</strong>. Open them and use <strong>Statement for the customer</strong>: pick <strong>This week</strong>, last week, a month, a quarter, a year, or <strong>choose your own dates</strong>, then <strong>Download statement</strong>. (You can also do it straight from the Invoices page — search their name, tap This week, and press the gold button.)<br><br>The page lists <strong>every delivery: the date, what they had, the total, what they\'ve paid and what\'s still owed</strong>, with the totals at the bottom and your bank details if anything is outstanding.<br><br><strong>It is not another bill.</strong> It just adds up the invoices you\'ve already given them, and says so on the page so nobody pays twice. It doesn\'t touch your takings, your figures or your invoices, and it updates itself as you log payments.' },
       { icon:'📄', title:'Their invoices, on their record', body:'Open any customer and you\'ll see <strong>Invoices &amp; receipts</strong> — every bill you\'ve raised for them, newest first, with what\'s still owed shown at the top right. A pub with three deliveries a week has three invoices and they\'re all listed. <strong>Tap any one to open it</strong>, then download or send it from there. For the full history, or to pull up one particular week, use the Invoices page.' },
       { icon:'📧', title:'Their account email', body:'Open a customer\'s <strong>Edit</strong> and you\'ll see their <strong>Account email</strong> — the address they signed up with on the website. It\'s shown for reference and can\'t be changed here (it\'s their login). Customers you added by hand show "No account".' },
       { icon:'⭐', title:'Exempt customers', body:'Family and friends who shouldn\'t be charged the £5 small-order fee can be marked as <strong>Exempt</strong> on their profile. Tick the box in their customer record.' },
@@ -12524,6 +12623,7 @@ const HELP_PAGES = {
       { icon:'➕', title:'Building one by hand', body:'Need a one-off? Select the customer — their details fill in automatically. For each line, pick an item from the <strong>availability list</strong> (the price fills in — a trade customer\'s <strong>agreed trade price</strong> is used automatically where you\'ve set one) or choose <strong>✏️ Custom item</strong> for something you\'ve sourced specially, with its own description and price. Press <strong>Generate invoice</strong> to preview, then <strong>Save invoice</strong>. It picks receipt or invoice automatically based on the customer.' },
       { icon:'🛒', title:'One-off items you\'ve sourced for a customer', body:'A trade customer asks you to get them something that\'s not on your list? Two easy ways to bill it: build an invoice by hand and use <strong>✏️ Custom item</strong> for each special line, or — if they\'ve already got an order that day — open the order on the delivery run, tap <strong>➕ Add an item</strong>, and type the one-off item with its price. Either way it lands on their invoice like anything else.' },
       { icon:'🔍', title:'Finding an invoice', body:'Don\'t scroll — use the <strong>Search</strong> box above the list. Type any part of a customer\'s name or an invoice number and the list narrows as you type. Press <strong>Clear</strong> to go back to everything. The All / Running / Unpaid / Paid / Overdue buttons still work on top of the search.' },
+      { icon:'🧾', title:'One page for their week — the weekly statement', body:'Every delivery gets its own invoice, which you hand over on the day. When a customer wants <strong>one page covering the week</strong>, search their name and tap <strong>This week</strong> — a gold bar appears above the list with <strong>📄 Statement for the customer</strong>. That gives you a single branded page listing <strong>every delivery, what they had, what it came to, what they\'ve paid and what\'s still owed</strong>, with the totals at the bottom and your bank details if there\'s anything outstanding.<br><br>It is <strong>not another bill</strong> — it just adds up the invoices you\'ve already given them, and it says so on the page so their accounts department can\'t pay twice. Nothing is added to your takings and nothing changes on your side. As soon as you log a payment, the next one you print shows it. Print it as often as you like.' },
       { icon:'📆', title:'One customer\'s week — the quick way', body:'Type the customer\'s name in <strong>Search</strong>, then tap <strong>This week</strong> under "Jump to". You get every invoice for that customer this week, however many deliveries they\'ve had, with the <strong>number of invoices and the total</strong> shown just above the list. <strong>Last week</strong> and <strong>This month</strong> work the same way. Tap the same button again to come back out. Weeks run Monday to Sunday.' },
       { icon:'📅', title:'Any other dates', body:'Use <strong>From</strong> and <strong>To</strong> to pick your own range — on their own, or alongside a search. These go by the <strong>delivery date</strong>, so asking for a week gives you that week\'s deliveries, not whatever happened to be typed up that week.' },
       { icon:'🔁', title:'Copying a recent order onto an invoice', body:'Building an invoice by hand for a regular? Pick the customer and a <strong>Copy a recent order</strong> panel appears. Tap <strong>Use this</strong> and that order\'s items drop straight in as invoice lines at the prices they were charged. Tap a second one to add it underneath — handy for putting Monday\'s and Thursday\'s deliveries on one weekly invoice. If the order went to a named site, its heading goes in automatically.' },
