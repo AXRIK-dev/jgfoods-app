@@ -731,6 +731,7 @@
       <div class="tn-link" id="nav-graphics" onclick="showPage('graphics')">🎨 Graphics</div>
       <div class="tn-link" onclick="showPage('temps')">🌡️ Temps</div>
       <div class="tn-link" id="nav-invoices" onclick="showPage('invoices')">📄 Invoices</div>
+      <div class="tn-link" onclick="showPage('support')">💡 Help</div>
     </div>
     <button class="tn-burger" id="nav-burger" onclick="toggleNav()" aria-label="Menu" aria-expanded="false">
       <span></span><span></span><span></span>
@@ -2093,6 +2094,44 @@
       <button class="btn-navy" style="font-size:12.5px;padding:10px 16px" onclick="checkOldRecords(this)">Check for old records now</button>
       <div id="retentionResult" style="margin-top:14px"></div>
     </div>
+  </div>
+</div>
+
+
+<!-- ============ SUPPORT / "HOW DO I…" ============
+     Jon messages Phil whenever he's stuck, because the help guide is
+     organised by PAGE and he doesn't always know which page his problem
+     lives on. This flips it round: he describes the problem in his own
+     words — typed or spoken — and the AI works out where it belongs.
+     Its knowledge is the same HELP_PAGES guide Phil already updates on
+     every change, so it can't drift out of date. -->
+<div class="page" id="page-support">
+  <div class="pagehead">
+    <div>
+      <div class="eyebrow">Help</div>
+      <h1>💡 Ask for help</h1>
+      <p>Stuck, or not sure where something lives? Say what you're trying to do in your own words — no need to know what it's called.</p>
+    </div>
+  </div>
+
+  <div class="dash-card" style="max-width:780px">
+    <label style="display:block;font-size:13px;font-weight:800;color:var(--navy);margin-bottom:7px">What are you trying to do?</label>
+    <textarea id="sup-q" rows="3" placeholder="e.g. how do I put an order in for Friday, or a customer paid me half in cash, or I need to see what the pub owes me"
+      style="width:100%;background:var(--paper);border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;font-size:14px;font-family:var(--body);resize:vertical"></textarea>
+
+    <div style="display:flex;gap:9px;margin-top:11px;flex-wrap:wrap;align-items:center">
+      <button class="btn-add" style="padding:12px 18px;font-size:13.5px" onclick="askSupport(this)">Get help</button>
+      <button id="sup-mic" style="padding:12px 16px;border-radius:9px;font-weight:800;font-size:13px;background:var(--cream);border:1px solid var(--line);color:var(--ink);cursor:pointer;font-family:var(--body)" onclick="toggleSupportMic()">🎤 Or just talk</button>
+      <span id="sup-mic-note" style="font-size:11.5px;color:var(--ink-soft)"></span>
+    </div>
+
+    <div id="sup-answer" style="margin-top:20px"></div>
+  </div>
+
+  <div class="dash-card" style="max-width:780px;margin-top:18px">
+    <h3 style="margin-bottom:6px">Common ones</h3>
+    <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px">Tap any of these to ask it.</p>
+    <div id="sup-suggestions" style="display:flex;flex-wrap:wrap;gap:8px"></div>
   </div>
 </div>
 
@@ -3574,6 +3613,7 @@ function showPage(id) {
   if (id === 'customers') renderCustomers();
   if (id === 'finance')   renderFinance();
   if (id === 'invoices')  { populateInvoiceCustomerSelect(); renderInvoices(); }
+  if (id === 'support')   renderSupportSuggestions();
   if (id === 'users')     openUsersPage();
   if (id === 'dashboard') renderDashboard();
   if (id === 'schedule')  loadSchedule();
@@ -7118,38 +7158,99 @@ function invoiceAgeLabel(inv) {
   return `${Math.floor(d / 30)} months`;
 }
 
-// ── Chase a payment ───────────────────────────────────────────
-// A reminder, not a demand. Jon rebuilt this business on relationships and
-// cold calling — a stiff letter would cost him more than the invoice is
-// worth. It opens in WhatsApp pre-written so he can change a word before it
-// goes, and it quotes the balance still owed rather than the invoice total,
-// so a part-paid customer is never asked for money he's already sent.
-function chaseInvoice(invId) {
-  const inv = sampleInvoices.find(i => i.id === invId);
-  if (!inv) return;
-  const cust = sampleCustomers.find(c => c.id === inv.custId);
-  const wa   = toWhatsAppNumber(cust?.phone || '');
+// ── The chase list, grouped by customer ───────────────────────
+// One card per customer who owes money: what each delivery day came to,
+// then their total. Longest-waiting customer first, because that's the
+// order you work down the phone in.
+function renderChaseList(shown) {
+  const byCust = new Map();
+  shown.forEach(inv => {
+    const key = inv.custId || ('__' + inv.name);
+    if (!byCust.has(key)) byCust.set(key, { name: inv.name, custId: inv.custId, invs: [] });
+    byCust.get(key).invs.push(inv);
+  });
 
-  const bal   = invBalance(inv);
-  const first = (inv.name || 'there').split(' ')[0];
-  const when  = inv.weekStart ? `week commencing ${new Date(inv.weekStart + 'T12:00:00').toLocaleDateString('en-GB')}`
-              : inv.deliveryDate ? `your delivery on ${new Date(String(inv.deliveryDate).slice(0,10) + 'T12:00:00').toLocaleDateString('en-GB')}`
-              : `invoice ${inv.ref}`;
-  const part  = invPaidTotal(inv) > 0.001 ? ' (the balance after what you\'ve already paid)' : '';
+  const groups = [...byCust.values()].map(g => {
+    g.invs.sort((a, b) => (invoiceAgeDays(b) ?? 0) - (invoiceAgeDays(a) ?? 0));
+    g.owed   = g.invs.reduce((s, i) => s + invBalance(i), 0);
+    g.oldest = Math.max(...g.invs.map(i => invoiceAgeDays(i) ?? 0));
+    g.phone  = invCustPhone(g.invs[0]);
+    return g;
+  }).sort((a, b) => b.oldest - a.oldest);
 
-  const msg = `Hi ${first}, hope you're well! Just a gentle reminder about ${when} — invoice ${inv.ref}, £${bal.toFixed(2)} still outstanding${part}.\n\n`
-    + `Bank transfer is easiest: HSBC, Mr J B Green, Acc 51476998, Sort 40-31-33, ref ${inv.ref}.\n\n`
-    + `No rush if it's already on its way. Any questions just give me a shout. Thanks! Jon — JG Foods, 07702 852704`;
+  return groups.map(g => {
+    const stale = g.oldest >= 30;
+    const lines = g.invs.map(inv => {
+      const bal  = invBalance(inv);
+      const paid = invPaidTotal(inv);
+      const when = inv.weekStart ? weekLabel(inv.weekStart) : (inv.date || '');
+      return `
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--line-soft);font-size:12.5px">
+          <div style="flex:1;min-width:0;cursor:pointer" onclick="viewInvoice('${inv.id}')" title="Tap to open this invoice">
+            <span style="font-weight:700;color:var(--ink)">${escapeHtmlAttr(when)}</span>
+            <span style="color:var(--ink-soft)"> · ${escapeHtmlAttr(inv.ref || '')}</span>
+            ${paid > 0.001 ? `<span style="color:#1a4fad;font-weight:700"> · £${paid.toFixed(2)} paid</span>` : ''}
+          </div>
+          <div style="font-weight:800;color:var(--oxblood);min-width:66px;text-align:right">£${bal.toFixed(2)}</div>
+          <button style="font-size:11px;font-weight:700;padding:5px 9px;border-radius:7px;background:var(--oxblood);color:#fff;cursor:pointer;border:none;white-space:nowrap" onclick="openPaymentModal('${inv.id}')">Log payment</button>
+        </div>`;
+    }).join('');
+
+    return `
+      <div style="background:#fff;border:1px solid ${stale ? '#e7bcbc' : 'var(--line-soft)'};border-radius:11px;padding:13px 15px;box-shadow:0 4px 12px -10px rgba(13,23,38,.4)">
+        <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:180px">
+            <div style="font-size:15px;font-weight:800;color:var(--ink)">${escapeHtmlAttr(g.name)}</div>
+            <div style="font-size:11.5px;margin-top:2px;font-weight:700;color:${stale ? '#a00' : 'var(--ink-soft)'}">
+              ⏳ Waiting ${invoiceAgeLabel(g.invs[0])}${g.phone ? ` · <a href="tel:${escapeHtmlAttr(g.phone.replace(/[^\d+]/g, ''))}" style="color:var(--navy);text-decoration:underline">${escapeHtmlAttr(g.phone)}</a>` : ''}
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-family:var(--display);font-size:20px;font-weight:600;color:var(--oxblood)">£${g.owed.toFixed(2)}</div>
+            <div style="font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.5px">${g.invs.length} deliver${g.invs.length === 1 ? 'y' : 'ies'}</div>
+          </div>
+          <button style="font-size:12px;font-weight:800;padding:9px 14px;border-radius:8px;background:#1a6640;color:#fff;cursor:pointer;border:none;white-space:nowrap" onclick="chaseCustomer('${g.custId || ''}','${escapeHtmlAttr(g.name).replace(/'/g, "\\'")}')">💬 Chase</button>
+        </div>
+        <div style="margin-top:8px">${lines}</div>
+      </div>`;
+  }).join('');
+}
+
+// One message covering everything a customer owes, laid out the way Jon
+// would say it on the phone: each day, then the total. Chasing twice for
+// two deliveries in the same week is the thing he wanted rid of.
+function chaseCustomer(custId, fallbackName) {
+  const invs = (sampleInvoices || [])
+    .filter(i => (custId ? i.custId === custId : i.name === fallbackName))
+    .filter(i => (i.status === 'sent' || i.status === 'overdue') && invBalance(i) > 0.001)
+    .sort((a, b) => String(invoiceDateKey(a)).localeCompare(String(invoiceDateKey(b))));
+
+  if (!invs.length) { alert('Nothing outstanding for this customer.'); return; }
+
+  const name  = invs[0].name || fallbackName || 'there';
+  const first = String(name).split(' ')[0];
+  const total = invs.reduce((s, i) => s + invBalance(i), 0);
+  const cust  = sampleCustomers.find(c => c.id === (custId || invs[0].custId));
+  const wa    = toWhatsAppNumber(cust?.phone || '');
+
+  const lines = invs.map(i => {
+    const when = i.weekStart ? weekLabel(i.weekStart) : (i.date || '');
+    return `${when} (${i.ref}) — £${invBalance(i).toFixed(2)}`;
+  }).join('\n');
+
+  const msg = `Hi ${first}, hope you're well! Just a gentle reminder on the below:\n\n${lines}\n\n`
+    + `Total outstanding: £${total.toFixed(2)}\n\n`
+    + `Bank transfer is easiest: HSBC, Mr J B Green, Acc 51476998, Sort 40-31-33 — reference ${name}.\n\n`
+    + `No rush if it's already on its way. Any questions just shout. Thanks! Jon — JG Foods, 07702 852704`;
 
   if (!wa) {
-    // No number saved — don't silently do nothing, and don't lose the wording
-    // he was about to send.
     navigator.clipboard?.writeText(msg);
-    alert(`There's no phone number saved for ${inv.name}.\n\nThe reminder has been copied — paste it into a message, or add their number on their customer record and the button will work next time.`);
+    alert(`There's no phone number saved for ${name}.\n\nThe reminder has been copied — paste it into a message, or add their number on their customer record and the button will work next time.`);
     return;
   }
   window.open(`https://wa.me/${wa}?text=${encodeURIComponent(msg)}`, '_blank');
 }
+
 
 // ── One-tap date periods ──────────────────────────────────────
 // Fills the From/To boxes for the periods Jon actually asks for. It leaves
@@ -7366,11 +7467,12 @@ function renderInvoices(filter) {
       const owed = shown.reduce((s, i) => s + invBalance(i), 0);
       const oldest = invoiceAgeLabel(shown[0]);
       chaseBar.style.display = 'block';
+      const people = new Set(shown.map(i => i.custId || i.name)).size;
       chaseBar.innerHTML = `
         <div style="background:var(--navy);color:#fff;border-radius:11px;padding:13px 16px;margin-bottom:12px">
-          <div style="font-size:15px;font-weight:800">£${owed.toFixed(2)} owed across ${shown.length} invoice${shown.length !== 1 ? 's' : ''}</div>
+          <div style="font-size:15px;font-weight:800">£${owed.toFixed(2)} owed by ${people} customer${people !== 1 ? 's' : ''}</div>
           <div style="font-size:11.5px;color:#cfd6e0;margin-top:3px">
-            Oldest first${oldest ? ' — longest waiting is ' + oldest : ''}. Tap 💬 Chase to send a friendly reminder.
+            ${shown.length} deliver${shown.length === 1 ? 'y' : 'ies'} in total, grouped by customer${oldest ? ' — longest waiting is ' + oldest : ''}. One 💬 Chase covers everything they owe.
           </div>
         </div>`;
     } else {
@@ -7388,6 +7490,12 @@ function renderInvoices(filter) {
     }</div>`;
     return;
   }
+  // Chasing is a per-CUSTOMER job, not a per-invoice one. Jon rings a pub
+  // once about the £340 they owe, not twice about £151 and £189 — so in
+  // chase mode the list groups by customer, with a line per delivery day
+  // underneath and one total. Every other view stays one row per invoice.
+  if (chasing) { list.innerHTML = renderChaseList(shown); return; }
+
   list.innerHTML = shown.map(inv => {
     const paid = invPaidTotal(inv);
     const bal  = invBalance(inv);
@@ -7414,7 +7522,6 @@ function renderInvoices(filter) {
         <div style="font-size:14px;font-weight:800;color:var(--ink);margin-top:2px">${inv.name}</div>
         <div style="font-size:11px;color:var(--ink-soft);margin-top:2px">${isWeekly ? weekLabel(inv.weekStart) + (isDraft ? ' · still collecting' : '') : (isDraft ? 'Still collecting deliveries — ' + inv.date : inv.date)}${payNote ? ' · ' + payNote : ''}</div>
         ${partPaid ? `<div style="font-size:11px;color:#1a4fad;margin-top:2px;font-weight:700">£${paid.toFixed(2)} paid · £${bal.toFixed(2)} remaining</div>` : ''}
-        ${chasing && !isDraft ? `<div style="font-size:11px;margin-top:3px;font-weight:800;color:${(invoiceAgeDays(inv) ?? 0) >= 30 ? '#a00' : 'var(--oxblood)'}">⏳ Waiting ${invoiceAgeLabel(inv)}${invCustPhone(inv) ? ' · ' + escapeHtmlAttr(invCustPhone(inv)) : ''}</div>` : ''}
         ${claimsPaid ? `<div style="font-size:11px;color:#b06000;margin-top:2px;font-weight:700">Marked paid but no money recorded — it isn't in your takings</div>` : ''}
       </div>
       <div style="font-family:var(--display);font-size:17px;font-weight:600;color:var(--navy);min-width:70px;text-align:right">£${inv.amount.toFixed(2)}</div>
@@ -7423,7 +7530,6 @@ function renderInvoices(filter) {
         ${isDraft
           ? `<button style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:var(--navy);color:#fff;cursor:pointer;border:none" onclick="finalizeInvoice('${inv.id}')" title="Close this running tab and send it — the next order for this customer starts a fresh one">Finalise &amp; send</button>`
           : (bal > 0.001 ? `
-              ${chasing ? `<button style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:#1a6640;color:#fff;cursor:pointer;border:none" onclick="chaseInvoice('${inv.id}')" title="Send ${escapeHtmlAttr(inv.name)} a friendly reminder on WhatsApp">💬 Chase</button>` : ''}
               <button style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;background:var(--oxblood);color:#fff;cursor:pointer;border:none" onclick="openPaymentModal('${inv.id}')" title="${claimsPaid ? 'This is marked paid but no money has been recorded against it — log it so it counts in your takings' : 'Record the money for this invoice'}">Log payment</button>` : '')}
         <div class="actions-wrap">
           <button class="actions-btn" style="font-size:11px;padding:6px 12px" id="ia-${inv.id}" onclick="toggleActionsMenu('iam-${inv.id}','ia-${inv.id}')">
@@ -12545,6 +12651,16 @@ document.querySelector('.item-product').addEventListener('change', updateLogTota
 <script>
 // ============ HELP DATA ============
 const HELP_PAGES = {
+  support: {
+    label: 'Ask for help',
+    sections: [
+      { icon:'\ud83d\udca1', title:'What is this page?', body:'Stuck on something, or not sure where it lives? Come here and <strong>say what you\'re trying to do in your own words</strong> — you don\'t need to know what it\'s called. Type it in the box, or press <strong>\ud83c\udfa4 Or just talk</strong> and say it out loud, then press <strong>Get help</strong>.' },
+      { icon:'\u2705', title:'What you get back', body:'If the app can do it, you get <strong>the steps in order</strong> — exactly which buttons to press — plus a <strong>Take me there</strong> button that jumps you straight to the right page. No hunting about.' },
+      { icon:'\u2709\ufe0f', title:'When it\'s something the app can\'t do yet', body:'It\'ll tell you straight, and then <strong>write the message to Phil for you</strong> explaining what you were after. Change any of it you like, then press <strong>\ud83d\udcac Send to Phil on WhatsApp</strong> — or Copy it instead. You don\'t have to explain it yourself.' },
+      { icon:'\ud83e\udde0', title:'It knows this app, nothing else', body:'It only answers from your own help guide, so it won\'t make things up or tell you about features you haven\'t got. Every time Phil changes something in the app, the guide is updated and this knows about it straight away.' },
+      { icon:'\ud83d\udc46', title:'Common ones', body:'Underneath the box there are buttons for the questions that come up most. Tap one and it asks it for you — quickest way to find your way round.' },
+    ]
+  },
   dashboard: {
     label: 'Dashboard',
     sections: [
@@ -12735,7 +12851,7 @@ const HELP_PAGES = {
       { icon:'↩️', title:'Logged a payment by mistake', body:'Press the <strong>×</strong> next to it in the Log payment box. It asks you to confirm, then removes it and puts the day\'s takings back to what they should be. If the invoice was marked paid it goes back to unpaid.' },
       { icon:'🔀', title:'Split payments', body:'If a customer pays part in cash and part by bank transfer, just log both separately using <strong>Log payment</strong>. Each entry shows up on the invoice with its method and amount. The remaining balance updates as you go.' },
       { icon:'↔️', title:'Marked it cash when it was bank (or the other way round)', body:'Easily fixed — nothing needs deleting. On the invoice, press <strong>Log payment</strong> and each payment listed has a small <strong>↔ Cash / ↔ Bank</strong> button next to it; press it, confirm, and it swaps over. From an order on the run there\'s a <strong>“Wrong one? Change to…”</strong> link under the Payment line that does the same thing. The amount and the date stay exactly as they were, the invoice stays paid, and your cash and bank figures for that day correct themselves straight away.' },
-      { icon:'💬', title:'Chasing money owed', body:'On the <strong>Dashboard</strong> tap the <strong>Unpaid invoices</strong> card, or on <strong>Finance</strong> tap <strong>Unpaid</strong> or <strong>Overdue</strong>. It takes you straight to a chase list — <strong>whoever\'s been waiting longest at the top</strong>, with a navy bar telling you the total owed and how many. Each one shows <strong>how long it\'s been waiting</strong> and their phone number, so you can ring them there and then. Tap <strong>💬 Chase</strong> and a polite reminder opens in WhatsApp already written — the invoice number, what\'s still owed and your bank details. Read it, change anything you like, press send. If someone\'s part paid it only asks for the balance, never the full amount again.' },
+      { icon:'💬', title:'Chasing money owed', body:'On the <strong>Dashboard</strong> tap the <strong>Unpaid invoices</strong> card, or on <strong>Finance</strong> tap <strong>Unpaid</strong> or <strong>Overdue</strong>. That takes you to your chase list.<br><br>It\'s <strong>one card per customer</strong>, not one per invoice — so a pub who\'s had two drops this week shows as <strong>one job</strong> with their total, and each day listed underneath (Mon £151, Thu £189). <strong>Whoever\'s waited longest is at the top</strong>, with how long it\'s been and their phone number — tap the number to ring them there and then.<br><br>Tap <strong>💬 Chase</strong> and a polite WhatsApp reminder opens ready written, covering <strong>everything that customer owes in one message</strong> — each day, each amount, the total and your bank details. Read it, change anything you like, send.<br><br>When they pay, press <strong>Log payment</strong> on the day it was for. If someone\'s part paid, it only ever asks for what\'s left.' },
       { icon:'🔴', title:'Overdue invoices', body:'Any invoice not paid <strong>30 days after the delivery</strong> turns <strong>Overdue</strong> and shows in red, and the waiting time on the chase list turns red with it. You\'ll see a count on the Dashboard and on Finance too.' },
     ]
   },
@@ -12760,6 +12876,279 @@ Object.entries(HELP_PAGES).forEach(([pageKey, page]) => {
     ALL_HELP_TOPICS.push({ pageKey, pageLabel: page.label, ...section });
   });
 });
+
+
+// ============ SUPPORT: "tell me what you're trying to do" ============
+// Jon's help guide is organised by PAGE, which only helps if you already
+// know which page your problem lives on. He doesn't, so he messages Phil
+// instead. This takes the problem in his own words and does the mapping
+// for him — and when the app genuinely can't do the thing, it writes the
+// message to Phil rather than leaving Jon to explain it himself.
+//
+// The AI's knowledge is HELP_PAGES, the same guide that gets updated with
+// every change. No second copy of the truth to fall out of date.
+
+const SUPPORT_PHIL_WHATSAPP = '447581278408';   // Phil — AXRIK
+
+const SUPPORT_EXAMPLES = [
+  'How do I put an order in for Friday?',
+  'A customer paid half cash, half bank',
+  'What does this pub still owe me?',
+  'I need to send someone last week\'s invoices',
+  'How do I put my prices up?',
+  'Someone wants to go on holiday hold',
+  'I marked something paid by mistake',
+  'How do I add a new delivery day?',
+];
+
+function renderSupportSuggestions() {
+  const wrap = document.getElementById('sup-suggestions');
+  if (!wrap) return;
+  wrap.innerHTML = SUPPORT_EXAMPLES.map(q =>
+    `<button class="inv-period" onclick="askSupportWith(${JSON.stringify(q).replace(/"/g, '&quot;')})">${escapeHtmlAttr(q)}</button>`
+  ).join('');
+}
+
+function askSupportWith(q) {
+  const box = document.getElementById('sup-q');
+  if (box) box.value = q;
+  askSupport(document.querySelector('#page-support .btn-add'));
+}
+
+// Flatten the help guide into something searchable, keeping the page each
+// section belongs to so we can offer a "take me there" button.
+function supportKnowledge() {
+  const out = [];
+  Object.entries(HELP_PAGES || {}).forEach(([key, page]) => {
+    (page.sections || []).forEach(sec => {
+      out.push({
+        page: key,
+        pageLabel: page.label || key,
+        title: sec.title || '',
+        // Strip the HTML so the AI reads words, not markup.
+        body: String(sec.body || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+      });
+    });
+  });
+  return out;
+}
+
+// The fallback when the AI is unreachable: a plain word match over the same
+// guide. Not as clever, but it still gets him to the right section — which
+// beats an error message and a dead end.
+function supportKeywordSearch(q) {
+  const words = String(q).toLowerCase().match(/[a-z']{3,}/g) || [];
+  const stop = new Set(['the','and','for','how','can','you','with','this','that','have','was','are',
+    'from','out','get','got','not','but','all','any','use','using','does','did','into','off','see','put','one','two','need','want','make']);
+  const terms = words.filter(w => !stop.has(w));
+  if (!terms.length) return [];
+  return supportKnowledge().map(sec => {
+    const hay = (sec.title + ' ' + sec.body).toLowerCase();
+    let score = 0;
+    terms.forEach(t => {
+      if (sec.title.toLowerCase().includes(t)) score += 3;
+      if (hay.includes(t)) score += 1;
+    });
+    return { ...sec, score };
+  }).filter(s => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+}
+
+async function askSupport(btn) {
+  const q = (document.getElementById('sup-q')?.value || '').trim();
+  const out = document.getElementById('sup-answer');
+  if (!out) return;
+  if (!q) {
+    out.innerHTML = supportNote('Type what you\'re trying to do first — or press 🎤 and just say it.');
+    return;
+  }
+
+  supportLastQ = q;
+  const label = btn ? btn.textContent : 'Get help';
+  if (btn) { btn.disabled = true; btn.textContent = 'Having a look…'; }
+  out.innerHTML = supportNote('Reading through your guide…');
+
+  try {
+    const know = supportKnowledge();
+    const resp = await fetch('/.netlify/functions/ai', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        max_tokens: 700,
+        system: `You are the in-app helper for JG Foods' admin app, used by Jon Green, a mobile butcher. Jon is NOT technical and reads at 4am before a delivery run. Answer in plain, warm UK English, short sentences, no jargon, never mention code, databases or settings files. Refer to buttons by exactly the words shown on them. Return ONLY valid minified JSON, no markdown fences.`,
+        prompt: `Here is the complete guide to the app, as JSON. Each entry has: page (the internal page key), pageLabel (what the tab is called), title, body.
+
+${JSON.stringify(know)}
+
+Jon says: """${q}"""
+
+Work out what he is trying to do and answer using ONLY the guide above.
+
+Return JSON with exactly these keys:
+- "canDo": true if the guide shows the app can do this, false if it genuinely cannot
+- "answer": 1-4 short numbered steps telling him exactly what to tap, in order. Plain sentences. If canDo is false, instead explain in one or two sentences what the app does today and why what he wants isn't there yet.
+- "page": the page key he needs (must be one of the "page" values above), or "" if none applies
+- "pageLabel": the matching pageLabel, or ""
+- "messageToPhil": if canDo is false, a short friendly message FROM Jon TO Phil describing what he wants and why, in Jon's plain voice, ready to send. Otherwise "".`,
+      }),
+    });
+
+    if (!resp.ok) throw new Error('AI unavailable');
+    const data = await resp.json();
+    if (!data.text) throw new Error('AI returned nothing');
+
+    const clean = data.text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+    const r = JSON.parse(clean);
+    out.innerHTML = supportAnswerHtml(r, q);
+  } catch (e) {
+    console.error('Support AI failed:', e);
+    // Graceful fallback — the guide is still here even when the AI isn't.
+    const hits = supportKeywordSearch(q);
+    out.innerHTML = hits.length
+      ? `${supportNote('The smart search is having a moment, so here\'s the closest I can find in your guide.')}
+         ${hits.map(h => `
+           <div style="background:#fff;border:1px solid var(--line-soft);border-radius:11px;padding:14px 16px;margin-top:10px">
+             <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:var(--ink-soft);font-weight:700">${escapeHtmlAttr(h.pageLabel)}</div>
+             <div style="font-size:14px;font-weight:800;color:var(--navy);margin:2px 0 6px">${escapeHtmlAttr(h.title)}</div>
+             <div style="font-size:13px;color:var(--ink);line-height:1.55">${escapeHtmlAttr(h.body).slice(0, 400)}…</div>
+             <button class="btn-add" style="margin-top:10px;font-size:12.5px;padding:9px 14px" onclick="showPage('${h.page}')">Take me to ${escapeHtmlAttr(h.pageLabel)}</button>
+           </div>`).join('')}`
+      : `${supportNote('I couldn\'t find that in your guide, and the smart search is offline just now.')}
+         ${supportPhilBox(`Hi Phil, I'm trying to do this on the app and can't work it out:\n\n"${q}"\n\nCan you have a look when you get a minute? Thanks, Jon`)}`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+}
+
+// Held so the "send it to Phil instead" link doesn't have to smuggle Jon's
+// own wording through an inline onclick, where one stray apostrophe in what
+// he typed would break the button.
+let supportLastQ = '';
+
+function supportEscalate() {
+  const out = document.getElementById('sup-answer');
+  if (!out) return;
+  out.innerHTML = supportPhilBox(
+    "Hi Phil, I asked the app about this and it didn't quite answer it:\n\n\"" +
+    supportLastQ + "\"\n\nCan you have a look when you get a minute? Thanks, Jon"
+  );
+}
+
+function supportNote(text) {
+  return `<p style="font-size:13px;color:var(--ink-soft);background:var(--cream);border:1px solid var(--line);border-radius:9px;padding:11px 14px">${escapeHtmlAttr(text)}</p>`;
+}
+
+function supportAnswerHtml(r, q) {
+  const steps = String(r.answer || '').trim();
+  if (r.canDo) {
+    return `
+      <div style="background:#fff;border:1px solid var(--line-soft);border-left:4px solid var(--green, #1a6640);border-radius:11px;padding:16px 18px">
+        <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:#1a6640;font-weight:800">Yes — here's how</div>
+        <div style="font-size:14px;color:var(--ink);line-height:1.65;margin-top:8px;white-space:pre-line">${escapeHtmlAttr(steps)}</div>
+        ${r.page && HELP_PAGES[r.page]
+          ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+               <button class="btn-add" style="font-size:12.5px;padding:10px 15px" onclick="showPage('${r.page}')">Take me to ${escapeHtmlAttr(r.pageLabel || HELP_PAGES[r.page].label)}</button>
+               <button style="font-size:12.5px;padding:10px 15px;border-radius:9px;font-weight:800;background:var(--cream);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer;font-family:var(--body)" onclick="showPage('${r.page}');setTimeout(openHelp,300)">Open the full guide for it</button>
+             </div>`
+          : ''}
+      </div>
+      <p style="font-size:12px;color:var(--ink-soft);margin-top:12px">Not what you meant? Reword it above and ask again — or
+        <a onclick="supportEscalate()" style="color:var(--navy);font-weight:700;text-decoration:underline;cursor:pointer">send it to Phil instead</a>.</p>`;
+  }
+  return `
+    <div style="background:#fff;border:1px solid var(--line-soft);border-left:4px solid var(--gold);border-radius:11px;padding:16px 18px">
+      <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:#b06000;font-weight:800">The app can't do that yet</div>
+      <div style="font-size:14px;color:var(--ink);line-height:1.65;margin-top:8px;white-space:pre-line">${escapeHtmlAttr(steps)}</div>
+    </div>
+    ${supportPhilBox(r.messageToPhil || `Hi Phil, could the app do this?\n\n"${q}"\n\nThanks, Jon`)}`;
+}
+
+// The "it's not in the system" path. Jon shouldn't have to explain a feature
+// request from scratch at 4am — it's written for him, and one tap sends it.
+function supportPhilBox(msg) {
+  const safe = String(msg || '');
+  return `
+    <div style="background:var(--cream);border:1px solid var(--gold);border-radius:11px;padding:15px 17px;margin-top:14px">
+      <div style="font-size:13.5px;font-weight:800;color:var(--navy);margin-bottom:4px">Send it to Phil</div>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 10px">I've written it for you. Change anything you like, then send.</p>
+      <textarea id="sup-phil-msg" rows="6" style="width:100%;background:#fff;border:1.5px solid var(--line);border-radius:9px;padding:11px 13px;font-size:13px;font-family:var(--body);resize:vertical">${escapeHtmlAttr(safe)}</textarea>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn-add" style="font-size:12.5px;padding:10px 15px" onclick="supportSendToPhil()">💬 Send to Phil on WhatsApp</button>
+        <button style="font-size:12.5px;padding:10px 15px;border-radius:9px;font-weight:800;background:#fff;border:1px solid var(--line);color:var(--ink-soft);cursor:pointer;font-family:var(--body)" onclick="supportCopyToPhil(this)">Copy it instead</button>
+      </div>
+    </div>`;
+}
+
+function supportSendToPhil() {
+  const msg = document.getElementById('sup-phil-msg')?.value || '';
+  window.open(`https://wa.me/${SUPPORT_PHIL_WHATSAPP}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+function supportCopyToPhil(btn) {
+  const msg = document.getElementById('sup-phil-msg')?.value || '';
+  navigator.clipboard?.writeText(msg);
+  if (btn) {
+    const was = btn.textContent;
+    btn.textContent = '✓ Copied';
+    setTimeout(() => { btn.textContent = was; }, 1600);
+  }
+}
+
+// ── Talking instead of typing ─────────────────────────────────
+// Jon finds it far quicker to say the problem than to type it, especially
+// on a phone in the van. Uses the browser's own speech recognition — free,
+// nothing to install. Where it isn't supported the button hides itself and
+// the phone keyboard's own mic still works, so nothing is lost.
+let supportRec = null, supportListening = false;
+
+function toggleSupportMic() {
+  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn  = document.getElementById('sup-mic');
+  const note = document.getElementById('sup-mic-note');
+  const box  = document.getElementById('sup-q');
+  if (!Rec) {
+    if (note) note.textContent = 'Talking isn\'t supported in this browser — use the microphone on your keyboard instead.';
+    return;
+  }
+
+  if (supportListening && supportRec) { supportRec.stop(); return; }
+
+  supportRec = new Rec();
+  supportRec.lang = 'en-GB';
+  supportRec.interimResults = true;
+  supportRec.continuous = false;
+
+  let finalText = (box?.value || '').trim();
+
+  supportRec.onstart = () => {
+    supportListening = true;
+    if (btn)  { btn.textContent = '⏹ Stop'; btn.style.background = '#a12020'; btn.style.color = '#fff'; }
+    if (note) note.textContent = 'Listening — just say it in your own words.';
+  };
+  supportRec.onresult = (ev) => {
+    let interim = '';
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      const t = ev.results[i][0].transcript;
+      if (ev.results[i].isFinal) finalText = (finalText + ' ' + t).trim();
+      else interim += t;
+    }
+    if (box) box.value = (finalText + ' ' + interim).trim();
+  };
+  supportRec.onerror = (ev) => {
+    if (note) note.textContent = ev.error === 'not-allowed'
+      ? 'I need permission to use the microphone — allow it in your browser and try again.'
+      : 'Didn\'t catch that — have another go, or type it instead.';
+  };
+  supportRec.onend = () => {
+    supportListening = false;
+    if (btn)  { btn.textContent = '🎤 Or just talk'; btn.style.background = ''; btn.style.color = ''; }
+    if (note && !note.textContent.startsWith('I need')) note.textContent = box?.value ? 'Got it — press Get help.' : '';
+  };
+
+  try { supportRec.start(); }
+  catch (e) { if (note) note.textContent = 'Couldn\'t start the microphone — type it instead.'; }
+}
 
 let helpCurrentPage = 'dashboard';
 let helpSearchMode = false;
