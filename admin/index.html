@@ -803,22 +803,32 @@
     <div class="tk-head">
       <div>
         <div class="tk-eyebrow" id="tkEyebrow">Today</div>
-        <h3>Taken today</h3>
+        <h3>Sales today</h3>
       </div>
       <button class="tk-refresh" onclick="refreshTodayTakings(true)" title="Check for anything logged since you opened the app">↻</button>
     </div>
 
+    <!-- The headline is what he SOLD that day, not what happened to land in
+         his account. Jon works on sales and treats the money as following on
+         ("never lost a penny in eight years"). Money in is still here — he
+         needs it to cash up — but it's the second number, not the first,
+         because paying off Monday's invoice today must not read as a
+         Thursday sale. -->
     <div class="tk-total" id="tkTotal">£0.00</div>
-    <div class="tk-total-sub" id="tkTotalSub">Nothing logged yet today</div>
+    <div class="tk-total-sub" id="tkTotalSub">No deliveries today</div>
 
     <div class="tk-split">
       <div class="tk-split-item">
-        <div class="tk-split-label">💷 Cash</div>
+        <div class="tk-split-label">💷 Cash taken</div>
         <div class="tk-split-val" id="tkCash">£0.00</div>
       </div>
       <div class="tk-split-item">
-        <div class="tk-split-label">🏦 Bank transfer</div>
+        <div class="tk-split-label">🏦 Bank taken</div>
         <div class="tk-split-val" id="tkBank">£0.00</div>
+      </div>
+      <div class="tk-split-item">
+        <div class="tk-split-label">⏳ Still to collect</div>
+        <div class="tk-split-val" id="tkOwed">£0.00</div>
       </div>
     </div>
 
@@ -1572,6 +1582,7 @@
         <div style="background:var(--cream);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:16px">
           <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:12.5px;font-weight:700;color:var(--ink-soft)">Carried forward</span><input type="number" id="wk-carried" class="fin-input" style="width:100px;text-align:right" placeholder="0.00"></div>
           <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:12.5px;font-weight:700;color:var(--ink-soft)">Sales this week <span style="font-weight:600;color:var(--green)">· auto</span></span><input type="number" id="wk-sales" class="fin-input" style="width:100px;text-align:right" placeholder="0.00" readonly></div>
+          <div id="wk-sales-note" style="font-size:11.5px;color:var(--ink-soft);margin:-2px 0 8px"></div>
           <div style="display:flex;justify-content:space-between"><span style="font-size:12.5px;font-weight:700;color:var(--ink-soft)">VAT reclaim</span><input type="number" id="wk-vat" class="fin-input" style="width:100px;text-align:right" placeholder="0.00" oninput="calcWeekly()"></div>
         </div>
 
@@ -11405,36 +11416,44 @@ function renderTodayTakings(t, iso) {
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   const setHTML = (id, v) => { const e = document.getElementById(id); if (e) e.innerHTML = v; };
 
+  // Money that ARRIVED today — whatever day the delivery was. Jon needs this
+  // to cash up, but it is not the day's sales.
   const cash  = Number(t.received_cash)  || 0;
   const bank  = Number(t.received_bank)  || 0;
-  const total = Number(t.received_total) || (cash + bank);
+  const takenTotal = Number(t.received_total) || (cash + bank);
   const n     = Number(t.payment_count)  || 0;
 
-  set('tkEyebrow', 'Today · ' + new Date(iso + 'T00:00:00')
-    .toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }));
-  set('tkTotal', tkMoney(total));
-  set('tkCash',  tkMoney(cash));
-  set('tkBank',  tkMoney(bank));
-
-  set('tkTotalSub', total > 0
-    ? `From ${n} payment${n !== 1 ? 's' : ''} logged today`
-    : 'Nothing logged yet today');
-
-  // What today's deliveries were worth, and anything still to collect.
+  // What he actually SOLD today — the value of today's deliveries. This is
+  // the headline.
   const delivered = Number(t.delivered_value)  || 0;
   const unpaid    = Number(t.delivered_unpaid) || 0;
   const orders    = Number(t.order_count)      || 0;
 
+  set('tkEyebrow', 'Today · ' + new Date(iso + 'T00:00:00')
+    .toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }));
+  set('tkTotal', tkMoney(delivered));
+  set('tkCash',  tkMoney(cash));
+  set('tkBank',  tkMoney(bank));
+  set('tkOwed',  tkMoney(unpaid));
+
+  set('tkTotalSub', orders
+    ? `${orders} deliver${orders !== 1 ? 'ies' : 'y'} today`
+    : 'No deliveries today');
+
+  // The reconciling line: what's physically come in today, and how much of it
+  // belongs to earlier days. Without that split the two numbers look like a
+  // mistake — this is exactly what caught Jon out.
+  const forOtherDays = Math.max(0, takenTotal - Math.max(0, delivered - unpaid));
+  const takenLine = takenTotal > 0
+    ? `Money in today <b>${tkMoney(takenTotal)}</b> from ${n} payment${n !== 1 ? 's' : ''}`
+      + (forOtherDays > 0.005 ? ` · ${tkMoney(forOtherDays)} of it for earlier days` : '')
+    : 'No payments logged yet today';
+
   if (!orders) {
-    setHTML('tkDeliveries', t._partial
-      ? 'No deliveries today.'
-      : 'No deliveries today — anything above is money in from other days.');
+    setHTML('tkDeliveries', takenLine);
   } else {
-    const owed = (!t._partial && unpaid > 0)
-      ? ` · <span class="tk-owed">${tkMoney(unpaid)} still to collect</span>`
-      : (!t._partial ? ' · <b>all paid ✓</b>' : '');
-    setHTML('tkDeliveries',
-      `Today's ${orders} deliver${orders !== 1 ? 'ies' : 'y'} worth <b>${tkMoney(delivered)}</b>${owed}`);
+    const state = (!t._partial && unpaid <= 0.005) ? ' · <b>all paid ✓</b>' : '';
+    setHTML('tkDeliveries', `${takenLine}${state}`);
   }
 }
 
@@ -11875,17 +11894,55 @@ function autoFillWeeklySales() {
   const end = new Date(endStr + 'T00:00:00');
   const start = new Date(end); start.setDate(end.getDate() - 6);
   const lo = isoLocal(start), hi = isoLocal(end);
-  const total = (dailySalesRows || [])
-    .filter(r => r.date >= lo && r.date <= hi)
-    .reduce((s, r) => s + (r.ordBank||0) + (r.ordCash||0) + (parseFloat(r.bank)||0) + (parseFloat(r.cash)||0), 0);
+  // SALES for the week — the value of what went out, by delivery date.
+  //
+  // This used to add up the PAYMENTS received in the week, which is a
+  // different number entirely and much smaller: a week's takings include
+  // last week's invoices being settled and exclude this week's that haven't
+  // been paid yet. Jon showed £2,603 for a week he'd actually sold about
+  // £5,500 in. He runs the business on sales and banks on the money
+  // following — so sales is the figure the weekly sheet has to start from.
+  const total = salesForRange(lo, hi);
   const el = document.getElementById('wk-sales');
   if (el) {
     el.value = total ? total.toFixed(2) : '';
     el.readOnly = true;
     el.style.background = 'var(--cream)';
-    el.title = "Fills in automatically from the Daily Sales in the week ending on the date above";
+    el.title = "What you sold in this week — the value of every delivery, whether it's been paid yet or not";
   }
+  renderWeeklyMoneyIn(lo, hi, total);
   loadWeeklyLedger(lo, hi);   // purchases + expenses for this week, from the ledger
+}
+
+
+// ── Sales for a date range ────────────────────────────────────
+// The value of the deliveries themselves, from their invoices, keyed on the
+// DELIVERY date — not on when anybody paid. Cancelled orders never get an
+// invoice, so they're out of it automatically.
+function salesForRange(lo, hi) {
+  return (sampleInvoices || [])
+    .filter(i => {
+      const k = invoiceDateKey(i);
+      return k && k >= lo && k <= hi;
+    })
+    .reduce((s, i) => s + (Number(i.amount) || 0), 0);
+}
+
+// Shown under the weekly sales box so the two numbers can't be mistaken for
+// each other again: what was sold, what's been paid against it, what's left.
+function renderWeeklyMoneyIn(lo, hi, sales) {
+  const el = document.getElementById('wk-sales-note');
+  if (!el) return;
+  const invs = (sampleInvoices || []).filter(i => {
+    const k = invoiceDateKey(i);
+    return k && k >= lo && k <= hi;
+  });
+  const paid = invs.reduce((s, i) => s + invPaidTotal(i), 0);
+  const owed = invs.reduce((s, i) => s + invBalance(i), 0);
+  if (!invs.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `Sold <b>£${sales.toFixed(2)}</b> across ${invs.length} deliver${invs.length !== 1 ? 'ies' : 'y'}`
+    + ` · paid so far <b style="color:#1a6640">£${paid.toFixed(2)}</b>`
+    + (owed > 0.005 ? ` · still to come <b style="color:var(--oxblood)">£${owed.toFixed(2)}</b>` : ' · <b style="color:#1a6640">all in ✓</b>');
 }
 
 function exportDailyToWeekly() { switchTab('finance', 'weekly'); }   // kept for the button; auto-fills on open
@@ -12679,7 +12736,7 @@ const HELP_PAGES = {
     sections: [
       { icon:'📊', title:'What is this page?', body:'The Dashboard is your home screen. It gives you a quick snapshot of what\'s happening today — what you\'ve taken, orders waiting, money owed, and anything that needs your attention.' },
       { icon:'\ud83d\udcac', title:'Chasing money \u2014 tap the Unpaid card', body:'The <strong>Unpaid invoices</strong> card isn\'t just a number \u2014 <strong>tap it</strong>. It opens your chase list with whoever\'s been waiting longest at the top, their phone number on each row, and a <strong>\ud83d\udcac Chase</strong> button that writes a polite WhatsApp reminder for you. The figure shown is what\'s <strong>still owed</strong>, so anyone who\'s part paid only counts for their balance.' },
-      { icon:'💷', title:'Taken today', body:'The navy panel at the top is your day\'s takings. The big gold figure is <strong>every penny that\'s come in today</strong>, and underneath it splits into <strong>cash</strong> and <strong>bank transfer</strong> so you know what should be in your pocket and what should be in the bank.<br><br>You don\'t enter anything here — it fills itself in. Every time you mark an order paid on the run, or press <strong>Log payment</strong> on an invoice, this goes up within seconds.' },
+      { icon:'\ud83d\udcb7', title:'Sales today', body:'The navy panel at the top is <strong>what you\'ve sold today</strong> \u2014 the value of today\'s deliveries, whether they\'ve paid you yet or not. That\'s your day\'s trade.<br><br>Underneath it splits three ways: <strong>\ud83d\udcb7 Cash taken</strong> and <strong>\ud83c\udfe6 Bank taken</strong> are the money that\'s actually come in today (so you know what should be in your pocket and what should be in the bank), and <strong>\u23f3 Still to collect</strong> is what today\'s deliveries haven\'t paid yet.<br><br>At the bottom there\'s a line saying <strong>Money in today</strong>, and if some of that money was for <strong>earlier days</strong> it tells you how much. That\'s the important bit: if you settle Monday\'s invoices on a Thursday, that money lands in Thursday\'s <em>Money in</em> \u2014 but it does <strong>not</strong> count as a Thursday sale. Your sales stay on the day the meat went out.<br><br>You don\'t enter anything here \u2014 it fills itself in as you log orders and payments.' },
       { icon:'🔄', title:'It corrects itself', body:'It\'s a running total, so it goes <em>down</em> as well as up. Delete an invoice and its money comes straight back out. Remove a payment and it comes off. And if you marked something cash when it was actually a bank transfer, switch it over (the <strong>↔</strong> button next to the payment) and both figures move to match — the total stays the same, it just moves across.<br><br>You never have to go back and correct this figure by hand. Press <strong>↻</strong> in the corner if you want to check for anything logged since you opened the app.' },
       { icon:'📋', title:'Show who\'s paid — reconciling the day', body:'Tap <strong>Show who\'s paid</strong> at the bottom of the panel and it opens the list behind the figure.<br><br><strong>Today\'s run</strong> lists every drop you\'re doing today. A green <strong>✓</strong> means the money\'s in and it tells you whether it was cash or bank. A <strong>○</strong> means they haven\'t paid yet, with the amount owed next to it. Anyone part-paid shows <strong>◑</strong> and how much is still outstanding.<br><br><strong>Also paid in today</strong> is money that landed today against a different day\'s deliveries — a pub settling last week\'s invoice, say. It\'s in your pocket tonight even though it\'s nothing to do with today\'s round, so it has to be in the count.<br><br>It stays open once you\'ve opened it, so it\'ll be there tomorrow.' },
       { icon:'✅', title:'Ticking people off as you count up', body:'Any unpaid line has <strong>💷 Cash</strong> and <strong>🏦 Bank</strong> buttons on it. Tap one and that customer is marked paid then and there — no need to go and find their order. It asks you to confirm first so a mis-tap in your pocket can\'t log a payment.<br><br>The figures at the top move as you go, so by the time you\'ve worked down the list the day\'s total is right. It\'s exactly the same as marking them paid on the order card — just all in one place.' },
@@ -12807,7 +12864,7 @@ const HELP_PAGES = {
       { icon:'🗓️', title:'Where a weekly invoice\'s money lands', body:'When a customer on <strong>one invoice a week</strong> pays, that money covers several deliveries at once — so it\'s spread across those days in proportion to what each delivery was worth, rather than all landing on one. A £300 invoice covering a £200 Monday and a £100 Thursday puts £200 on the Monday and £100 on the Thursday. Part payments split the same way. You don\'t have to do anything — it just adds up correctly across the week.' },
       { icon:'📥', title:'Import past takings', body:'Already got your figures in a spreadsheet? On the Daily Sales tab, drag your Excel or CSV file onto the <strong>Import past takings</strong> box (or tap Choose file). As long as it has <strong>Date</strong>, <strong>Bank</strong> and <strong>Cash</strong> columns, it reads them straight in — so you\'re not starting from scratch. Days you already have are updated, not duplicated.' },
       { icon:'💰', title:'Cash tabs', body:'Some customers pay their full week\'s cash in one go on a set day. These are tracked in the <strong>Cash Tabs</strong> section at the bottom of the Daily tab — separate from your daily cash total. Use <strong>+ Add tab order</strong> to log each delivery against their tab. On payment day, press <strong>Settle tab</strong> and the total moves into that day\'s cash automatically.' },
-      { icon:'📊', title:'Weekly tab', body:'Your weekly reconciliation, and it now fills itself in. Pick the <strong>Week ending</strong> date; the <strong>Sales this week</strong> figure comes from your Daily Sales, and the <strong>purchases and expenses</strong> come from your <strong>Expenses &amp; Purchases</strong> tab for that week. The sheet works out what should be in the bank on its own — you don\'t type costs in here any more. Add the <strong>carried forward</strong> and any <strong>VAT reclaim</strong> if you use them, then Save.' },
+      { icon:'\ud83d\udcca', title:'Weekly tab', body:'Your weekly reconciliation, and it fills itself in. Pick the <strong>Week ending</strong> date.<br><br><strong>Sales this week</strong> is <strong>what you sold</strong> \u2014 the value of every delivery that week, paid or not. Underneath it tells you how much of that has been <strong>paid so far</strong> and how much is <strong>still to come</strong>.<br><br>This is deliberately <strong>not</strong> the money that landed in the week. Those are two different figures: a week\'s takings include last week\'s invoices being settled, and leave out this week\'s that haven\'t been paid yet. Your sales are your sales on the day the meat went out \u2014 the money follows after.<br><br><strong>Purchases and expenses</strong> come from your <strong>Expenses &amp; Purchases</strong> tab for that week. The sheet works out what should be in the bank on its own \u2014 you don\'t type costs in here. Add the <strong>carried forward</strong> and any <strong>VAT reclaim</strong> if you use them, then Save.' },
       { icon:'📸', title:'Expenses &amp; Purchases tab', body:'This is where you record <strong>every cost</strong> — stock from the wholesaler, fuel, van, packaging, insurance, the lot — one line each with the receipt attached. Tap <strong>+ Add expense</strong>, then <strong>snap the receipt</strong>: it reads the photo and fills in the supplier, date, amount and VAT for you. Check it, pick whether it\'s <strong>stock</strong> or an <strong>overhead expense</strong>, and press <strong>Save</strong>. No receipt or the photo\'s unclear? Just type it in. Each month shows running totals and every row keeps its photo. This is the single place your costs live — your Weekly and Monthly figures add up from here, and <strong>Export for accountant</strong> gives them the lot as a spreadsheet.' },
       { icon:'🏦', title:'Bank Payments tab', body:'Shows every <strong>bank-transfer</strong> payment, grouped by customer and by the delivery day of their order — filled in automatically whenever you mark an order paid by <strong>bank transfer</strong> in a delivery run. The <strong>Outstanding</strong> column is what each customer still owes. Export it for your records any time.' },
       { icon:'📤', title:'Monthly (Accountant) tab', body:'Generates the monthly summary your accountant needs, built entirely from what you\'ve already entered. The <strong>income (sales)</strong> rolls up from your orders/Daily Sales, and the <strong>purchases and expenses</strong> come from your Expenses &amp; Purchases tab — grouped by supplier and category. Pick the month and press <strong>Export</strong> to download it. Nothing to retype — it\'s all there.' },
