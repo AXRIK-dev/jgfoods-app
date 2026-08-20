@@ -2128,6 +2128,18 @@
     <div id="sup-answer" style="margin-top:20px"></div>
   </div>
 
+  <!-- For Phil rather than Jon: collapsed, so it's out of the way. -->
+  <div class="dash-card" style="max-width:780px;margin-top:18px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div>
+        <h3 style="margin:0">Questions asked</h3>
+        <p style="font-size:12px;color:var(--ink-soft);margin:3px 0 0">What's been asked here, and how often. Mainly for Phil.</p>
+      </div>
+      <button id="sup-log-btn" class="btn-add" style="font-size:12.5px;padding:9px 15px" onclick="toggleSupportLog()">Show</button>
+    </div>
+    <div id="sup-log-body" style="display:none;margin-top:14px"></div>
+  </div>
+
   <div class="dash-card" style="max-width:780px;margin-top:18px">
     <h3 style="margin-bottom:6px">Common ones</h3>
     <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px">Tap any of these to ask it.</p>
@@ -12658,6 +12670,7 @@ const HELP_PAGES = {
       { icon:'\u2705', title:'What you get back', body:'If the app can do it, you get <strong>the steps in order</strong> — exactly which buttons to press — plus a <strong>Take me there</strong> button that jumps you straight to the right page. No hunting about.' },
       { icon:'\u2709\ufe0f', title:'When it\'s something the app can\'t do yet', body:'It\'ll tell you straight, and then <strong>write the message to Phil for you</strong> explaining what you were after. Change any of it you like, then press <strong>\ud83d\udcac Send to Phil on WhatsApp</strong> — or Copy it instead. You don\'t have to explain it yourself.' },
       { icon:'\ud83e\udde0', title:'It knows this app, nothing else', body:'It only answers from your own help guide, so it won\'t make things up or tell you about features you haven\'t got. Every time Phil changes something in the app, the guide is updated and this knows about it straight away.' },
+      { icon:'\ud83d\udcca', title:'Questions asked', body:'A list of what\'s been asked on this page and how often. It\'s mainly for Phil — if the same question keeps coming up it usually means a screen needs changing, not the wording. You can ignore it.' },
       { icon:'\ud83d\udc46', title:'Common ones', body:'Underneath the box there are buttons for the questions that come up most. Tap one and it asks it for you — quickest way to find your way round.' },
     ]
   },
@@ -13001,8 +13014,10 @@ Return JSON with exactly these keys:
     const clean = data.text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
     const r = JSON.parse(clean);
     out.innerHTML = supportAnswerHtml(r, q);
+    logSupportQuestion(q, r.canDo === true, r.page || '');
   } catch (e) {
     console.error('Support AI failed:', e);
+    logSupportQuestion(q, null, '');   // null = AI was down, fallback ran
     // Graceful fallback — the guide is still here even when the AI isn't.
     const hits = supportKeywordSearch(q);
     out.innerHTML = hits.length
@@ -13033,6 +13048,90 @@ function supportEscalate() {
     "Hi Phil, I asked the app about this and it didn't quite answer it:\n\n\"" +
     supportLastQ + "\"\n\nCan you have a look when you get a minute? Thanks, Jon"
   );
+}
+
+// Quietly record what was asked. Fire-and-forget on purpose: if this fails
+// Jon must never see an error — he came here because he was already stuck.
+async function logSupportQuestion(question, couldAnswer, page) {
+  try {
+    if (!window.supabase) return;
+    const { data: { user } = {} } = await window.supabase.auth.getUser();
+    await window.supabase.from('support_questions').insert({
+      question:     String(question).slice(0, 500),
+      could_answer: couldAnswer,
+      page:         page || null,
+      asked_by:     user?.id || null,
+    });
+  } catch (e) { console.warn('Could not log the question (harmless):', e); }
+}
+
+// ── What's been asked (for Phil) ──────────────────────────────
+// The same question five times isn't a wording problem, it's a screen that
+// needs changing. Grouped by what was asked so the repeats stand out, with
+// the ones the app couldn't do flagged — those are the feature requests.
+let supportLogOpen = false;
+
+async function toggleSupportLog() {
+  const body = document.getElementById('sup-log-body');
+  const btn  = document.getElementById('sup-log-btn');
+  if (!body) return;
+  supportLogOpen = !supportLogOpen;
+  body.style.display = supportLogOpen ? 'block' : 'none';
+  if (btn) btn.textContent = supportLogOpen ? 'Hide' : 'Show';
+  if (supportLogOpen) await renderSupportLog();
+}
+
+async function renderSupportLog() {
+  const body = document.getElementById('sup-log-body');
+  if (!body) return;
+  body.innerHTML = '<p style="font-size:12.5px;color:var(--ink-soft)">Loading…</p>';
+
+  if (!window.supabase) { body.innerHTML = supportNote('Not connected.'); return; }
+
+  const { data, error } = await window.supabase
+    .from('support_questions')
+    .select('question, could_answer, page, asked_at')
+    .order('asked_at', { ascending: false })
+    .limit(300);
+
+  if (error) {
+    body.innerHTML = supportNote('Could not load the list — ' + error.message);
+    return;
+  }
+  if (!data || !data.length) {
+    body.innerHTML = supportNote('Nothing asked yet. Come back in a week — the questions that repeat are the ones worth acting on.');
+    return;
+  }
+
+  const byQ = new Map();
+  data.forEach(r => {
+    const key = String(r.question).toLowerCase().trim().replace(/[?.!]+$/, '');
+    if (!byQ.has(key)) byQ.set(key, { text: r.question, count: 0, last: r.asked_at, unanswered: 0, page: r.page });
+    const g = byQ.get(key);
+    g.count++;
+    if (r.could_answer === false) g.unanswered++;
+    if (r.asked_at > g.last) g.last = r.asked_at;
+  });
+
+  const rows = [...byQ.values()].sort((a, b) => b.count - a.count || String(b.last).localeCompare(String(a.last)));
+  const cantDo = rows.filter(r => r.unanswered > 0).length;
+
+  body.innerHTML = `
+    <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px">
+      ${data.length} question${data.length !== 1 ? 's' : ''} asked · ${rows.length} different one${rows.length !== 1 ? 's' : ''}${cantDo ? ` · <b style="color:#b06000">${cantDo} the app can't do yet</b>` : ''}.
+      Anything asked more than once or twice is usually a screen worth changing, not wording worth rewriting.
+    </p>
+    ${rows.map(r => `
+      <div style="display:flex;align-items:center;gap:11px;padding:9px 0;border-top:1px solid var(--line-soft)">
+        <div style="min-width:34px;height:26px;border-radius:7px;background:${r.count > 2 ? 'var(--oxblood)' : 'var(--cream)'};color:${r.count > 2 ? '#fff' : 'var(--ink-soft)'};font-weight:800;font-size:12.5px;display:flex;align-items:center;justify-content:center">${r.count}×</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;color:var(--ink)">${escapeHtmlAttr(r.text)}</div>
+          <div style="font-size:11px;color:var(--ink-soft);margin-top:1px">
+            last asked ${prettyInvoiceDate(r.last)}${r.page ? ' · ' + escapeHtmlAttr(HELP_PAGES[r.page]?.label || r.page) : ''}
+          </div>
+        </div>
+        ${r.unanswered ? '<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:9px;background:#fdf3e3;color:#b06000;text-transform:uppercase;white-space:nowrap">can\'t do yet</span>' : ''}
+      </div>`).join('')}`;
 }
 
 function supportNote(text) {
