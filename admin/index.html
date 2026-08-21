@@ -2313,6 +2313,51 @@
   </div>
 </div>
 
+<!-- ============ CHANGE THE DELIVERY DATE MODAL (migration 050) ============ -->
+<!-- Logged an order on the wrong day? This moves it — the order, the invoice
+     and both weeks' figures — instead of making Jon delete and re-key it. -->
+<div class="modal-overlay" id="moveDateModal">
+  <div class="modal" style="max-width:470px">
+    <div class="modal-head">
+      <div>
+        <h3 id="mdTitle">Change the delivery date</h3>
+        <p style="font-size:12px;color:var(--ink-soft);margin-top:3px" id="mdSubtitle"></p>
+      </div>
+      <button class="modal-close" onclick="closeModal('moveDateModal')">✕</button>
+    </div>
+
+    <div style="background:var(--cream);border:1px solid var(--line);border-radius:10px;padding:11px 14px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-soft)">Filed under this day now</div>
+      <div style="font-family:var(--display);font-size:17px;font-weight:700;color:var(--navy);margin-top:2px" id="mdCurrent">—</div>
+    </div>
+
+    <div class="field" style="margin-bottom:8px">
+      <label>The day it actually went out</label>
+      <input type="date" id="md-date" onchange="mdPreview()">
+    </div>
+
+    <div id="md-quick" style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px"></div>
+
+    <div id="md-preview" style="display:none;background:var(--green-soft);border:1px solid #cfdcc4;border-radius:9px;padding:10px 13px;margin-bottom:12px;font-size:12.5px;color:#3d5a2a;font-weight:700"></div>
+
+    <div id="md-payment-wrap" style="display:none;margin-bottom:12px">
+      <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;background:#fdf3e3;border:1px solid #fcd299;border-radius:9px;padding:11px 13px">
+        <input type="checkbox" id="md-move-payment" style="width:16px;height:16px;margin-top:1px;accent-color:var(--navy)">
+        <span style="font-size:12.5px;color:#8a5200;line-height:1.5"><strong>Move the money as well.</strong> <span id="md-payment-detail"></span> Tick this only if they paid you on the new day too. Leave it alone if the money really did come in when you recorded it — your takings stay on the day the cash landed.</span>
+      </label>
+    </div>
+
+    <p style="font-size:12px;color:var(--ink-soft);line-height:1.55;margin-bottom:14px">
+      Nothing is deleted and the invoice number doesn't change. The order moves to the new day, the invoice re-dates itself, and both weeks' sales figures put themselves right.
+    </p>
+
+    <div style="display:flex;gap:10px">
+      <button class="btn-navy" style="flex:1;justify-content:center;padding:12px" onclick="closeModal('moveDateModal')">Cancel</button>
+      <button class="btn-add" id="mdSaveBtn" style="flex:1.5;justify-content:center;padding:12px" onclick="confirmMoveDate()">📅 Move it</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ EDIT PRODUCT MODAL ============ -->
 <div class="modal-overlay" id="editProductModal">
   <div class="modal">
@@ -4161,6 +4206,7 @@ function renderOrderModalBody() {
       <button class="btn-navy" style="font-size:12px;padding:9px 13px" onclick="orderStartEdit()">✏️ Edit items</button>
       <button class="btn-navy" style="font-size:12px;padding:9px 13px" onclick="orderPrintInvoice()">🖨 Print invoice</button>
       <button class="btn-navy" style="font-size:12px;padding:9px 13px" onclick="orderEmailInvoice()">✉️ Email invoice</button>
+      ${inv && inv.id ? `<button class="btn-navy" style="font-size:12px;padding:9px 13px" onclick="orderChangeDeliveryDate()" title="Logged this on the wrong day? Move it — the order and the invoice both follow">📅 Wrong day?</button>` : ''}
     </div>
     ${isPaid ? '' : `
     <div style="margin-top:12px">
@@ -4330,6 +4376,21 @@ async function orderSaveItems(btn) {
     if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
     alert('Could not save changes: ' + (e.message || e));
   }
+}
+
+// Same correction as the one on the invoice list, reached from the order
+// itself — because "this is on the wrong day" is usually noticed while
+// looking at the order, not while looking at the paperwork.
+function orderChangeDeliveryDate() {
+  const f = currentOrderFull;
+  const id = f && f.inv && f.inv.id;
+  if (!id) { alert('This order has no invoice yet, so there is nothing to re-date. Log the order again on the right day.'); return; }
+  if (!sampleInvoices.find(i => i.id === id)) {
+    alert('Open the Invoices page and use Actions → Change the delivery date on this one.');
+    return;
+  }
+  closeModal('orderModal');
+  openMoveDateModal(id);
 }
 
 function orderPrintInvoice() {
@@ -7562,6 +7623,7 @@ function renderInvoices(filter) {
           <div class="actions-menu" id="iam-${inv.id}">
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');viewInvoice('${inv.id}')"><span class="ai-icon">👁️</span> View invoice</div>
             ${isDraft ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');finalizeInvoice('${inv.id}')"><span class="ai-icon">✅</span> Finalise &amp; send</div>` : (bal > 0.001 ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openPaymentModal('${inv.id}')"><span class="ai-icon">💷</span> Log payment</div>` : '')}
+            <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');openMoveDateModal('${inv.id}')"><span class="ai-icon">📅</span> Change the delivery date</div>
             ${inv.status !== 'paid' && paid <= 0.001 ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');splitInvoice('${inv.id}')"><span class="ai-icon">✂️</span> Split into one per delivery</div>` : ''}
             ${inv.status !== 'paid' ? `<div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');mergeInvoiceWeek('${inv.id}')"><span class="ai-icon">🧾</span> Combine this week onto one</div>` : ''}
             <div class="action-item" onclick="closeActionsMenu('iam-${inv.id}','ia-${inv.id}');downloadInvoiceById('${inv.id}')"><span class="ai-icon">📄</span> Download PDF</div>
@@ -7897,6 +7959,129 @@ async function syncDailySalesForInvoice(invoiceId) {
     await window.supabase.rpc('recompute_daily_sales_for_invoice', { p_invoice_id: invoiceId });
   } catch (e) {
     console.error('Daily sales sync failed:', e);
+  }
+}
+
+// ── "It's on the wrong day" (migration 050) ───────────────────
+// Jon logs orders in batches while he's catching up, and every so often he
+// picks the wrong delivery day. The old answer was "delete it and type it
+// again", which burns an invoice number and loses the payment. This moves
+// the whole thing — the order's delivery slot, the invoice's date, its week,
+// its line items — and puts both weeks' sales figures right afterwards.
+let currentMoveInvId = null;
+
+function openMoveDateModal(invId) {
+  const inv = sampleInvoices.find(i => i.id === invId);
+  if (!inv) return;
+  currentMoveInvId = invId;
+
+  const current = inv.deliveryDate ? String(inv.deliveryDate).slice(0, 10) : '';
+
+  document.getElementById('mdTitle').textContent = 'Change the delivery date';
+  document.getElementById('mdSubtitle').textContent = `${inv.ref} · ${inv.name} · £${(Number(inv.amount) || 0).toFixed(2)}`;
+  document.getElementById('mdCurrent').textContent =
+    current ? prettyInvoiceDate(current) : (inv.weekStart ? weekLabel(inv.weekStart) : 'No date on it');
+  document.getElementById('md-date').value = '';
+  document.getElementById('md-preview').style.display = 'none';
+
+  // The two corrections that actually happen: it went on last week when it
+  // belonged this week, or the other way round. Same weekday either way.
+  const base = current || toDateStr(new Date());
+  document.getElementById('md-quick').innerHTML = [
+    { d: addDaysStr(base,  7), label: 'A week later' },
+    { d: addDaysStr(base, -7), label: 'A week earlier' },
+    { d: toDateStr(new Date()), label: 'Today' },
+  ].map(o => `<button class="btn-navy" style="font-size:12px;padding:8px 12px" onclick="mdQuick('${o.d}')">${o.label} · ${prettyDate(o.d)}</button>`).join('');
+
+  // Money only moves if he says so — sales follow the delivery, cash follows
+  // the day it landed, and this is the one place they could get confused.
+  const paid = (inv.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const wrap = document.getElementById('md-payment-wrap');
+  const box  = document.getElementById('md-move-payment');
+  if (box) box.checked = false;
+  if (wrap) {
+    if (paid > 0.001) {
+      wrap.style.display = '';
+      document.getElementById('md-payment-detail').textContent =
+        `£${paid.toFixed(2)} has been recorded against this one.`;
+    } else {
+      wrap.style.display = 'none';
+    }
+  }
+
+  document.getElementById('moveDateModal').classList.add('show');
+}
+
+function mdQuick(dateStr) {
+  const el = document.getElementById('md-date');
+  if (!el) return;
+  el.value = dateStr;
+  mdPreview();
+}
+
+// Says in plain words what pressing the button will do, including which two
+// weeks are about to change — that's the bit he's trying to fix.
+function mdPreview() {
+  const el = document.getElementById('md-preview');
+  const to = document.getElementById('md-date')?.value || '';
+  const inv = sampleInvoices.find(i => i.id === currentMoveInvId);
+  if (!el || !to || !inv) { if (el) el.style.display = 'none'; return; }
+
+  const from = inv.deliveryDate ? String(inv.deliveryDate).slice(0, 10) : '';
+  if (from && from === to) {
+    el.style.display = 'block';
+    el.textContent = 'That’s the day it’s already on — nothing to change.';
+    return;
+  }
+  const amt  = (Number(inv.amount) || 0).toFixed(2);
+  const wkTo = weekLabel(mondayOf(to));
+  el.style.display = 'block';
+  el.innerHTML = `£${amt} moves to <strong>${prettyInvoiceDate(to)}</strong>`
+    + (from ? ` — off ${weekLabel(mondayOf(from))} and onto ${wkTo}.` : ` — it lands in ${wkTo}.`);
+}
+
+async function confirmMoveDate() {
+  const inv = sampleInvoices.find(i => i.id === currentMoveInvId);
+  const to  = document.getElementById('md-date')?.value || '';
+  if (!inv) return;
+  if (!to) { alert('Pick the day the delivery actually went out.'); return; }
+  if (!window.supabase) { alert('Not connected to the database — please refresh and try again.'); return; }
+
+  const movePay = !!document.getElementById('md-move-payment')?.checked;
+  const btn = document.getElementById('mdSaveBtn');
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Moving…'; }
+
+  try {
+    const { data, error } = await window.supabase.rpc('move_invoice_to_date', {
+      p_invoice_id: inv.id,
+      p_new_date: to,
+      p_move_payments: movePay,
+    });
+    if (error) throw error;
+
+    closeModal('moveDateModal');
+
+    if (data && data.moved === false) {
+      alert(`${inv.ref} is already on ${prettyInvoiceDate(to)} — nothing changed.`);
+      return;
+    }
+
+    // Reload rather than patch: the move touches the order, the slot, the
+    // invoice and two days of takings, and the dashboard reads all four.
+    if (typeof loadAppData === 'function') await loadAppData();
+    else { renderInvoices(); renderDashboard(); }
+    if (typeof renderFinance === 'function') renderFinance();
+
+    alert(`${inv.ref} for ${inv.name} is now filed under ${prettyInvoiceDate(to)}.\n\n`
+        + `Your sales figures for both weeks have corrected themselves`
+        + (movePay ? ' and the payment moved with it.' : '. The payment stayed on the day the money came in.'));
+  } catch (err) {
+    console.error('confirmMoveDate error:', err);
+    // The database messages are written for Jon — show them as they come.
+    alert('Could not move that one.\n\n' + (err.message || err));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label || '📅 Move it'; }
   }
 }
 
@@ -12909,7 +13094,10 @@ const HELP_PAGES = {
       { icon:'✂️', title:'Splitting a weekly invoice up', body:'Customer changed their mind and wants each delivery billed separately? Open the <strong>Actions</strong> menu on the invoice and choose <strong>Split into one per delivery</strong>. Each delivery becomes its own invoice, <strong>dated the day it went out</strong>, with its own invoice number. Nothing is sent to the customer — the new invoices just appear in this list for you to check.<br><br>It works whether the invoice is still running or you\'ve already finalised it. The only thing that stops it is <strong>money already logged against it</strong> — remove the payment first, or the cash would end up on the wrong delivery. If it tells you there\'s nothing to split, everything on that invoice is for the same day.' },
       { icon:'🧾', title:'Combining a week onto one invoice', body:'Ended up with two or three invoices for the same customer in the same week and want to hand them one bill? A <strong>blue bar appears above the list</strong> telling you so — press <strong>Combine into one invoice</strong> and they\'re brought together, grouped by delivery and by site, keeping the earliest invoice number so the customer sees a reference they recognise. You can also do it from <strong>Actions</strong> on any of them. It picks up invoices you raised by hand as well as ones the system created, and anything already marked paid is left exactly as it is.' },
       { icon:'📅', title:'The date on an invoice is the delivery date', body:'Every invoice and receipt is dated the day the meat <strong>goes out</strong> — not the day you make it, and not the day you print it. So you can run off tomorrow\'s invoices tonight and they\'ll show tomorrow\'s date, and if you reprint Monday\'s invoice next month it still says Monday. Printing something again never changes its date. Weekly invoices are headed <strong>W/C</strong> with the week they cover, same as always.' },
-      { icon:'✏️', title:'Correcting a date', body:'Got one wrong? Build the invoice by hand with the right <strong>Delivery date</strong> and delete the wrong one from its <strong>Actions</strong> menu. On invoices you build yourself, the Delivery date box at the top sets the date — it defaults to today, so change it if the delivery is another day.' },
+      { icon:'📅', title:'It\'s on the wrong day — moving it', body:'Logged an order on the wrong delivery day, so your week doesn\'t add up? <strong>Don\'t delete it.</strong> Open the <strong>Actions</strong> menu on that invoice and choose <strong>📅 Change the delivery date</strong>. Pick the day it really went out — there are one-tap buttons for <strong>a week later</strong> and <strong>a week earlier</strong>, which is nearly always what\'s happened — and press <strong>Move it</strong>.<br><br>It tells you what\'s about to happen before you commit: which day it\'s on now, which day it\'s going to, and which two weeks change. The order moves with it, the invoice re-dates itself, and <strong>both weeks\' sales figures put themselves right</strong>. The invoice number stays exactly the same, so anything you\'ve already handed the customer still matches.<br><br>You can do the same from the order itself — open it on the delivery run and press <strong>📅 Wrong day?</strong>.' },
+      { icon:'💷', title:'Moving a date when it\'s already been paid', body:'That\'s fine — you can move a paid one. By default <strong>the money stays on the day it came in</strong>, because your takings are about when the cash landed and your sales are about when the meat went out. Those are two different questions and the app keeps them apart.<br><br>If the customer actually paid you on the new day too, tick <strong>Move the money as well</strong> in the box that appears. If you\'re not sure, leave it — the sales figure is the one that was wrong.' },
+      { icon:'✂️', title:'When it won\'t move', body:'If an invoice covers <strong>more than one delivery day</strong> it won\'t move, because that would drag every day on it onto the same date. Use <strong>Split into one per delivery</strong> first, then move the one day that\'s wrong.<br><br>And if a weekly customer already has an invoice still collecting for the week you\'re moving into, use <strong>Combine this week onto one</strong> instead — that puts them together rather than leaving two.' },
+      { icon:'✏️', title:'Setting the date on one you build yourself', body:'On invoices you build by hand, the <strong>Delivery date</strong> box at the top sets the date — it defaults to today, so change it if the delivery was another day.' },
       { icon:'⏪', title:'Writing up a past week', body:'Catching the system up with work you\'ve already done? Set the <strong>Delivery date</strong> back to the day in question before you save — it\'ll print with that date and be filed under the right week. To enter the orders themselves, use Log Order and pick <strong>📅 A delivery I\'ve already done</strong> from the delivery slot list.' },
       { icon:'👁️', title:'Just having a look at an invoice', body:'To check what\'s on an invoice, <strong>tap the customer\'s name</strong> in the list — or choose <strong>View invoice</strong> from the Actions menu. It opens on screen exactly as the customer sees it, and <strong>nothing is saved to your computer</strong>. Download, email and WhatsApp buttons are along the bottom if you do want to send it. Use this rather than Download PDF when you\'re only checking something, and you won\'t end up with a folder full of PDFs.' },
       { icon:'📄', title:'Download as PDF', body:'Open the <strong>Actions</strong> menu and choose <strong>Download PDF</strong> to save the invoice or receipt as a tidy PDF on your device — ready to email, print, or keep for your records. If you only want to <em>look</em> at it, use <strong>View invoice</strong> instead — that doesn\'t save anything.' },
